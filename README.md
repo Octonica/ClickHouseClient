@@ -7,7 +7,7 @@ It has support of all ADO.NET features (with some exlusions like transaction sup
 ### Features
 * compression (send and recive)
 * timezones
-* most clickhouse column types are supported (aggregating ones in developent)
+* most clickhouse [column types](docs/TypeMapping.md) are supported (aggregating ones in developent)
 * full support for .net async ADO.NET API
 * no unsafe code
 * tested in production
