@@ -1,10 +1,10 @@
 ClickHouse .NET Core driver
 ===============
 
-This is an implementation of .net core driver for ClickHouse in form of ADO.NET DbProvider Factory. It has the support of all ADO.NET features (with some exclusions like transaction support).
+This is an implementation of .net core driver for ClickHouse in form of ADO.NET DbProvider API. It has the support of all ADO.NET features (with some exclusions like transaction support).
 
 ### Features
-* compression (send and recive)
+* compression (send and recieve)
 * timezones
 * most clickhouse [column types](docs/TypeMapping.md) are supported (aggregating ones in developent)
 * full support for .net async ADO.NET API
