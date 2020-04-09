@@ -10,7 +10,7 @@
     <Version Condition="'$(Version)' == ''">1.0.0</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Company>Octonica</Company>
-    <Copyright>© 2019 – 2020 Octonica LLC</Copyright>
+    <Copyright>© 2019 – 2020 Octonica</Copyright>
     <Product>Octonica.ClickHouseClient</Product>
     <PackageProjectUrl>https://github.com/Octonica/ClickHouseClient</PackageProjectUrl>
     <Description>ClickHouse .NET Core driver</Description>
