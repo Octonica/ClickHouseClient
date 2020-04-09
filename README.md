@@ -17,13 +17,9 @@ nuget package coming soon
 ```
 
 ConnectionString syntax: 
-`Host=<host>;Port=<port>;Database=<db>;Password=<pass>`, e.g. `"Host=127.0.0.1;Password=P@ssw0rd; Database=db`
+`Host=<host>;Port=<port>;Database=<db>;Password=<pass>`, e.g. `"Host=127.0.0.1;Password=P@ssw0rd; Database=db` additionally, if you want to build a connection string via code you can use `ClickHouseConnectionStringBuilder`.
 
-ADO .NET DbConnection Class:
-`Octonica.ClickHouse.ClickHouseConnection`
-
-additionally, if you want to build a connection string via code you can use `ClickHouseConnectionStringBuilder`.
-
+Entry point for API is ADO .NET DbConnection Class: `Octonica.ClickHouse.ClickHouseConnection`.
 
 ### Extended API
 In order to provide non-ADO.NET complaint data manipulation functionality, proprietary ClickHouseColumnWriter API exists.
