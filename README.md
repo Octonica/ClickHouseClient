@@ -1,8 +1,7 @@
 ClickHouse .NET Core driver
 ===============
 
-This is implementation of .net core driver for ClickHouse in form of ADO.NET DbProvider Factory.
-It has support of all ADO.NET features (with some exlusions like transaction support).
+This is an implementation of .net core driver for ClickHouse in form of ADO.NET DbProvider Factory. It has the support of all ADO.NET features (with some exclusions like transaction support).
 
 ### Features
 * compression (send and recive)
@@ -23,7 +22,7 @@ ConnectionString syntax:
 ADO .NET DbConnection Class:
 `Octonica.ClickHouse.ClickHouseConnection`
 
-additionally, if you wanto to build connection string via code you can use `ClickHouseConnectionStringBuilder`.
+additionally, if you want to build a connection string via code you can use `ClickHouseConnectionStringBuilder`.
 
 
 ### Extended API
