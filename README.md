@@ -6,14 +6,15 @@ This is an implementation of .net core driver for ClickHouse in form of ADO.NET 
 ### Features
 * compression (send and recieve)
 * timezones
-* most clickhouse [column types](docs/TypeMapping.md) are supported (aggregating ones in developent)
+* most clickhouse [column types](docs/TypeMapping.md) are supported ([aggregating ones](https://clickhouse.tech/docs/en/sql_reference/data_types/aggregatefunction/) is under development)
 * full support for .net async ADO.NET API
 * no unsafe code
 * tested in production
 
 ### Usage
+Install from [NuGet](https://www.nuget.org/packages/Octonica.ClickHouseClient/):
 ```
-nuget package coming soon
+dotnet add package Octonica.ClickHouseClient
 ```
 
 ConnectionString syntax: 
