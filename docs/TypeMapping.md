@@ -11,5 +11,10 @@
 |~~UInt64~~| ulong | GetFieldValue\<UInt64\>|
 | Float32 | float | GetFloat()|
 | Float64 | double | GetDouble()|
+| Decimal | decimal | GetDecimal()|
+| Decimal32 | decimal | GetDecimal()|
+| Decimal64 | decimal | GetDecimal()|
+| Decimal128 | decimal | GetDecimal()|
 | String | string | GetString()|
 | FixedString | byte[] | GetValue()|
+| DateTime | DateTime | GetFieldValue\<DateTime\>|
