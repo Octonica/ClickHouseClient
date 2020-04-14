@@ -17,6 +17,8 @@
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Authors>Octonica</Authors>
     <PackageTags>ClickHouse</PackageTags>
+    <RepositoryUrl>https://github.com/Octonica/ClickHouseClient.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
