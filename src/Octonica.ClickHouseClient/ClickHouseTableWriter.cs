@@ -39,5 +39,12 @@ namespace Octonica.ClickHouseClient
             RowCount = rowCount;
             Columns = columns.ToList().AsReadOnly();
         }
+
+        public ClickHouseTableWriter(string tableName, int rowCount, IReadOnlyList<IClickHouseColumnWriter> columns)
+        {
+            TableName = tableName;
+            RowCount = rowCount;
+            Columns = columns;
+        }
     }
 }

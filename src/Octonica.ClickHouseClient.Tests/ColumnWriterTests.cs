@@ -221,6 +221,56 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task InsertSingleRow()
+        {
+            await using var con = await OpenConnectionAsync();
+
+            await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName}(num, id, str) VALUES", CancellationToken.None))
+            {
+                await writer.WriteRowAsync(new List<object?> {42m, 50_000, "Hello"}, CancellationToken.None);
+                writer.WriteRow(null, 50_001, "world!");
+                writer.WriteRow(new List<object?> {42.5m, 50_002, DBNull.Value});
+
+                await writer.EndWriteAsync(CancellationToken.None);
+            }
+
+            var cmd = con.CreateCommand($"SELECT cast(T.id - 50000 AS Int32) id, T.str, T.num FROM {TestTableName} AS T WHERE T.id>=50000 AND T.id<60000");
+            int count = 0;
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    var str = reader.GetFieldValue(1, (string?) null);
+                    var num = reader.GetFieldValue(2, (decimal?) null);
+
+                    switch (id)
+                    {
+                        case 0:
+                            Assert.Equal("Hello", str);
+                            Assert.Equal(42m, num);
+                            break;
+                        case 1:
+                            Assert.Equal("world!", str);
+                            Assert.Null(num);
+                            break;
+                        case 2:
+                            Assert.Null(str);
+                            Assert.Equal(42.5m, num);
+                            break;
+                        default:
+                            Assert.True(id >= 0 && id <= 3, "Id is out of range.");
+                            break;
+                    }
+
+                    ++count;
+                }
+            }
+
+            Assert.Equal(3, count);
+        }
+
+        [Fact]
         public async Task InsertArrayValues()
         {
             try
