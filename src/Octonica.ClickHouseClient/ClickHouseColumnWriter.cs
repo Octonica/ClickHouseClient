@@ -526,7 +526,7 @@ namespace Octonica.ClickHouseClient
                 }
                 else
                 {
-                    foreach (object? item in (IEnumerable<T>) _collection)
+                    foreach (object? item in (IEnumerable) _collection)
                     {
                         // T may be nullable but there is no way to declare T?
                         if (item == DBNull.Value)
