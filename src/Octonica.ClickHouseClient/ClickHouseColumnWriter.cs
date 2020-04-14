@@ -89,14 +89,10 @@ namespace Octonica.ClickHouseClient
 
         public int GetOrdinal(string name)
         {
-            var comparer = StringComparer.Ordinal;
-            for (int i = 0; i < _columns.Count; i++)
-            {
-                if (comparer.Equals(_columns[i].Name, name))
-                    return i;
-            }
+            if (name == null)
+                throw new ArgumentNullException(nameof(name));
 
-            return -1;
+            return CommonUtils.GetColumnIndex(_columns, name);
         }
 
         public void WriteRow(params object?[] values)
