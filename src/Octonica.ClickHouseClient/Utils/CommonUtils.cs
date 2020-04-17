@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #endregion
+
 using System;
 using System.Collections.ObjectModel;
 using Octonica.ClickHouseClient.Protocol;

@@ -21,6 +21,7 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class ReinterpretedTableColumn<TFrom, TTo> : IClickHouseTableColumn<TTo>
     {
+        private readonly IClickHouseTableColumn? _reinterpretationRoot;
         private readonly IClickHouseTableColumn<TFrom> _sourceColumn;
         private readonly Func<TFrom, TTo> _reinterpret;
 
@@ -28,6 +29,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public ReinterpretedTableColumn(IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
         {
+            _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
+            _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
+        }
+
+        public ReinterpretedTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
+        {
+            _reinterpretationRoot = reinterpretationRoot ?? throw new ArgumentNullException(nameof(reinterpretationRoot));
             _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
             _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
         }
@@ -45,7 +53,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            return _sourceColumn.TryReinterpret<T>();
+            return (_reinterpretationRoot ?? _sourceColumn).TryReinterpret<T>();
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -56,6 +64,40 @@ namespace Octonica.ClickHouseClient.Types
 
             var reinterpreted = _reinterpret((TFrom) sourceValue);
             return reinterpreted!;
+        }
+    }
+
+    internal sealed class ReinterpretedTableColumn<TValue> : IClickHouseTableColumn<TValue>
+    {
+        private readonly IClickHouseTableColumn _reinterpretationRoot;
+        private readonly IClickHouseTableColumn<TValue> _column;
+
+        public int RowCount => _column.RowCount;
+
+        public ReinterpretedTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseTableColumn<TValue> column)
+        {
+            _reinterpretationRoot = reinterpretationRoot ?? throw new ArgumentNullException(nameof(reinterpretationRoot));
+            _column = column ?? throw new ArgumentNullException(nameof(column));
+        }
+
+        public bool IsNull(int index)
+        {
+            return _column.IsNull(index);
+        }
+
+        public TValue GetValue(int index)
+        {
+            return _column.GetValue(index);
+        }
+
+        object IClickHouseTableColumn.GetValue(int index)
+        {
+            return ((IClickHouseTableColumn) _column).GetValue(index);
+        }
+
+        public IClickHouseTableColumn<T>? TryReinterpret<T>()
+        {
+            return _reinterpretationRoot.TryReinterpret<T>();
         }
     }
 }

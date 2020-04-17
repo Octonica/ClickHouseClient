@@ -193,6 +193,9 @@ namespace Octonica.ClickHouseClient.Types
 
                 new NothingTypeInfo(),
                 new NullableTypeInfo(),
+
+                new IpV4TypeInfo(),
+                new IpV6TypeInfo(),
             };
         }
     }
