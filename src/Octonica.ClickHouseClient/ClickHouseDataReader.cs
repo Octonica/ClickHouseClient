@@ -113,14 +113,10 @@ namespace Octonica.ClickHouseClient
 
         public sealed override int GetOrdinal(string name)
         {
-            var comparer = StringComparer.Ordinal;
-            for (int i = 0; i < _blockHeader.Columns.Count; i++)
-            {
-                if (comparer.Equals(_blockHeader.Columns[i].Name, name))
-                    return i;
-            }
+            if (name == null)
+                throw new ArgumentNullException(nameof(name));
 
-            return -1;
+            return CommonUtils.GetColumnIndex(_blockHeader.Columns, name);
         }
 
         public sealed override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)

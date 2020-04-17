@@ -89,14 +89,78 @@ namespace Octonica.ClickHouseClient
 
         public int GetOrdinal(string name)
         {
-            var comparer = StringComparer.Ordinal;
-            for (int i = 0; i < _columns.Count; i++)
+            if (name == null)
+                throw new ArgumentNullException(nameof(name));
+
+            return CommonUtils.GetColumnIndex(_columns, name);
+        }
+
+        public void WriteRow(params object?[] values)
+        {
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
+        }
+
+        public void WriteRow(IReadOnlyCollection<object?> values)
+        {
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
+        }
+
+        public async Task WriteRowAsync(IReadOnlyCollection<object?> values)
+        {
+            await WriteRow(values, true, CancellationToken.None);
+        }
+
+        public async Task WriteRowAsync(IReadOnlyCollection<object?> values, CancellationToken cancellationToken)
+        {
+            await WriteRow(values, true, cancellationToken);
+        }
+
+        private async ValueTask WriteRow(IReadOnlyCollection<object?> values, bool async, CancellationToken cancellationToken)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (values.Count != _columns.Count)
+                throw new ArgumentException("The number of values must be equal to the number of columns.");
+
+            var columnWriters = new List<IClickHouseColumnWriter>(_columns.Count);
+            foreach (var value in values)
             {
-                if (comparer.Equals(_columns[i].Name, name))
-                    return i;
+                int i = columnWriters.Count;
+
+                var columnInfo = _columns[i];
+                SingleRowColumnWriterDispatcher dispatcher;
+                Type valueType;
+                if (value != null && !(value is DBNull))
+                {
+                    dispatcher = new SingleRowColumnWriterDispatcher(value, columnInfo, _columnSettings?[i]);
+                    valueType = value.GetType();
+                }
+                else if (columnInfo.TypeInfo.TypeName != "Nullable")
+                {
+                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
+                }
+                else
+                {
+                    dispatcher = new SingleRowColumnWriterDispatcher(null, columnInfo, _columnSettings?[i]);
+                    valueType = columnInfo.TypeInfo.GetFieldType();
+                }
+
+                IClickHouseColumnWriter columnWriter;
+                try
+                {
+                    columnWriter = TypeDispatcher.Dispatch(valueType, dispatcher);
+                }
+                catch (ClickHouseException ex)
+                {
+                    throw new ClickHouseException(ex.ErrorCode, $"Column \"{columnInfo.Name}\" (position {i}): {ex.Message}", ex);
+                }
+
+                columnWriters.Add(columnWriter);
             }
 
-            return -1;
+            var table = new ClickHouseTableWriter(string.Empty, 1, columnWriters);
+            await SendTable(table, async, cancellationToken);
         }
 
         public void WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount)
@@ -238,7 +302,11 @@ namespace Octonica.ClickHouseClient
             }
 
             var table = new ClickHouseTableWriter(string.Empty, rowCount, writers);
+            await SendTable(table, async, cancellationToken);
+        }
 
+        private async ValueTask SendTable(ClickHouseTableWriter table, bool async, CancellationToken cancellationToken)
+        {
             try
             {
                 await _session.SendTable(table, async, cancellationToken);
@@ -454,7 +522,7 @@ namespace Octonica.ClickHouseClient
                 }
                 else
                 {
-                    foreach (object? item in (IEnumerable<T>) _collection)
+                    foreach (object? item in (IEnumerable) _collection)
                     {
                         // T may be nullable but there is no way to declare T?
                         if (item == DBNull.Value)
@@ -475,6 +543,26 @@ namespace Octonica.ClickHouseClient
                         $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
                 }
 
+                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+            }
+        }
+
+        private class SingleRowColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
+        {
+            private readonly object? _value;
+            private readonly ColumnInfo _columnInfo;
+            private readonly ClickHouseColumnSettings? _columnSettings;
+
+            public SingleRowColumnWriterDispatcher(object? value, ColumnInfo columnInfo, ClickHouseColumnSettings? columnSettings)
+            {
+                _value = value;
+                _columnInfo = columnInfo;
+                _columnSettings = columnSettings;
+            }
+
+            public IClickHouseColumnWriter Dispatch<T>()
+            {
+                var rows = new ConstantReadOnlyList<T>((T) _value, 1);
                 return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
             }
         }

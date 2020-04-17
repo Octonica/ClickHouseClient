@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version Condition="'$(Version)' == ''">1.0.2</Version>
+    <Version Condition="'$(Version)' == ''">1.0.3</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Company>Octonica</Company>
     <Copyright>© 2019 – 2020 Octonica</Copyright>
@@ -17,6 +17,8 @@
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Authors>Octonica</Authors>
     <PackageTags>ClickHouse</PackageTags>
+    <RepositoryUrl>https://github.com/Octonica/ClickHouseClient.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

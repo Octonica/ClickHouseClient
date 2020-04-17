@@ -20,6 +20,7 @@ using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -765,6 +766,88 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadIpV4Column()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS ip4_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE ip4_test(val IPv4, strVal String) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO ip4_test(val, strVal) VALUES ('116.253.40.133','116.253.40.133')('10.0.151.56','10.0.151.56')('192.0.121.234','192.0.121.234')";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT val, strVal FROM ip4_test";
+                int count = 0;
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var ipAddr = reader.GetFieldValue<IPAddress>(0);
+                        var ipAddrStr = reader.GetFieldValue<string>(1);
+                        var expectedIpAddr = IPAddress.Parse(ipAddrStr);
+
+                        Assert.Equal(expectedIpAddr, ipAddr);
+                        ++count;
+                    }
+                }
+
+                Assert.Equal(3, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS ip4_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task ReadIpV6Column()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS ip6_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE ip6_test(val IPv6, strVal String) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO ip6_test(val, strVal) VALUES ('2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d','2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d')('2a02:aa08:e000:3100::2','2a02:aa08:e000:3100::2')('::ffff:192.0.121.234','::ffff:192.0.121.234')";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT val, strVal FROM ip6_test";
+                int count = 0;
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var ipAddr = reader.GetFieldValue<IPAddress>(0);
+                        var ipAddrStr = reader.GetFieldValue<string>(1);
+                        var expectedIpAddr = IPAddress.Parse(ipAddrStr);
+
+                        Assert.Equal(expectedIpAddr, ipAddr);
+                        ++count;
+                    }
+                }
+
+                Assert.Equal(3, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS ip6_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
         public async Task ReadFixedStringParameterScalar()
         {
             var values = new[] {string.Empty, "0", "12345678", "abcdefg", "1234", "abcd", "абвг"};
@@ -1190,6 +1273,44 @@ namespace Octonica.ClickHouseClient.Tests
 
             var result = await cmd.ExecuteScalarAsync();
             Assert.Equal(DBNull.Value, result);
+        }
+
+        [Fact]
+        public async Task ReadIpV4ParameterScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {param}");
+            var param = new ClickHouseParameter("param") {Value = IPAddress.Parse("10.0.121.1")};
+            Assert.Equal(ClickHouseDbType.IpV4, param.ClickHouseDbType);
+
+            cmd.Parameters.Add(param);
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.Equal(param.Value, result);
+
+            param.Value = "::ffff:192.0.2.1";
+            param.ClickHouseDbType = ClickHouseDbType.IpV4;
+            result = await cmd.ExecuteScalarAsync<string>();
+            Assert.Equal("192.0.2.1", result);
+        }
+
+        [Fact]
+        public async Task ReadIpV6ParameterScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {param}");
+            var param = new ClickHouseParameter("param") { Value = IPAddress.Parse("2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d") };
+            Assert.Equal(ClickHouseDbType.IpV6, param.ClickHouseDbType);
+
+            cmd.Parameters.Add(param);
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.Equal(param.Value, result);
+
+            param.Value = "192.0.121.234";
+            param.ClickHouseDbType = ClickHouseDbType.IpV6;
+            result = await cmd.ExecuteScalarAsync<string>();
+            Assert.Equal("::ffff:192.0.121.234", result);
         }
 
         [Fact]

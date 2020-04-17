@@ -19,6 +19,8 @@ using System;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using Octonica.ClickHouseClient.Exceptions;
@@ -36,16 +38,29 @@ namespace Octonica.ClickHouseClient
         private readonly string _parameterName;
 
         private bool? _forcedNullable;
-        private DbType? _forcedType;
+        private ClickHouseDbType? _forcedType;
         private byte? _forcedScale;
         private byte? _forcedPrecision;
 
         internal string Id { get; }
 
+        public ClickHouseDbType ClickHouseDbType
+        {
+            get=> _forcedType ?? GetTypeFromValue().dbType;
+            set => _forcedType = value;
+        }
+
         public override DbType DbType
         {
-            get => _forcedType ?? GetTypeFromValue().dbType;
-            set => _forcedType = value;
+            get
+            {
+                var chType = ClickHouseDbType;
+                if (chType > ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode)
+                    return DbType.Object;
+
+                return (DbType) chType;
+            }
+            set => ClickHouseDbType = (ClickHouseDbType) value;
         }
 
         public override ParameterDirection Direction
@@ -125,97 +140,97 @@ namespace Octonica.ClickHouseClient
             object? preparedValue = null;
             switch (_forcedType)
             {
-                case DbType.AnsiString:
-                case DbType.AnsiStringFixedLength:
+                case ClickHouseDbType.AnsiString:
+                case ClickHouseDbType.AnsiStringFixedLength:
                     throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported. String encoding can be specified with the property \"{nameof(Encoding)}\".");
-                case DbType.Time:
-                case DbType.Xml:
+                case ClickHouseDbType.Time:
+                case ClickHouseDbType.Xml:
                     throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported.");
 
-                case DbType.Binary:
+                case ClickHouseDbType.Binary:
                     typeName = Size <= 0 ? "Array(UInt8)" : string.Format(CultureInfo.InvariantCulture, "FixedString({0})", Size);
                     clrType = typeof(byte[]);
                     break;
-                case DbType.Byte:
+                case ClickHouseDbType.Byte:
                     typeName = "UInt8";
                     clrType = typeof(byte);
                     break;
-                case DbType.Boolean:
+                case ClickHouseDbType.Boolean:
                     typeName = "UInt8";
                     clrType = typeof(byte);
                     break;
-                case DbType.Currency:
+                case ClickHouseDbType.Currency:
                     typeName = "Decimal(18, 4)";
                     clrType = typeof(decimal);
                     break;
-                case DbType.Date:
+                case ClickHouseDbType.Date:
                     typeName = "Date";
                     clrType = typeof(DateTime);
                     break;
-                case DbType.DateTime:
+                case ClickHouseDbType.DateTime:
                     typeName = "DateTime";
                     clrType = typeof(DateTime);
                     break;
-                case DbType.Decimal:
+                case ClickHouseDbType.Decimal:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale);
                     clrType = typeof(decimal);
                     break;
-                case DbType.Double:
+                case ClickHouseDbType.Double:
                     typeName = "Float64";
                     clrType = typeof(double);
                     break;
-                case DbType.Guid:
+                case ClickHouseDbType.Guid:
                     typeName = "UUID";
                     clrType = typeof(Guid);
                     break;
-                case DbType.Int16:
+                case ClickHouseDbType.Int16:
                     typeName = "Int16";
                     clrType = typeof(short);
                     break;
-                case DbType.Int32:
+                case ClickHouseDbType.Int32:
                     typeName = "Int32";
                     clrType = typeof(int);
                     break;
-                case DbType.Int64:
+                case ClickHouseDbType.Int64:
                     typeName = "Int64";
                     clrType = typeof(long);
                     break;
-                case DbType.Object:
+                case ClickHouseDbType.Object:
                     if (Value != null)
                         throw new NotSupportedException();
 
                     typeName = "Nothing";
                     clrType = typeof(DBNull);
                     break;
-                case DbType.SByte:
+                case ClickHouseDbType.SByte:
                     typeName = "Int8";
                     clrType = typeof(sbyte);
                     break;
-                case DbType.Single:
+                case ClickHouseDbType.Single:
                     typeName = "Float32";
                     clrType = typeof(float);
                     break;
-                case DbType.String:
+                case ClickHouseDbType.String:
                     typeName = "String";
                     clrType = typeof(string);
                     break;
-                case DbType.UInt16:
+                case ClickHouseDbType.UInt16:
                     typeName = "UInt16";
                     clrType = typeof(ushort);
                     break;
-                case DbType.UInt32:
+                case ClickHouseDbType.UInt32:
                     typeName = "UInt32";
                     clrType = typeof(uint);
                     break;
-                case DbType.UInt64:
+                case ClickHouseDbType.UInt64:
                     typeName = "UInt32";
                     clrType = typeof(ulong);
                     break;
-                case DbType.VarNumeric:
+                case ClickHouseDbType.VarNumeric:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", Precision, Scale);
                     clrType = typeof(decimal);
                     break;
-                case DbType.StringFixedLength:
+                case ClickHouseDbType.StringFixedLength:
                 {
                     if (Size <= 0)
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"Parameter \"{ParameterName}\". The size of the fixed string must be a positive number.");
@@ -238,14 +253,24 @@ namespace Octonica.ClickHouseClient
                     clrType = typeof(byte[]);
                     break;
                 }
-                case DbType.DateTime2:
+                case ClickHouseDbType.DateTime2:
                     typeName = "DateTime";
                     clrType = typeof(DateTime);
                     break;
-                case DbType.DateTimeOffset:
+                case ClickHouseDbType.DateTimeOffset:
                     typeName = "DateTime";
                     clrType = typeof(DateTime);
                     break;
+                case ClickHouseDbType.IpV4:
+                    typeName = "IPv4";
+                    clrType = typeof(IPAddress);
+                    break;
+                case ClickHouseDbType.IpV6:
+                    typeName = "IPv6";
+                    clrType = typeof(IPAddress);
+                    break;
+                case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
+                    goto default;
                 case null:
                     typeName = GetTypeFromValue().clickHouseType;
                     clrType = Value?.GetType() ?? typeof(DBNull);
@@ -277,46 +302,54 @@ namespace Octonica.ClickHouseClient
             return column;
         }
 
-        private (DbType dbType, string clickHouseType) GetTypeFromValue()
+        private (ClickHouseDbType dbType, string clickHouseType) GetTypeFromValue()
         {
             switch (Value)
             {
                 case string _:
-                    return (DbType.String, "String");
+                    return (ClickHouseDbType.String, "String");
                 case byte[] _:
-                    return (DbType.Binary, "Array(UInt8)");
+                    return (ClickHouseDbType.Binary, "Array(UInt8)");
                 case byte _:
-                    return (DbType.Byte, "UInt8");
+                    return (ClickHouseDbType.Byte, "UInt8");
                 case bool _:
-                    return (DbType.Boolean, "UInt8");
+                    return (ClickHouseDbType.Boolean, "UInt8");
                 case decimal _:
-                    return (DbType.Decimal, "Decimal");
+                    return (ClickHouseDbType.Decimal, "Decimal");
                 case DateTime _:
                 case DateTimeOffset _:
-                    return (DbType.DateTime, "DateTime");
+                    return (ClickHouseDbType.DateTime, "DateTime");
                 case double _:
-                    return (DbType.Double, "Float64");
+                    return (ClickHouseDbType.Double, "Float64");
                 case Guid _:
-                    return (DbType.Guid, "UUID");
+                    return (ClickHouseDbType.Guid, "UUID");
                 case short _:
-                    return (DbType.Int16, "Int16");
+                    return (ClickHouseDbType.Int16, "Int16");
                 case int _:
-                    return (DbType.Int32, "Int32");
+                    return (ClickHouseDbType.Int32, "Int32");
                 case long _:
-                    return (DbType.Int64, "Int64");
+                    return (ClickHouseDbType.Int64, "Int64");
                 case sbyte _:
-                    return (DbType.SByte, "Int8");
+                    return (ClickHouseDbType.SByte, "Int8");
                 case float _:
-                    return (DbType.Single, "Float32");
+                    return (ClickHouseDbType.Single, "Float32");
                 case ushort _:
-                    return (DbType.UInt16, "UInt16");
+                    return (ClickHouseDbType.UInt16, "UInt16");
                 case uint _:
-                    return (DbType.UInt32, "UInt32");
+                    return (ClickHouseDbType.UInt32, "UInt32");
                 case ulong _:
-                    return (DbType.UInt64, "UInt32");
+                    return (ClickHouseDbType.UInt64, "UInt32");
+
+                case IPAddress ipAddress:
+                    if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
+                        return (ClickHouseDbType.IpV4, "IPv4");
+                    if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
+                        return (ClickHouseDbType.IpV6, "IPv6");
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"Parameter \"{ParameterName}\". The type \"{ipAddress.AddressFamily}\" of the network address is not supported.");
+
                 case DBNull _:
                 case null:
-                    return (DbType.Object, "Nothing");
+                    return (ClickHouseDbType.Object, "Nothing");
                 default:
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The type \"{Value.GetType()}\" of the parameter \"{ParameterName}\" is not supported.");
             }
