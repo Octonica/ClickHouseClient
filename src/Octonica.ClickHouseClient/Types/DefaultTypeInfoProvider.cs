@@ -163,6 +163,7 @@ namespace Octonica.ClickHouseClient.Types
             return new IClickHouseTypeInfo[]
             {
                 new ArrayTypeInfo(),
+                new LowCardinalityTypeInfo(),
                 new TupleTypeInfo(),
 
                 new DateTypeInfo(),
