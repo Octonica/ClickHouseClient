@@ -848,6 +848,151 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadLowCardinalityColumn()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE low_cardinality_test(id Int32, str LowCardinality(String)) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_test(id, str) VALUES (1,'foo')(2,'bar')(4,'bar')(6,'bar')(3,'foo')(7,'foo')(8,'bar')(5,'foobar')";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT id, str FROM low_cardinality_test";
+                int count = 0;
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var id = reader.GetInt32(0);
+                        var str = reader.GetString(1);
+
+                        var expected = id == 5 ? "foobar" : id % 2 == 1 ? "foo" : "bar";
+                        Assert.Equal(expected, str);
+                        ++count;
+                    }
+                }
+
+                Assert.Equal(8, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task ReadNullableLowCardinalityColumn()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_null_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE low_cardinality_null_test(id Int32, str LowCardinality(Nullable(String))) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_null_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%200) FROM system.numbers LIMIT 30000";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_null_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%200) FROM system.numbers WHERE number>=30000 LIMIT 30000";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_null_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%400) FROM system.numbers WHERE number>=60000 LIMIT 30000";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT id, str FROM low_cardinality_null_test";
+                int count = 0;
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var id = reader.GetInt32(0);
+                        var str = reader.GetString(1, null);
+
+                        if (id % 50 == 0)
+                            Assert.Null(str);
+                        else if (id < 60000)
+                            Assert.Equal((id % 200).ToString(), str);
+                        else
+                            Assert.Equal((id % 400).ToString(), str);
+
+                        ++count;
+                    }
+                }
+
+                Assert.Equal(90000, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_null_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task SkipLowCardinalityColumn()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_skip_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE low_cardinality_skip_test(id Int32, str LowCardinality(Nullable(String))) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_skip_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%200) FROM system.numbers LIMIT 10000";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO low_cardinality_skip_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%200) FROM system.numbers WHERE number>=10000 LIMIT 10000";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT id, str FROM low_cardinality_skip_test";
+                int count = 0;
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var id = reader.GetInt32(0);
+                        var str = reader.GetString(1, null);
+
+                        if (id % 50 == 0)
+                            Assert.Null(str);
+                        else
+                            Assert.Equal((id % 200).ToString(), str);
+
+                        if (++count == 100)
+                            break;
+                    }
+                }
+
+                Assert.Equal(100, count);
+
+                cmd.CommandText = "SELECT count(*) FROM low_cardinality_skip_test";
+                count = (int) await cmd.ExecuteScalarAsync<ulong>();
+                Assert.Equal(20000, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS low_cardinality_skip_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
         public async Task ReadFixedStringParameterScalar()
         {
             var values = new[] {string.Empty, "0", "12345678", "abcdefg", "1234", "abcd", "абвг"};
