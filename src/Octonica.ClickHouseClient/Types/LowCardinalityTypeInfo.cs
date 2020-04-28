@@ -24,13 +24,15 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class LowCardinalityTypeInfo : IClickHouseTypeInfo
+    internal sealed class LowCardinalityTypeInfo : IClickHouseColumnTypeInfo
     {
-        private readonly IClickHouseTypeInfo? _baseType;
+        private readonly IClickHouseColumnTypeInfo? _baseType;
 
         public string ComplexTypeName { get; }
 
         public string TypeName => "LowCardinality";
+
+        public int GenericArgumentsCount => _baseType == null ? 0 : 1;
 
         public LowCardinalityTypeInfo()
         {
@@ -38,7 +40,7 @@ namespace Octonica.ClickHouseClient.Types
             ComplexTypeName = TypeName;
         }
 
-        private LowCardinalityTypeInfo(IClickHouseTypeInfo baseType)
+        private LowCardinalityTypeInfo(IClickHouseColumnTypeInfo baseType)
         {
             _baseType = baseType ?? throw new ArgumentNullException(nameof(baseType));
             ComplexTypeName = $"{TypeName}({_baseType.ComplexTypeName})";
@@ -61,7 +63,7 @@ namespace Octonica.ClickHouseClient.Types
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_baseType != null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
@@ -81,10 +83,29 @@ namespace Octonica.ClickHouseClient.Types
             return _baseType.GetFieldType();
         }
 
+        public ClickHouseDbType GetDbType()
+        {
+            if (_baseType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return _baseType.GetDbType();
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            if (_baseType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            if (index != 0)
+                throw new IndexOutOfRangeException();
+
+            return _baseType;
+        }
+
         private class LowCardinalityColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
-            private readonly IClickHouseTypeInfo _baseType;
+            private readonly IClickHouseColumnTypeInfo _baseType;
 
             private IClickHouseColumnReader? _baseColumnReader;
             private int _baseRowCount;
@@ -93,7 +114,7 @@ namespace Octonica.ClickHouseClient.Types
             private byte[]? _buffer;
             private int _position;
 
-            public LowCardinalityColumnReader(int rowCount, IClickHouseTypeInfo baseType)
+            public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType)
             {
                 _rowCount = rowCount;
 

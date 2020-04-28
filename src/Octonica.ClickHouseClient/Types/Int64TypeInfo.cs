@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(long);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Int64;
+        }
+
         private sealed class Int64Reader : StructureReaderBase<long>
         {
             public Int64Reader(int rowCount)

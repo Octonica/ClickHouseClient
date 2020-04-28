@@ -26,13 +26,15 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class FixedStringTypeInfo : IClickHouseTypeInfo
+    internal sealed class FixedStringTypeInfo : IClickHouseColumnTypeInfo
     {
         private readonly int? _length;
 
         public string ComplexTypeName { get; }
 
         public string TypeName => "FixedString";
+
+        public int GenericArgumentsCount => 0;
 
         public FixedStringTypeInfo()
         {
@@ -72,7 +74,7 @@ namespace Octonica.ClickHouseClient.Types
             return new FixedStringWriter(columnName, ComplexTypeName, byteRows, _length.Value);
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_length != null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
@@ -89,6 +91,16 @@ namespace Octonica.ClickHouseClient.Types
         public Type GetFieldType()
         {
             return typeof(byte[]);
+        }
+
+        public ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.StringFixedLength;
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
         }
 
         private sealed class FixedStringReader : IClickHouseColumnReader

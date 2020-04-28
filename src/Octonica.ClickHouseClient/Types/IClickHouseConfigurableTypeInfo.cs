@@ -17,8 +17,8 @@
 
 namespace Octonica.ClickHouseClient.Types
 {
-    public interface IClickHouseConfigurableTypeInfo : IClickHouseTypeInfo
+    public interface IClickHouseConfigurableTypeInfo : IClickHouseColumnTypeInfo
     {
-        IClickHouseTypeInfo Configure(ClickHouseServerInfo serverInfo);
+        IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo);
     }
 }

@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(Guid);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Guid;
+        }
+
         private sealed class UuidReader : StructureReaderBase<Guid>
         {
             public UuidReader(int rowCount)

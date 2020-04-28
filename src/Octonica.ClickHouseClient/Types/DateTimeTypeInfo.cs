@@ -33,6 +33,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public string TypeName => "DateTime";
 
+        public int GenericArgumentsCount => 0;
+
         public DateTimeTypeInfo()
             : this(TimeZoneInfo.Utc, null)
         {
@@ -60,7 +62,7 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (options.Count > 1)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
@@ -75,7 +77,17 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(DateTimeOffset);
         }
 
-        public IClickHouseTypeInfo Configure(ClickHouseServerInfo serverInfo)
+        public ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.DateTime;
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)
         {
             var timezone = TZConvert.GetTimeZoneInfo(serverInfo.Timezone);
             return new DateTimeTypeInfo(timezone, null);

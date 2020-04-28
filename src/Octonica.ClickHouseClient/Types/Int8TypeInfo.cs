@@ -47,6 +47,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(sbyte);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.SByte;
+        }
+
         private sealed class Int8Reader : StructureReaderBase<sbyte>
         {
             public Int8Reader(int rowCount)
