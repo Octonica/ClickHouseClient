@@ -79,7 +79,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public ClickHouseDbType GetDbType()
         {
-            return ClickHouseDbType.DateTime;
+            return ClickHouseDbType.DateTimeOffset;
         }
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
