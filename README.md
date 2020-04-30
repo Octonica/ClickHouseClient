@@ -1,12 +1,12 @@
 ClickHouse .NET Core driver
 ===============
 
-This is an implementation of .net core driver for ClickHouse in form of ADO.NET DbProvider API. It has the support of all ADO.NET features (with some exclusions like transaction support).
+This is an implementation of .NET Core driver for ClickHouse in a form of ADO.NET DbProvider API. This driver supports all ADO.NET features (with some exclusions like transaction support).
 
 ### Features
 * compression (send and recieve)
 * timezones
-* most clickhouse [column types](docs/TypeMapping.md) are supported ([aggregating ones](https://clickhouse.tech/docs/en/sql_reference/data_types/aggregatefunction/) is under development)
+* most clickhouse [column types](docs/TypeMapping.md) are supported ([aggregating ones](https://clickhouse.tech/docs/en/sql_reference/data_types/aggregatefunction/) are under development)
 * full support for .net async ADO.NET API
 * no unsafe code
 * tested in production
@@ -47,4 +47,4 @@ var _ = cmd.ExecuteNonQuery();
 ```
 
 ### Build requirements
-In order to build the driver you need to have .net core sdk 3.1 or higher.
+In order to build the driver you need to have .NET Core SDK 3.1 or higher.
