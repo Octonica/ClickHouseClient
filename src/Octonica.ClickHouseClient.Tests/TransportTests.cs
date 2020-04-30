@@ -308,7 +308,8 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.False(string.IsNullOrEmpty(settings.User));
             Assert.Null(settings.Database);
 
-            await using var conn = OpenConnection();
+            await using var conn = new ClickHouseConnection(settings);
+            await conn.OpenAsync();
             Assert.Null(conn.Database);
 
             var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync<string>();
