@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <OldToolsVersion>2.0</OldToolsVersion>
+    <UpgradeBackupLocation />
+    <ProjectGuid>{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}</ProjectGuid>
+    <StartupObject>Octonica.ClickHouseClient.Benchmark.Runner</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="ClickHouseTestsBase.cs\**" />
+    <Compile Remove="Runner.cs\**" />
+    <EmbeddedResource Remove="ClickHouseTestsBase.cs\**" />
+    <EmbeddedResource Remove="Runner.cs\**" />
+    <None Remove="ClickHouseTestsBase.cs\**" />
+    <None Remove="Runner.cs\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.12.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Octonica.ClickHouseClient\Octonica.ClickHouseClient.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

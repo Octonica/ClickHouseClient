@@ -7,6 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Octonica.ClickHouseClient",
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Octonica.ClickHouseClient.Tests", "Octonica.ClickHouseClient.Tests\Octonica.ClickHouseClient.Tests.csproj", "{AEE192D3-405E-4804-9883-10A4F9FC902E}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Octonica.ClickHouseClient.Benchmark", "Octonica.ClickHouseClient.Benchmark\Octonica.ClickHouseClient.Benchmark.csproj", "{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7D934752-DF65-47D4-B183-9D1D6A8E4BDA} = {7D934752-DF65-47D4-B183-9D1D6A8E4BDA}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +26,10 @@ Global
 		{AEE192D3-405E-4804-9883-10A4F9FC902E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AEE192D3-405E-4804-9883-10A4F9FC902E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AEE192D3-405E-4804-9883-10A4F9FC902E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87CE9C2C-C7E5-4221-8400-5F6F2186A93B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

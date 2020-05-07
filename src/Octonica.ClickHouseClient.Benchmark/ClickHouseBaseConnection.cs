@@ -16,14 +16,15 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 
-namespace Octonica.ClickHouseClient.Tests
+
+namespace Octonica.ClickHouseClient.Benchmark
 {
-    public abstract class ClickHouseTestsBase
+    public class ClickHouseBaseConnection
     {
         private const string ConfigExample = "host=domain.com; port=9000; user=default; password=pw";
 
@@ -67,11 +68,12 @@ namespace Octonica.ClickHouseClient.Tests
 
             var configEnv = Environment.GetEnvironmentVariable("dbconfig", EnvironmentVariableTarget.User);
 
-            Assert.True(configEnv != null, $"Need user enviroment \"dbconfig\" with params {ConfigExample}");
+            if (configEnv == null)
+            {
+                throw new Exception($"Need user enviroment \"dbconfig\" with params {ConfigExample}.");
+            }
 
             ClickHouseConnectionStringBuilder builder = new ClickHouseConnectionStringBuilder(configEnv);
-
-            Assert.True(builder.Host != null, "Example \t" + ConfigExample);
 
             return builder;
         }
