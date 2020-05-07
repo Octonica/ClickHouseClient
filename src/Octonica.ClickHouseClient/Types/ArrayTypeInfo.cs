@@ -26,36 +26,38 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class ArrayTypeInfo : IClickHouseTypeInfo
+    internal sealed class ArrayTypeInfo : IClickHouseColumnTypeInfo
     {
+        private readonly IClickHouseColumnTypeInfo? _elementTypeInfo;
+
         public string ComplexTypeName { get; }
 
         public string TypeName { get; } = "Array";
 
-        public IClickHouseTypeInfo? ElementTypeInfo { get; }
+        public int GenericArgumentsCount => _elementTypeInfo == null ? 0 : 1;
 
         public ArrayTypeInfo()
         {
             ComplexTypeName = TypeName;
         }
 
-        private ArrayTypeInfo(IClickHouseTypeInfo elementTypeInfo)
+        private ArrayTypeInfo(IClickHouseColumnTypeInfo elementTypeInfo)
         {
-            ElementTypeInfo = elementTypeInfo ?? throw new ArgumentNullException(nameof(elementTypeInfo));
-            ComplexTypeName = $"{TypeName}({ElementTypeInfo.ComplexTypeName})";
+            _elementTypeInfo = elementTypeInfo ?? throw new ArgumentNullException(nameof(elementTypeInfo));
+            ComplexTypeName = $"{TypeName}({_elementTypeInfo.ComplexTypeName})";
         }
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            if (ElementTypeInfo == null)
+            if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new ArrayColumnReader(rowCount, ElementTypeInfo);
+            return new ArrayColumnReader(rowCount, _elementTypeInfo);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (ElementTypeInfo == null)
+            if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             Type? elementType = null;
@@ -82,11 +84,11 @@ namespace Octonica.ClickHouseClient.Types
             if (elementType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Can't detect a type of the array's element. The type \"{typeof(T)}\" doesn't implement \"{typeof(IReadOnlyList<>)}\".");
 
-            var dispatcher = new ArrayColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, ElementTypeInfo);
+            var dispatcher = new ArrayColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
             return TypeDispatcher.Dispatch(elementType, dispatcher);
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (options.Count > 1)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
@@ -97,13 +99,29 @@ namespace Octonica.ClickHouseClient.Types
 
         public Type GetFieldType()
         {
-            return ElementTypeInfo == null ? typeof(object[]) : ElementTypeInfo.GetFieldType().MakeArrayType();
+            return _elementTypeInfo == null ? typeof(object[]) : _elementTypeInfo.GetFieldType().MakeArrayType();
+        }
+
+        public ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Array;
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            if (_elementTypeInfo == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            if (index != 0)
+                throw new IndexOutOfRangeException();
+
+            return _elementTypeInfo;
         }
 
         private sealed class ArrayColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
-            private readonly IClickHouseTypeInfo _elementType;
+            private readonly IClickHouseColumnTypeInfo _elementType;
             private readonly List<(int offset, int length)> _ranges;
 
             private IClickHouseColumnReader? _elementColumnReader;
@@ -111,7 +129,7 @@ namespace Octonica.ClickHouseClient.Types
             private int _position;
             private int _elementPosition;
 
-            public ArrayColumnReader(int rowCount, IClickHouseTypeInfo elementType)
+            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
             {
                 _rowCount = rowCount;
                 _elementType = elementType;
@@ -235,7 +253,7 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ArrayColumnSkipContext
         {
-            private readonly IClickHouseTypeInfo _elementType;
+            private readonly IClickHouseColumnTypeInfo _elementType;
             private readonly List<(int offset, int length)> _ranges;
 
             private IClickHouseColumnReader? _elementColumnReader;
@@ -244,7 +262,7 @@ namespace Octonica.ClickHouseClient.Types
             private int _position;
             private int _elementPosition;
 
-            public ArrayColumnSkipContext(IClickHouseTypeInfo elementType, int initialCapacity)
+            public ArrayColumnSkipContext(IClickHouseColumnTypeInfo elementType, int initialCapacity)
             {
                 _elementType = elementType;
                 _ranges = new List<(int offset, int length)>(initialCapacity);
@@ -317,9 +335,9 @@ namespace Octonica.ClickHouseClient.Types
             private readonly string _columnType;
             private readonly object _rows;
             private readonly ClickHouseColumnSettings? _columnSettings;
-            private readonly IClickHouseTypeInfo _elementTypeInfo;
+            private readonly IClickHouseColumnTypeInfo _elementTypeInfo;
 
-            public ArrayColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseTypeInfo elementTypeInfo)
+            public ArrayColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
             {
                 _columnName = columnName;
                 _columnType = columnType;

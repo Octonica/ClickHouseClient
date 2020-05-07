@@ -50,7 +50,7 @@ namespace Octonica.ClickHouseClient
 
         public override int ConnectionTimeout => Timeout.Infinite;
 
-        public override string Database => _connectionSettings.Database;
+        public override string? Database => _connectionSettings.Database;
 
         public override string DataSource => _connectionSettings.Host + (_connectionSettings.Port != ClickHouseConnectionStringBuilder.DefaultPort ? ":" + _connectionSettings.Port : string.Empty);
 

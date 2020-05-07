@@ -28,7 +28,6 @@ namespace Octonica.ClickHouseClient
 
         public const ushort DefaultPort = 9000;
         public const string DefaultUser = "default";
-        public const string DefaultDatabase = "default";
         public const int DefaultReadWriteTimeout = 10000;
         public const int DefaultCommandTimeout = 15;
         public const int DefaultBufferSize = 4096;
@@ -61,9 +60,9 @@ namespace Octonica.ClickHouseClient
             set => this[nameof(Password)] = value;
         }
 
-        public string Database
+        public string? Database
         {
-            get => GetStringOrDefault(nameof(Database), DefaultDatabase);
+            get => GetString(nameof(Database));
             set => this[nameof(Database)] = value;
         }
 

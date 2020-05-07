@@ -302,13 +302,21 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public async Task CanConnectWithUserAndPassword()
         {
+            var settings = GetDefaultConnectionSettings();
+            settings = new ClickHouseConnectionStringBuilder(settings) {Database = null}.BuildSettings();
 
-            using var conn = OpenConnection();
-            var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync();
-            var currentDb = await conn.CreateCommand("select currentDatabase()").ExecuteScalarAsync();
+            Assert.False(string.IsNullOrEmpty(settings.User));
+            Assert.Null(settings.Database);
 
-            Assert.Equal(GetDefaultConnectionSettings().User, currentUser.ToString());
-            Assert.Equal(GetDefaultConnectionSettings().Database, currentDb.ToString());
+            await using var conn = new ClickHouseConnection(settings);
+            await conn.OpenAsync();
+            Assert.Null(conn.Database);
+
+            var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync<string>();
+            var currentDb = await conn.CreateCommand("select currentDatabase()").ExecuteScalarAsync<string>();
+
+            Assert.Equal(settings.User, currentUser);
+            Assert.NotNull(currentDb);
         }
 
         [Fact]

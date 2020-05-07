@@ -62,6 +62,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(IPAddress);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.IpV6;
+        }
+
         private static IPAddress? ParseIpAddress(string? address)
         {
             if (address == null)

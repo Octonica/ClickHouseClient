@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(short);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Int16;
+        }
+
         private sealed class Int16Reader : StructureReaderBase<short>
         {
             public Int16Reader(int rowCount)

@@ -26,14 +26,14 @@ namespace Octonica.ClickHouseClient.Types
     {
         public static readonly DefaultTypeInfoProvider Instance = new DefaultTypeInfoProvider();
 
-        private readonly Dictionary<string, IClickHouseTypeInfo> _types;
+        private readonly Dictionary<string, IClickHouseColumnTypeInfo> _types;
 
         private DefaultTypeInfoProvider()
             : this(GetDefaultTypes())
         {
         }
 
-        protected DefaultTypeInfoProvider(IEnumerable<IClickHouseTypeInfo> types)
+        protected DefaultTypeInfoProvider(IEnumerable<IClickHouseColumnTypeInfo> types)
         {
             if (types == null)
                 throw new ArgumentNullException(nameof(types));
@@ -41,7 +41,7 @@ namespace Octonica.ClickHouseClient.Types
             _types = types.ToDictionary(t => t.TypeName);
         }
 
-        public IClickHouseTypeInfo GetTypeInfo(string typeName)
+        public IClickHouseColumnTypeInfo GetTypeInfo(string typeName)
         {
             var typeNameMem = typeName.AsMemory();
             var (baseTypeName, options) = ParseTypeName(typeNameMem);
@@ -51,7 +51,7 @@ namespace Octonica.ClickHouseClient.Types
             return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName}\" is not supported.");
         }
 
-        public IClickHouseTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName)
+        public IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName)
         {
             var (baseTypeName, options) = ParseTypeName(typeName);
             var result = GetTypeInfo(baseTypeName.ToString(), options);
@@ -59,7 +59,7 @@ namespace Octonica.ClickHouseClient.Types
             return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName.ToString()}\" is not supported.");
         }
 
-        private IClickHouseTypeInfo? GetTypeInfo(string baseTypeName, List<ReadOnlyMemory<char>>? options)
+        private IClickHouseColumnTypeInfo? GetTypeInfo(string baseTypeName, List<ReadOnlyMemory<char>>? options)
         {
             if (!_types.TryGetValue(baseTypeName, out var typeInfo))
                 return null;
@@ -158,9 +158,9 @@ namespace Octonica.ClickHouseClient.Types
             return new DefaultTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
         }
 
-        protected static IEnumerable<IClickHouseTypeInfo> GetDefaultTypes()
+        protected static IEnumerable<IClickHouseColumnTypeInfo> GetDefaultTypes()
         {
-            return new IClickHouseTypeInfo[]
+            return new IClickHouseColumnTypeInfo[]
             {
                 new ArrayTypeInfo(),
                 new LowCardinalityTypeInfo(),

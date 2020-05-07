@@ -25,20 +25,22 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class NullableTypeInfo : IClickHouseTypeInfo
+    internal sealed class NullableTypeInfo : IClickHouseColumnTypeInfo
     {
         public string ComplexTypeName { get; }
 
         public string TypeName => "Nullable";
 
-        public IClickHouseTypeInfo? UnderlyingType { get; }
+        public int GenericArgumentsCount => UnderlyingType == null ? 0 : 1;
+
+        public IClickHouseColumnTypeInfo? UnderlyingType { get; }
 
         public NullableTypeInfo()
         {
             ComplexTypeName = TypeName;
         }
 
-        public NullableTypeInfo(IClickHouseTypeInfo underlyingType)
+        public NullableTypeInfo(IClickHouseColumnTypeInfo underlyingType)
         {
             if (underlyingType is NullableTypeInfo)
                 throw new ArgumentException("The underlying type can't be nullable.", nameof(underlyingType));
@@ -63,7 +65,7 @@ namespace Octonica.ClickHouseClient.Types
             return new NullableColumnWriter<T>(columnName, ComplexTypeName, rows, columnSettings, UnderlyingType);
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (UnderlyingType != null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
@@ -87,17 +89,36 @@ namespace Octonica.ClickHouseClient.Types
             return underlyingFieldType;
         }
 
+        public ClickHouseDbType GetDbType()
+        {
+            if (UnderlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return UnderlyingType.GetDbType();
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            if (UnderlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            if (index != 0)
+                throw new IndexOutOfRangeException();
+
+            return UnderlyingType;
+        }
+
         private sealed class NullableColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
-            private readonly IClickHouseTypeInfo _underlyingType;
+            private readonly IClickHouseColumnTypeInfo _underlyingType;
 
             private BitArray? _nullFlags;
             private IClickHouseColumnReader? _baseColumnReader;
 
             private int _nullFlagPosition;
 
-            public NullableColumnReader(int rowCount, IClickHouseTypeInfo underlyingType)
+            public NullableColumnReader(int rowCount, IClickHouseColumnTypeInfo underlyingType)
             {
                 _rowCount = rowCount;
                 _underlyingType = underlyingType;
@@ -197,7 +218,7 @@ namespace Octonica.ClickHouseClient.Types
 
             private int _position;
 
-            public NullableColumnWriter(string columnName, string columnType, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings, IClickHouseTypeInfo underlyingTypeInfo)
+            public NullableColumnWriter(string columnName, string columnType, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
             {
                 if (underlyingTypeInfo == null)
                     throw new ArgumentNullException(nameof(underlyingTypeInfo));
@@ -241,13 +262,13 @@ namespace Octonica.ClickHouseClient.Types
 
         private interface IValueOrDefaultListDispatcherBase
         {
-            IClickHouseColumnWriter Dispatch(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseTypeInfo underlyingTypeInfo);
+            IClickHouseColumnWriter Dispatch(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo);
         }
 
         private sealed class ValueOrDefaultListDispatcher<TValue> : IValueOrDefaultListDispatcherBase
             where TValue : struct
         {
-            public IClickHouseColumnWriter Dispatch(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseTypeInfo underlyingTypeInfo)
+            public IClickHouseColumnWriter Dispatch(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
             {
                 var genericList = (IReadOnlyList<TValue?>) rows;
                 var listWrapper = new MappedReadOnlyList<TValue?, TValue>(genericList, item => item ?? default);

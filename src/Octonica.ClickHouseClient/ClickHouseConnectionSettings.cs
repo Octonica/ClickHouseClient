@@ -29,7 +29,7 @@ namespace Octonica.ClickHouseClient
 
         public string? Password { get; }
 
-        public string Database { get; }
+        public string? Database { get; }
 
         public int ReadWriteTimeout { get; }
 
@@ -56,8 +56,8 @@ namespace Octonica.ClickHouseClient
             Host = builder.Host;
             Port = builder.Port;
             User = builder.User;
-            Password = builder.Password;
-            Database = builder.Database;
+            Password = string.IsNullOrEmpty(builder.Password) ? null : builder.Password;
+            Database = string.IsNullOrEmpty(builder.Database) ? null : builder.Database;
             ReadWriteTimeout = builder.ReadWriteTimeout;
             BufferSize = builder.BufferSize;
             ClientName = builder.ClientName;

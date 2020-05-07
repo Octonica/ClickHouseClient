@@ -96,6 +96,11 @@ namespace Octonica.ClickHouseClient
                 _columnSettings[i] = columnSettings;
         }
 
+        public IClickHouseTypeInfo GetFieldTypeInfo(int ordinal)
+        {
+            return _blockHeader.Columns[ordinal].TypeInfo;
+        }
+
         public sealed override string GetName(int ordinal)
         {
             return _blockHeader.Columns[ordinal].Name;

@@ -95,7 +95,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(ClickHouseConnectionStringBuilder.DefaultPort, settings.Port);
             ++checkedPropertiesCount;
 
-            Assert.Equal(ClickHouseConnectionStringBuilder.DefaultDatabase, settings.Database);
+            Assert.Null(settings.Database);
             ++checkedPropertiesCount;
 
             Assert.Equal(ClickHouseConnectionStringBuilder.DefaultUser, settings.User);

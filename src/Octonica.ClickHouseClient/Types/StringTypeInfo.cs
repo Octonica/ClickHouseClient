@@ -52,6 +52,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(string);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.String;
+        }
+
         private class StringColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;

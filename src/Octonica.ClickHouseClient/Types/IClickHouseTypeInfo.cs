@@ -16,8 +16,6 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -27,15 +25,15 @@ namespace Octonica.ClickHouseClient.Types
 
         string TypeName { get; }
 
-        IClickHouseColumnReader CreateColumnReader(int rowCount);
+        int GenericArgumentsCount { get; }
 
-        IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings);
-
-        IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider);
-        
         /// <summary>
         /// Type for <see cref="ClickHouseDataReader.GetFieldType"/>
         /// </summary>
         Type GetFieldType();
+
+        ClickHouseDbType GetDbType();
+
+        IClickHouseTypeInfo GetGenericArgument(int index);
     }
 }

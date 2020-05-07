@@ -29,7 +29,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public int ProtocolRevision { get;  }
 
-        public string Database { get;  }
+        public string? Database { get;  }
 
         public string User { get;  }
 
@@ -40,7 +40,7 @@ namespace Octonica.ClickHouseClient.Protocol
             ClientName = builder.ClientName ?? throw new ArgumentException("The name of the client can't be null.", nameof(ClientName));
             ClientVersion = builder.ClientVersion ?? throw new ArgumentException("The version of the client can't be null.", nameof(ClientVersion));
             ProtocolRevision = builder.ProtocolRevision ?? throw new ArgumentException("The revision of the protocol is required.", nameof(ProtocolRevision));
-            Database = builder.Database ?? throw new ArgumentException("The database is required.", nameof(Database));
+            Database = builder.Database;
             User = builder.User ?? throw new ArgumentException("The name of the user is required.", nameof(User));
             Password = builder.Password;
         }
@@ -54,7 +54,7 @@ namespace Octonica.ClickHouseClient.Protocol
             writer.Write7BitInt32(ClientVersion.Minor);
             writer.Write7BitInt32(ProtocolRevision);
 
-            writer.WriteString(Database);
+            writer.WriteString(Database ?? string.Empty);
             writer.WriteString(User);
             writer.WriteString(Password ?? string.Empty);
         }

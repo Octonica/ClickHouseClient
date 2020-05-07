@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(ulong);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.UInt64;
+        }
+
         private sealed class UInt64Reader : StructureReaderBase<ulong>
         {
             public UInt64Reader(int rowCount)

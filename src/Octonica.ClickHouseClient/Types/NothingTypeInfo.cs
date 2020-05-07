@@ -23,11 +23,13 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class NothingTypeInfo : IClickHouseTypeInfo
+    internal sealed class NothingTypeInfo : IClickHouseColumnTypeInfo
     {
         public string ComplexTypeName => TypeName;
 
         public string TypeName => "Nothing";
+
+        public int GenericArgumentsCount => 0;
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
@@ -39,7 +41,7 @@ namespace Octonica.ClickHouseClient.Types
             return new NothingColumnWriter(columnName, ComplexTypeName, rows.Count);
         }
 
-        IClickHouseTypeInfo IClickHouseTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{TypeName}\" does not support arguments.");
         }
@@ -47,6 +49,16 @@ namespace Octonica.ClickHouseClient.Types
         public Type GetFieldType()
         {
             return typeof(DBNull);
+        }
+
+        public ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Nothing;
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
         }
 
         private sealed class NothingColumnReader : IClickHouseColumnReader

@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(DateTime);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Date;
+        }
+
         private sealed class DateReader : StructureReaderBase<DateTime>
         {
             public DateReader(int rowCount)

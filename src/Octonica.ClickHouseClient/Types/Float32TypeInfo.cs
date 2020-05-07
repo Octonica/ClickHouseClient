@@ -48,6 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(float);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Single;
+        }
+
         private sealed class Float32Reader : StructureReaderBase<float>
         {
             public Float32Reader(int rowCount)

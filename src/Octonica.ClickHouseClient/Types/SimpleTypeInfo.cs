@@ -22,11 +22,13 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    public abstract class SimpleTypeInfo : IClickHouseTypeInfo
+    public abstract class SimpleTypeInfo : IClickHouseColumnTypeInfo
     {
         public string ComplexTypeName => TypeName;
 
         public string TypeName { get; }
+
+        public int GenericArgumentsCount => 0;
 
         public SimpleTypeInfo(string typeName)
         {
@@ -39,7 +41,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public abstract Type GetFieldType();
 
-        IClickHouseTypeInfo IClickHouseTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public abstract ClickHouseDbType GetDbType();
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{TypeName}\" does not support arguments.");
         }

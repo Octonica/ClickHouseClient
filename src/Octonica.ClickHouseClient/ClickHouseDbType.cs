@@ -64,7 +64,6 @@ namespace Octonica.ClickHouseClient
         DateTime2 = DbType.DateTime2,
         DateTimeOffset = DbType.DateTimeOffset,
 
-
         /// <summary>
         /// It's not a valid code for any type. This value is used as the delimiter between <see cref="DbType"/> and ClickHouse-specific type codes.
         /// </summary>
@@ -72,5 +71,10 @@ namespace Octonica.ClickHouseClient
 
         IpV4 = ClickHouseSpecificTypeDelimiterCode + 1,
         IpV6 = ClickHouseSpecificTypeDelimiterCode + 2,
+
+        Array = ClickHouseSpecificTypeDelimiterCode + 3,
+        Tuple = ClickHouseSpecificTypeDelimiterCode + 4,
+
+        Nothing = ClickHouseSpecificTypeDelimiterCode + 5,
     }
 }

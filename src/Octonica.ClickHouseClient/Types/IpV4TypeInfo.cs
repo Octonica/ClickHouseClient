@@ -68,6 +68,11 @@ namespace Octonica.ClickHouseClient.Types
             return typeof(IPAddress);
         }
 
+        public override ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.IpV4;
+        }
+
         private static uint IpAddressStringToUInt32(string? address)
         {
             if (address == null)

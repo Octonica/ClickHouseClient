@@ -25,7 +25,7 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal abstract class DecimalTypeInfoBase : IClickHouseTypeInfo
+    internal abstract class DecimalTypeInfoBase : IClickHouseColumnTypeInfo
     {
         public const byte DefaultPrecision = 38, DefaultScale = 9;
 
@@ -35,6 +35,8 @@ namespace Octonica.ClickHouseClient.Types
         public string ComplexTypeName { get; }
 
         public string TypeName { get; }
+
+        public int GenericArgumentsCount => 0;
 
         protected DecimalTypeInfoBase(string typeName, int? precision)
         {
@@ -95,7 +97,7 @@ namespace Octonica.ClickHouseClient.Types
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
         }
 
-        public IClickHouseTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
+        public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             int? precision = null;
             int scale;
@@ -129,6 +131,16 @@ namespace Octonica.ClickHouseClient.Types
         public Type GetFieldType()
         {
             return typeof(decimal);
+        }
+
+        public ClickHouseDbType GetDbType()
+        {
+            return ClickHouseDbType.Decimal;
+        }
+
+        public IClickHouseTypeInfo GetGenericArgument(int index)
+        {
+            throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
         }
 
         protected abstract DecimalTypeInfoBase CloneWithOptions(string complexTypeName, int? precision, int scale);

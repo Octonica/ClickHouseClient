@@ -21,9 +21,9 @@ namespace Octonica.ClickHouseClient.Types
 {
     public interface IClickHouseTypeInfoProvider
     {
-        IClickHouseTypeInfo GetTypeInfo(string typeName);
+        IClickHouseColumnTypeInfo GetTypeInfo(string typeName);
 
-        IClickHouseTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName);
+        IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName);
 
         IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);
     }

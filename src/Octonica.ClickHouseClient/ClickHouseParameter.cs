@@ -360,9 +360,9 @@ namespace Octonica.ClickHouseClient
             private readonly string _parameterId;
             private readonly object? _value;
             private readonly ClickHouseColumnSettings? _columnSettings;
-            private readonly IClickHouseTypeInfo _typeInfo;
+            private readonly IClickHouseColumnTypeInfo _typeInfo;
 
-            public ParameterColumnWriterBuilder(string parameterId, object? value, ClickHouseColumnSettings? columnSettings, IClickHouseTypeInfo typeInfo)
+            public ParameterColumnWriterBuilder(string parameterId, object? value, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo typeInfo)
             {
                 _parameterId = parameterId;
                 _value = value;
@@ -373,7 +373,6 @@ namespace Octonica.ClickHouseClient
             
             public IClickHouseColumnWriter Dispatch<T>()
             {
-
                 var singleElementColumn = new ConstantReadOnlyList<T>((T)_value, 1);
                 return _typeInfo.CreateColumnWriter(_parameterId, singleElementColumn, _columnSettings);
             }

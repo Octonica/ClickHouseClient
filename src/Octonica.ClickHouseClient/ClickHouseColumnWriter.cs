@@ -24,6 +24,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
@@ -70,6 +71,11 @@ namespace Octonica.ClickHouseClient
 
             for (int i = 0; i < _columns.Count; i++)
                 _columnSettings[i] = columnSettings;
+        }
+
+        public IClickHouseTypeInfo GetFieldTypeInfo(int ordinal)
+        {
+            return _columns[ordinal].TypeInfo;
         }
 
         public string GetName(int ordinal)
