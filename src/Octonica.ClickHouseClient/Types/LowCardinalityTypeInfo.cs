@@ -184,7 +184,7 @@ namespace Octonica.ClickHouseClient.Types
 
                 var elementCount = Math.Min(_rowCount - _position, (int) (slice.Length / _keySize));
                 var byteCount = elementCount * _keySize;
-                slice.CopyTo(new Span<byte>(_buffer, _position * elementCount, byteCount));
+                slice.Slice(0, byteCount).CopyTo(new Span<byte>(_buffer, _position * _keySize, byteCount));
 
                 _position += elementCount;
                 result += new SequenceSize(byteCount, elementCount);
