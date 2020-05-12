@@ -247,7 +247,7 @@ namespace Octonica.ClickHouseClient.Types
                 var len = Math.Min(_rows.Count - _position, writeTo.Length);
                 for (int i = 0; i < len; i++)
                 {
-                    writeTo[i] = _rows[i] == null ? (byte) 1 : (byte) 0;
+                    writeTo[i] = _rows[_position + i] == null ? (byte) 1 : (byte) 0;
                 }
 
                 _position += len;
