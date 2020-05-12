@@ -167,7 +167,7 @@ namespace Octonica.ClickHouseClient
                 }
                 catch (Exception ex)
                 {
-                    await writer.Discard(async, CancellationToken.None);
+                    writer.Discard();
                     throw ClickHouseHandledException.Wrap(ex);
                 }
 
@@ -192,9 +192,9 @@ namespace Octonica.ClickHouseClient
                 {
                     WriteTable(table);
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
-                    await _client._writer.Discard(async, CancellationToken.None);
+                    _client._writer.Discard();
                     throw ClickHouseHandledException.Wrap(ex);
                 }
 

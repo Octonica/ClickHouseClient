@@ -19,7 +19,6 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Pipelines;
 using System.Linq;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Utils;
@@ -118,7 +117,7 @@ namespace Octonica.ClickHouseClient.Protocol
                 _buffers[i] = (_buffers[i].buffer, 0);
         }
 
-        public void Complete(PipeWriter pipeWriter)
+        public void Complete(ReadWriteBuffer pipeWriter)
         {
             if (_acquiredBufferIndex >= 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is in progress.");
@@ -252,7 +251,7 @@ namespace Octonica.ClickHouseClient.Protocol
             {
                 var span = pipeWriter.GetMemory(segment.Memory.Length);
                 segment.Memory.CopyTo(span);
-                pipeWriter.Advance(segment.Memory.Length);
+                pipeWriter.ConfirmWrite(segment.Memory.Length);
             }
         }
 

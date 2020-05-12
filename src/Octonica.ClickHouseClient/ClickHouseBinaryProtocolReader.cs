@@ -17,8 +17,6 @@
 
 using System;
 using System.Buffers;
-using System.IO;
-using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -31,8 +29,8 @@ namespace Octonica.ClickHouseClient
 {
     internal class ClickHouseBinaryProtocolReader: IDisposable
     {
-        private readonly Pipe _pipe;
-        private readonly Stream _stream;
+        private readonly ReadWriteBuffer _buffer;
+        private readonly NetworkStream _stream;
         private readonly int _bufferSize;
 
         private CompressionAlgorithm _currentCompression;
@@ -41,7 +39,7 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseBinaryProtocolReader(NetworkStream stream, int bufferSize)
         {
-            _pipe = new Pipe(new PipeOptions(minimumSegmentSize: bufferSize));
+            _buffer = new ReadWriteBuffer(bufferSize);
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             _bufferSize = bufferSize;
         }
@@ -95,7 +93,7 @@ namespace Octonica.ClickHouseClient
                 if (readResult.Length >= size)
                     break;
 
-                AdvanceReader(readResult.Start);
+                AdvanceReader(readResult, 0);
                 await Advance(async, cancellationToken);
             } while (true);
 
@@ -112,7 +110,7 @@ namespace Octonica.ClickHouseClient
                 result = encoding.GetString(buffer);
             }
 
-            AdvanceReader(stringSpan.End);
+            AdvanceReader(readResult, (int) stringSpan.Length);
             return result;
         }
 
@@ -132,7 +130,7 @@ namespace Octonica.ClickHouseClient
                 var readResult = await Read(async, cancellationToken);
                 if (readResult.Length < sizeof(int))
                 {
-                    AdvanceReader(readResult.Start);
+                    AdvanceReader(readResult, 0);
                     await Advance(async, cancellationToken);
                     continue;
                 }
@@ -146,7 +144,7 @@ namespace Octonica.ClickHouseClient
                     result = BitConverter.ToInt32(tmpArr, 0);
                 }
 
-                AdvanceReader(readResult.GetPosition(sizeof(int)));
+                AdvanceReader(readResult, sizeof(int));
                 return result;
 
             } while (true);
@@ -170,7 +168,7 @@ namespace Octonica.ClickHouseClient
         {
             var readResult = await Read(async, cancellationToken);
             var result = readResult.FirstSpan[0];
-            AdvanceReader(readResult.GetPosition(1));
+            AdvanceReader(readResult, 1);
             return result;
         }
 
@@ -181,12 +179,12 @@ namespace Octonica.ClickHouseClient
                 var readResult = await Read(async, cancellationToken);
                 if (!TryRead7BitInteger(readResult, out var result, out var bytesRead))
                 {
-                    AdvanceReader(readResult.Start);
+                    AdvanceReader(readResult, 0);
                     await Advance(async, cancellationToken);
                 }
                 else
                 {
-                    AdvanceReader(readResult.GetPosition(bytesRead));
+                    AdvanceReader(readResult, bytesRead);
                     return result;
                 }
             } while (true);
@@ -199,7 +197,7 @@ namespace Octonica.ClickHouseClient
 
             var readResult = await Read(async, cancellationToken);
             var size = readBytes(readResult);
-            AdvanceReader(readResult.GetPosition(size.Bytes));
+            AdvanceReader(readResult, size.Bytes);
 
             return size;
         }
@@ -209,14 +207,14 @@ namespace Octonica.ClickHouseClient
             if (_currentCompression != CompressionAlgorithm.None)
                 throw new NotImplementedException();
 
-            if (!_pipe.Reader.TryRead(out var readResult))
+            var readResult = _buffer.Read();
+            if (readResult.IsEmpty)
             {
                 value = 0;
                 return false;
             }
 
-            value = readResult.Buffer.FirstSpan[0];
-            _pipe.Reader.AdvanceTo(readResult.Buffer.Start);
+            value = readResult.FirstSpan[0];
             return true;
         }
 
@@ -283,28 +281,28 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<ReadOnlySequence<byte>> ReadFromPipe(bool async, CancellationToken cancellationToken)
         {
-            var reader = _pipe.Reader;
             do
             {
-                if (reader.TryRead(out var readResult))
-                    return readResult.Buffer;
+                var readResult = _buffer.Read();
+                if (!readResult.IsEmpty)
+                    return readResult;
 
-                await AdvancePipe(async, cancellationToken);
+                await AdvanceBuffer(async, cancellationToken);
             } while (true);
         }
 
-        private void AdvanceReader(SequencePosition consumedPosition)
+        private void AdvanceReader(ReadOnlySequence<byte> readResult, int consumedPosition)
         {
             if (_currentCompression == CompressionAlgorithm.None)
             {
-                _pipe.Reader.AdvanceTo(consumedPosition);
+                _buffer.ConfirmRead(consumedPosition);
             }
             else
             {
                 if (_compressionDecoder == null)
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. A decoder is not initialized.");
 
-                _compressionDecoder.AdvanceReader(consumedPosition);
+                _compressionDecoder.AdvanceReader(readResult.GetPosition(consumedPosition));
             }
         }
 
@@ -323,12 +321,11 @@ namespace Octonica.ClickHouseClient
                         var size = _compressionDecoder.ReadHeader(buffer);
                         if (size >= 0)
                         {
-                            _pipe.Reader.AdvanceTo(buffer.GetPosition(size));
+                            _buffer.ConfirmRead(size);
                             break;
                         }
 
-                        _pipe.Reader.AdvanceTo(buffer.Start);
-                        await AdvancePipe(async, cancellationToken);
+                        await AdvanceBuffer(async, cancellationToken);
                     }
                 }
 
@@ -336,19 +333,18 @@ namespace Octonica.ClickHouseClient
                 {
                     var sequence = await ReadFromPipe(async, cancellationToken);
                     var consumed = _compressionDecoder.ConsumeNext(sequence);
-                    _pipe.Reader.AdvanceTo(sequence.GetPosition(consumed));
+                    _buffer.ConfirmRead(consumed);
                 }
 
                 return;
             }
 
-            await AdvancePipe(async, cancellationToken);
+            await AdvanceBuffer(async, cancellationToken);
         }
 
-        private async ValueTask AdvancePipe(bool async, CancellationToken cancellationToken)
+        private async ValueTask AdvanceBuffer(bool async, CancellationToken cancellationToken)
         {
-            var writer = _pipe.Writer;
-            var buffer = writer.GetMemory(_bufferSize);
+            var buffer = _buffer.GetMemory();
 
             int bytesRead;
             if (async)
@@ -356,7 +352,10 @@ namespace Octonica.ClickHouseClient
                 bytesRead = await _stream.ReadAsync(buffer, cancellationToken);
             }
             else
+            {
                 bytesRead = _stream.Read(buffer.Span);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
 
             if (bytesRead == 0)
             {
@@ -364,12 +363,8 @@ namespace Octonica.ClickHouseClient
                 throw new InvalidOperationException();
             }
 
-            writer.Advance(bytesRead);
-
-            if (async)
-                await writer.FlushAsync(cancellationToken);
-            else
-                TaskHelper.WaitSynchronously(async () => await writer.FlushAsync(cancellationToken));
+            _buffer.ConfirmWrite(bytesRead);
+            _buffer.Flush();
         }
 
         public static bool TryRead7BitInteger(ReadOnlySequence<byte> sequence, out ulong value, out int bytesRead)

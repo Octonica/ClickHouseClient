@@ -17,8 +17,6 @@
 
 using System;
 using System.Diagnostics;
-using System.IO;
-using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -33,8 +31,8 @@ namespace Octonica.ClickHouseClient
     {
         private readonly int _bufferSize;
 
-        private readonly Pipe _pipe;
-        private readonly Stream _stream;
+        private readonly ReadWriteBuffer _buffer;
+        private readonly NetworkStream _stream;
 
         private CompressionAlgorithm _currentCompression;
 
@@ -42,7 +40,7 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseBinaryProtocolWriter(NetworkStream stream, int bufferSize)
         {
-            _pipe = new Pipe(new PipeOptions(minimumSegmentSize: bufferSize));
+            _buffer = new ReadWriteBuffer(bufferSize);
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             _bufferSize = bufferSize;
         }
@@ -52,16 +50,13 @@ namespace Octonica.ClickHouseClient
             if (_currentCompression != CompressionAlgorithm.None)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. The stream can't be flushed because it's compression is not completed.");
 
-            if (async)
-                await _pipe.Writer.FlushAsync(cancellationToken);
-            else
-                TaskHelper.WaitSynchronously(async () => await _pipe.Writer.FlushAsync(cancellationToken));
+            _buffer.Flush();
 
-            var reader = _pipe.Reader;
-            if (!reader.TryRead(out var readResult))
+            var readResult = _buffer.Read();
+            if (readResult.IsEmpty)
                 return;
 
-            foreach (var buffer in readResult.Buffer)
+            foreach (var buffer in readResult)
             {
                 if (async)
                     await _stream.WriteAsync(buffer, cancellationToken);
@@ -69,7 +64,7 @@ namespace Octonica.ClickHouseClient
                     _stream.Write(buffer.Span);
             }
 
-            reader.AdvanceTo(readResult.Buffer.End);
+            _buffer.ConfirmRead((int) readResult.Length);
 
             if (async)
                 await _stream.FlushAsync(cancellationToken);
@@ -77,19 +72,15 @@ namespace Octonica.ClickHouseClient
                 _stream.Flush();
         }
 
-        public async ValueTask Discard(bool async, CancellationToken cancellationToken)
+        public void Discard()
         {
-            if (async)
-                await _pipe.Writer.FlushAsync(cancellationToken);
-            else
-                TaskHelper.WaitSynchronously(async () => await _pipe.Writer.FlushAsync(cancellationToken));
+            _buffer.Discard();
 
-            var reader = _pipe.Reader;
+            var readResult = _buffer.Read();
+            if (!readResult.IsEmpty)
+                _buffer.ConfirmRead((int) readResult.Length);
+
             _currentCompression = CompressionAlgorithm.None;
-            if (!reader.TryRead(out var readResult))
-                return;
-
-            reader.AdvanceTo(readResult.Buffer.End);
         }
 
         public void BeginCompress(CompressionAlgorithm algorithm, int compressionBlockSize)
@@ -126,7 +117,7 @@ namespace Octonica.ClickHouseClient
 
         public void EndCompress()
         {
-            _compressionEncoder?.Complete(_pipe.Writer);
+            _compressionEncoder?.Complete(_buffer);
             _currentCompression = CompressionAlgorithm.None;
         }
 
@@ -262,13 +253,13 @@ namespace Octonica.ClickHouseClient
                 return _compressionEncoder.GetSpan(sizeHint);
             }
 
-            return _pipe.Writer.GetSpan(sizeHint);
+            return _buffer.GetMemory(sizeHint).Span;
         }
 
         private Memory<byte> GetMemory(int sizeHint)
         {
             if (_currentCompression == CompressionAlgorithm.None)
-                return _pipe.Writer.GetMemory(sizeHint);
+                return _buffer.GetMemory(sizeHint);
 
             if (_compressionEncoder == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
@@ -280,7 +271,7 @@ namespace Octonica.ClickHouseClient
         private Memory<byte> GetMemory()
         {
             if (_currentCompression == CompressionAlgorithm.None)
-                return _pipe.Writer.GetMemory();
+                return _buffer.GetMemory();
 
             if (_compressionEncoder == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
@@ -299,7 +290,7 @@ namespace Octonica.ClickHouseClient
             }
             else
             {
-                _pipe.Writer.Advance(bytes);
+                _buffer.ConfirmWrite(bytes);
             }
         }
 

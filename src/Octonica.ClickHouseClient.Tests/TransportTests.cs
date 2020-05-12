@@ -265,7 +265,7 @@ namespace Octonica.ClickHouseClient.Tests
                 await cn.OpenAsync();
                 await using var cmd = cn.CreateCommand("SELECT sleep(3)");
 
-                Assert.Throws<TaskCanceledException>(() => cmd.ExecuteNonQuery());
+                Assert.Throws<OperationCanceledException>(() => cmd.ExecuteNonQuery());
             }
         }
 
