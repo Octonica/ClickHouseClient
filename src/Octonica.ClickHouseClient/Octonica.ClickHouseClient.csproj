@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version Condition="'$(Version)' == ''">1.0.6</Version>
+    <Version Condition="'$(Version)' == ''">1.0.7</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Company>Octonica</Company>
     <Copyright>© 2019 – 2020 Octonica</Copyright>
