@@ -59,6 +59,8 @@ namespace Octonica.ClickHouseClient.Protocol
 
             var maxLen = Math.Min(length, _compressedAvailable);
             Array.Copy(_compressedBuffer, _compressedSize - _compressedAvailable, target, offset, maxLen);
+            _compressedAvailable -= maxLen;
+
             return maxLen;
         }
 
