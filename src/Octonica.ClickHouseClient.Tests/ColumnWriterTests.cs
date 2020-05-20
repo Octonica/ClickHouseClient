@@ -531,6 +531,44 @@ namespace Octonica.ClickHouseClient.Tests
             static string? NumToString(int num) => num % 15 == 0 ? null : num % 3 == 0 ? "foo" : num % 5 == 0 ? "bar" : num % 2 == 0 ? "true" : "false";
         }
 
+        [Fact]
+        public async Task InsertLargeTable()
+        {
+            // "Large" means that the size of the table is greater than the size of the buffer
+            const int startId = 100_000, rowCount = 100_000;
+
+            var settings = new ClickHouseConnectionStringBuilder(GetDefaultConnectionSettings()) {BufferSize = 4096};
+
+            await using var connection = new ClickHouseConnection(settings);
+            await connection.OpenAsync();
+
+            await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}(id, str) VALUES"))
+            {
+                var table = new object[] {Enumerable.Range(startId, rowCount), Enumerable.Range(startId, rowCount).Select(num => num.ToString())};
+                await writer.WriteTableAsync(table, rowCount, CancellationToken.None);
+                await writer.EndWriteAsync(CancellationToken.None);
+            }
+
+            await using var cmd = connection.CreateCommand($"SELECT id, str FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            await using var reader = cmd.ExecuteReader();
+            int expectedId = startId;
+            while (await reader.ReadAsync())
+            {
+                var id = reader.GetInt32(0);
+                var str = reader.GetString(1);
+
+                Assert.Equal(expectedId, id);
+                Assert.Equal(expectedId.ToString(), str);
+
+                ++expectedId;
+            }
+
+            Assert.Equal(startId + rowCount, expectedId);
+        }
+
         public class TableFixture : ClickHouseTestsBase, IDisposable
         {
             public TableFixture()

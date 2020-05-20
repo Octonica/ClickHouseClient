@@ -122,6 +122,17 @@ namespace Octonica.ClickHouseClient.Protocol
             if (_acquiredBufferIndex >= 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is in progress.");
 
+            /* 
+             * Compressed data consist of a sequence of compressed blocks.
+             *
+             * The structure of the block:
+             * 1. CityHash checksum (16 bytes);
+             * 2. Algorithm's identifier (1 byte);
+             * 3. The size of the block without checksum (4 bytes);
+             * 4. The size of data in the block without compression (4 bytes);
+             * 5. The block of compressed data.
+            */
+
             var resultSequences = new List<(int bufferIndex, int offset, int length)>(_sequences.Count + 1);
 
             const int cityHashSize = 2 * sizeof(ulong);
@@ -138,11 +149,20 @@ namespace Octonica.ClickHouseClient.Protocol
                 }
             }
 
-            (int bufferIndex, int offset, int length) currentSequence = (-1, 0, 0);
-            int writePosition = 0, readPosition = 0, sequenceIndex = 0, rawSize = 0, encodedSize = 0;
-            while (true)
+            int readPosition = 0, sequenceIndex = 0;
+            bool completed;
+            do
             {
-                bool completed = false;
+                if (resultSequences.Count > 0)
+                {
+                    foreach (var sequence in resultSequences)
+                        freeSequences.Enqueue(sequence);
+
+                    resultSequences.Clear();
+                }
+
+                completed = true;
+                int writePosition = 0, rawSize = 0, encodedSize = 0;
                 while (sequenceIndex < _sequences.Count)
                 {
                     var readSequence = _sequences[sequenceIndex];
@@ -160,14 +180,15 @@ namespace Octonica.ClickHouseClient.Protocol
 
                     if (readPosition < readSequence.length)
                     {
-                        completed = true;
+                        completed = false;
                         break;
                     }
                 }
 
-                if (!completed)
+                if (rawSize == 0)
                     break;
 
+                (int bufferIndex, int offset, int length) currentSequence = (-1, 0, 0);
                 while (true)
                 {
                     if (writePosition == currentSequence.length)
@@ -188,71 +209,67 @@ namespace Octonica.ClickHouseClient.Protocol
                         writePosition = 0;
                     }
 
-                    var result = EncodeNext(_buffers[currentSequence.bufferIndex].buffer, currentSequence.offset + writePosition, currentSequence.length - writePosition);
+                    int result = completed
+                        ? EncodeFinal(_buffers[currentSequence.bufferIndex].buffer, currentSequence.offset + writePosition, currentSequence.length - writePosition)
+                        : EncodeNext(_buffers[currentSequence.bufferIndex].buffer, currentSequence.offset + writePosition, currentSequence.length - writePosition);
+
                     encodedSize += result;
                     writePosition += result;
 
                     if (writePosition < currentSequence.length)
                         break;
                 }
-            }
 
-            while (true)
-            {
-                if (writePosition == currentSequence.length)
+                if (writePosition > 0)
+                    resultSequences.Add((currentSequence.bufferIndex, currentSequence.offset, writePosition));
+
+                Span<byte> headerSpan = header;
+                headerSpan[cityHashSize] = AlgorithmIdentifier;
+                var success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1), encodedSize + header.Length - cityHashSize);
+                Debug.Assert(success);
+                success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1 + sizeof(int)), rawSize);
+                Debug.Assert(success);
+
+                var segments = new List<ReadOnlyMemory<byte>>(resultSequences.Count + 1) {new ReadOnlyMemory<byte>(header)};
+                segments.AddRange(resultSequences.Select(s => new ReadOnlyMemory<byte>(_buffers[s.bufferIndex].buffer, s.offset, s.length)));
+                var dataSegment = new SimpleReadOnlySequenceSegment<byte>(segments);
+
+                var dataSequence = new ReadOnlySequence<byte>(dataSegment, 0, dataSegment.LastSegment, dataSegment.LastSegment.Memory.Length);
+                var cityHash = CityHash.CityHash128(dataSequence.Slice(cityHashSize));
+
+                success = BitConverter.TryWriteBytes(headerSpan, cityHash.Low);
+                Debug.Assert(success);
+                success = BitConverter.TryWriteBytes(headerSpan.Slice(sizeof(ulong)), cityHash.High);
+                Debug.Assert(success);
+
+                for (ReadOnlySequenceSegment<byte>? segment = dataSegment; segment != null; segment = segment.Next)
                 {
-                    if (currentSequence.length > 0)
-                        resultSequences.Add(currentSequence);
-
-                    if (freeSequences.Count > 0)
+                    var sourceMem = segment.Memory;
+                    while (true)
                     {
-                        currentSequence = freeSequences.Dequeue();
+                        var targetMem = pipeWriter.GetMemory();
+                        if (sourceMem.Length > targetMem.Length)
+                        {
+                            sourceMem.Slice(0, targetMem.Length).CopyTo(targetMem);
+                            sourceMem = sourceMem.Slice(targetMem.Length);
+                            pipeWriter.ConfirmWrite(targetMem.Length);
+                        }
+                        else
+                        {
+                            sourceMem.CopyTo(targetMem);
+                            pipeWriter.ConfirmWrite(sourceMem.Length);
+                            break;
+                        }
                     }
-                    else
-                    {
-                        currentSequence = (_buffers.Count, 0, _bufferSize);
-                        _buffers.Add((new byte[_bufferSize], _bufferSize));
-                    }
-
-                    writePosition = 0;
                 }
 
-                var result = EncodeFinal(_buffers[currentSequence.bufferIndex].buffer, currentSequence.offset + writePosition, currentSequence.length - writePosition);
-                encodedSize += result;
-                writePosition += result;
+                if (writePosition > 0)
+                {
+                    // This entire sequence should be marked as free
+                    resultSequences[^1] = currentSequence;
+                }
 
-                if (writePosition < currentSequence.length)
-                    break;
-            }
-
-            if (writePosition > 0)
-                resultSequences.Add((currentSequence.bufferIndex, currentSequence.offset, writePosition));
-
-            Span<byte> headerSpan = header;
-            headerSpan[cityHashSize] = AlgorithmIdentifier;
-            var success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1), encodedSize + header.Length - cityHashSize);
-            Debug.Assert(success);
-            success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1 + sizeof(int)), rawSize);
-            Debug.Assert(success);
-
-            var segments = new List<ReadOnlyMemory<byte>>(resultSequences.Count + 1) {new ReadOnlyMemory<byte>(header)};
-            segments.AddRange(resultSequences.Select(s => new ReadOnlyMemory<byte>(_buffers[s.bufferIndex].buffer, s.offset, s.length)));
-            var dataSegment = new SimpleReadOnlySequenceSegment<byte>(segments);
-
-            var dataSequence = new ReadOnlySequence<byte>(dataSegment, 0, dataSegment.LastSegment, dataSegment.LastSegment.Memory.Length);
-            var cityHash = CityHash.CityHash128(dataSequence.Slice(cityHashSize));
-
-            success = BitConverter.TryWriteBytes(headerSpan, cityHash.Low);
-            Debug.Assert(success);
-            success = BitConverter.TryWriteBytes(headerSpan.Slice(sizeof(ulong)), cityHash.High);
-            Debug.Assert(success);
-            
-            for (ReadOnlySequenceSegment<byte>? segment = dataSegment; segment != null; segment = segment.Next)
-            {
-                var span = pipeWriter.GetMemory(segment.Memory.Length);
-                segment.Memory.CopyTo(span);
-                pipeWriter.ConfirmWrite(segment.Memory.Length);
-            }
+            } while (!completed);
         }
 
         protected abstract int ConsumeNext(byte[] source, int offset, int length);
