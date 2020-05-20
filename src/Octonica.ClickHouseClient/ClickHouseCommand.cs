@@ -106,7 +106,7 @@ namespace Octonica.ClickHouseClient
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
-                int result = 0, rowsAffected = 0;
+                (int read, int written) result = (0, 0), progress = (0, 0);
                 while (true)
                 {
                     var message = await session.ReadMessage(async, cancellationToken);
@@ -119,8 +119,8 @@ namespace Octonica.ClickHouseClient
                             var blockHeader = await session.SkipTable(dataMessage, async, cancellationToken);
                             if (blockHeader.Columns.Count == 0 && blockHeader.RowCount == 0)
                             {
-                                result += rowsAffected;
-                                rowsAffected = 0;
+                                result = (result.read + progress.read, result.written + progress.written);
+                                progress = (0, 0);
                             }
                             continue;
 
@@ -128,13 +128,20 @@ namespace Octonica.ClickHouseClient
                             throw ((ServerErrorMessage) message).Exception.CopyWithQuery(query);
 
                         case ServerMessageCode.EndOfStream:
-                            result += rowsAffected;
+                            result = (result.read + progress.read, result.written + progress.written);
                             session.Dispose();
-                            return result;
+
+                            if (result.written > 0)
+                            {
+                                // INSERT command could also return the number of parsed rows. Return only the number of inserted rows.
+                                return result.written;
+                            }
+
+                            return result.read;
 
                         case ServerMessageCode.Progress:
                             var progressMessage = (ServerProgressMessage) message;
-                            rowsAffected = progressMessage.Rows + progressMessage.WrittenRows;
+                            progress = (progressMessage.Rows, progressMessage.WrittenRows);
                             continue;
 
                         case ServerMessageCode.ProfileInfo:
