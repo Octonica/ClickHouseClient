@@ -76,5 +76,7 @@ namespace Octonica.ClickHouseClient
         Tuple = ClickHouseSpecificTypeDelimiterCode + 4,
 
         Nothing = ClickHouseSpecificTypeDelimiterCode + 5,
+
+        Enum = ClickHouseSpecificTypeDelimiterCode + 6,
     }
 }

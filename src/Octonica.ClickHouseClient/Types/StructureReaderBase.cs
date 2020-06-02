@@ -90,7 +90,12 @@ namespace Octonica.ClickHouseClient.Types
             return new StructureTableColumn<T>(buffer);
         }
 
-        public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
+        public IClickHouseTableColumn<T> EndRead()
+        {
+            return EndRead(_memory.Slice(0, _position));
+        }
+
+        IClickHouseTableColumn IClickHouseColumnReader.EndRead(ClickHouseColumnSettings? settings)
         {
             return EndRead(_memory.Slice(0, _position));
         }

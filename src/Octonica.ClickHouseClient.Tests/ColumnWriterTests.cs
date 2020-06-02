@@ -532,6 +532,57 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task InsertEnumValues()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_enums");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand($"CREATE TABLE {TestTableName}_enums(id Int16, e8 Enum8('min' = -128, 'zero' = 0, 'max' = 127), e16 Enum16('unknown value' = 0, 'well known value' = 42, 'foo' = -1024, 'bar' = 108)) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}_enums(id, e16, e8) VALUES"))
+                {
+                    var source = new object[]
+                    {
+                        Enumerable.Range(0, 1000).Select(num => (short) num),
+                        Enumerable.Range(-500, 1000).Select(num => num % 108 == 0 ? "bar" : num < 0 ? "foo" : num == 42 ? "well known value" : "unknown value"),
+                        Enumerable.Range(0, 1000).Select(num => num % 3 == 0 ? sbyte.MinValue : num % 3 == 1 ? (sbyte) 0 : sbyte.MaxValue)
+                    };
+
+                    await writer.WriteTableAsync(source, 1000, CancellationToken.None);
+                    await writer.EndWriteAsync(CancellationToken.None);
+                }
+
+                cmd.CommandText = $"SELECT e8, e16 FROM {TestTableName}_enums ORDER BY id";
+
+                int count = 0;
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                while (reader.Read())
+                {
+                    var e8 = reader.GetValue(0);
+                    var e16 = reader.GetInt16(1);
+
+                    Assert.Equal(count % 3 == 0 ? "min" : count % 3 == 1 ? "zero" : "max", e8);
+                    Assert.Equal((count - 500) % 108 == 0 ? 108 : count - 500 < 0 ? -1024 : count - 500 == 42 ? 42 : 0, e16);
+                    ++count;
+                }
+
+                Assert.Equal(1000, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_enums");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
         public async Task InsertLargeTable()
         {
             // "Large" means that the size of the table is greater than the size of the buffer

@@ -373,6 +373,17 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadEnumScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT CAST(42 AS Enum('' = 0, 'b' = -129, 'Hello, world! :)' = 42))");
+
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.Equal("Hello, world! :)", result);
+        }
+
+        [Fact]
         public async Task ReadInt32ArrayColumn()
         {
             int?[]?[] expected = new int?[10][];
@@ -1463,79 +1474,79 @@ namespace Octonica.ClickHouseClient.Tests
         {
             const string ddl = @"
 CREATE TABLE clickhouse_test_nullable (
-	int8     Nullable(Int8),
-	int16    Nullable(Int16),
-	int32    Nullable(Int32),
-	int64    Nullable(Int64),
-	uint8    Nullable(UInt8),
-	uint16   Nullable(UInt16),
-	uint32   Nullable(UInt32),
-	uint64   Nullable(UInt64),
-	float32  Nullable(Float32),
-	float64  Nullable(Float64),
-	string   Nullable(String),
-	fString  Nullable(FixedString(2)),
-	date     Nullable(Date),
-	datetime Nullable(DateTime),
-	enum8    Nullable(Enum8 ('a' = 1, 'b' = 2)),
-	enum16   Nullable(Enum16('c' = 1, 'd' = 2))
+    int8     Nullable(Int8),
+    int16    Nullable(Int16),
+    int32    Nullable(Int32),
+    int64    Nullable(Int64),
+    uint8    Nullable(UInt8),
+    uint16   Nullable(UInt16),
+    uint32   Nullable(UInt32),
+    uint64   Nullable(UInt64),
+    float32  Nullable(Float32),
+    float64  Nullable(Float64),
+    string   Nullable(String),
+    fString  Nullable(FixedString(2)),
+    date     Nullable(Date),
+    datetime Nullable(DateTime),
+    enum8    Nullable(Enum8 ('a' = 127, 'b' = 2)),
+    enum16   Nullable(Enum16('c' = -32768, 'd' = 2, '' = 42))
 ) Engine=Memory;";
 
             const string dml = @"
 INSERT INTO clickhouse_test_nullable (
-	int8
-	,int16
-	,int32
-	,int64
-	,uint8
-	,uint16
-	,uint32
-	,uint64
-	,float32
-	,float64
-	,string
-	,fString
-	,date
-	,datetime
-	//,enum8
-	//,enum16
+    int8
+    ,int16
+    ,int32
+    ,int64
+    ,uint8
+    ,uint16
+    ,uint32
+    ,uint64
+    ,float32
+    ,float64
+    ,string
+    ,fString
+    ,date
+    ,datetime
+    ,enum8
+    ,enum16
 ) VALUES (
     8
-	,16
-	,32
-	,64
-	,18
-	,116
-	,132
-	,165
-	,1.1
-	,1.2
-	,'RU'
-	,'UA'
-	,now()
-	,now()
-//	,'a'
-//	,'c'
+    ,16
+    ,32
+    ,64
+    ,18
+    ,116
+    ,132
+    ,165
+    ,1.1
+    ,1.2
+    ,'RU'
+    ,'UA'
+    ,now()
+    ,now()
+    ,'a'
+    ,'c'
 )";
 
             const string query = @"
 SELECT
-	int8
-	,int16
-	,int32
-	,int64
-	,uint8
-	,uint16
-	,uint32
-	,uint64
-	,float32
-	,float64
-	,string
-	,fString
-	,date
-	,datetime
-//	,enum8
-//	enum16
+    int8
+    ,int16
+    ,int32
+    ,int64
+    ,uint8
+    ,uint16
+    ,uint32
+    ,uint64
+    ,float32
+    ,float64
+    ,string
+    ,fString
+    ,date
+    ,datetime
+    ,enum8
+    ,enum16
 FROM clickhouse_test_nullable";
 
             try
@@ -1574,6 +1585,10 @@ FROM clickhouse_test_nullable";
                     Assert.Equal(fixedStringBytes, fixedStringBytesAsValue);
                     Assert.NotNull(fixedStringBytes as byte[]);
                     Assert.Equal("UA", Encoding.Default.GetString(fixedStringBytes as byte[]));
+                    Assert.Equal("a", r.GetValue(14));
+                    Assert.Equal(127, r.GetFieldValue<sbyte>(14));
+                    Assert.Equal("c", r.GetValue(15));
+                    Assert.Equal(-32768, r.GetInt16(15));
                 }
             }
             finally

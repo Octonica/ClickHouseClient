@@ -53,7 +53,7 @@ namespace Octonica.ClickHouseClient.Types
             return ClickHouseDbType.Int16;
         }
 
-        private sealed class Int16Reader : StructureReaderBase<short>
+        internal sealed class Int16Reader : StructureReaderBase<short>
         {
             public Int16Reader(int rowCount)
                 : base(sizeof(short), rowCount)
@@ -71,7 +71,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class Int16Writer : StructureWriterBase<short>
+        internal sealed class Int16Writer : StructureWriterBase<short>
         {
             public Int16Writer(string columnName, string columnType, IReadOnlyList<short> rows)
                 : base(columnName, columnType, sizeof(short), rows)

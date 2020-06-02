@@ -91,7 +91,8 @@ namespace Octonica.ClickHouseClient.Types
                 int count = 1;
                 int currentIdx = pOpenIdx;
                 int optionStartIdx = pOpenIdx + 1;
-                ReadOnlySpan<char> significantChars = "(,)";
+                bool escaped = false;
+                ReadOnlySpan<char> significantChars = "(,)'";
                 do
                 {
                     if (typeNameSpan.Length - 1 == currentIdx)
@@ -103,25 +104,32 @@ namespace Octonica.ClickHouseClient.Types
 
                     pNextIdx += currentIdx + 1;
                     currentIdx = pNextIdx;
-                    if (typeNameSpan[currentIdx] == '(')
+                    if (typeNameSpan[currentIdx] == '\'')
                     {
-                        ++count;
+                        escaped = !escaped;
                     }
-                    else if (typeNameSpan[currentIdx] == ')')
+                    else if (!escaped)
                     {
-                        --count;
-                        if (count == 0)
-                            break;
-                    }
-                    else if (count == 1)
-                    {
-                        var currentOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
-                        optionStartIdx = currentIdx + 1;
+                        if (typeNameSpan[currentIdx] == '(')
+                        {
+                            ++count;
+                        }
+                        else if (typeNameSpan[currentIdx] == ')')
+                        {
+                            --count;
+                            if (count == 0)
+                                break;
+                        }
+                        else if (count == 1)
+                        {
+                            var currentOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
+                            optionStartIdx = currentIdx + 1;
 
-                        if (options != null)
-                            options.Add(currentOption);
-                        else
-                            options = new List<ReadOnlyMemory<char>>(2) {currentOption};
+                            if (options != null)
+                                options.Add(currentOption);
+                            else
+                                options = new List<ReadOnlyMemory<char>>(2) {currentOption};
+                        }
                     }
 
                 } while (true);
@@ -197,6 +205,9 @@ namespace Octonica.ClickHouseClient.Types
 
                 new IpV4TypeInfo(),
                 new IpV6TypeInfo(),
+
+                new Enum8TypeInfo(),
+                new Enum16TypeInfo(),
             };
         }
     }

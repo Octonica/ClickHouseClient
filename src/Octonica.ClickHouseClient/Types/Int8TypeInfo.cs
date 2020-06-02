@@ -52,7 +52,7 @@ namespace Octonica.ClickHouseClient.Types
             return ClickHouseDbType.SByte;
         }
 
-        private sealed class Int8Reader : StructureReaderBase<sbyte>
+        internal sealed class Int8Reader : StructureReaderBase<sbyte>
         {
             public Int8Reader(int rowCount)
                 : base(sizeof(sbyte), rowCount)
@@ -70,7 +70,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class Int8Writer : IClickHouseColumnWriter
+        internal sealed class Int8Writer : IClickHouseColumnWriter
         {
             private readonly IReadOnlyList<sbyte> _rows;
 
