@@ -435,4 +435,6 @@ $RECYCLE.BIN/
 # Test configuration
 /src/Octonica.ClickHouseClient.Tests/clickHouse.dbconfig
 
+# Benchmark configuration
+/src/Octonica.ClickHouseClient.Benchmarks/clickHouse.dbconfig
 

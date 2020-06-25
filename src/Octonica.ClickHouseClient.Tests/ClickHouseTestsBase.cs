@@ -15,18 +15,13 @@
  */
 #endregion
 
-using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
 {
     public abstract class ClickHouseTestsBase
     {
-        private const string ConfigExample = "host=domain.com; port=9000; user=default;";
-
         private ClickHouseConnectionSettings? _settings;
 
         public ClickHouseConnectionSettings GetDefaultConnectionSettings()
@@ -36,8 +31,7 @@ namespace Octonica.ClickHouseClient.Tests
                 return _settings;
             }
 
-            _settings = this.ReadConfigFile().BuildSettings();
-
+            _settings = ConnectionSettingsHelper.GetConnectionSettings();
             return _settings;
         }
 
@@ -61,24 +55,5 @@ namespace Octonica.ClickHouseClient.Tests
 
             return connection;
         }
-
-        private ClickHouseConnectionStringBuilder ReadConfigFile()
-        {
-
-            string configPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..\\..\\..\\"));
-
-            configPath += "clickHouse.dbconfig";
-
-            Assert.True(File.Exists(configPath), "Need database connection config: " + configPath + " \t" + ConfigExample);
-
-            string configText = File.ReadAllText(configPath);
-
-            ClickHouseConnectionStringBuilder builder = new ClickHouseConnectionStringBuilder(configText);
-
-            Assert.True(builder.Host != null, "Example \t" + ConfigExample);
-
-            return builder;
-        }
     }
-
 }
