@@ -109,10 +109,12 @@ namespace Octonica.ClickHouseClient
 
         public void Dispose()
         {
-            _semaphore?.Dispose();
-            _reader?.Dispose();
+            _semaphore.Dispose();
+            _reader.Dispose();
             _writer.Dispose();
-            _client?.Dispose();
+
+            _client.Client.Close(0);
+            _client.Dispose();
         }
 
         public class Session : IDisposable
