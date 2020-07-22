@@ -113,6 +113,19 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadStringWithEncodingScalar()
+        {
+            const string str = "АБВГДЕ";
+            var encoding = Encoding.GetEncoding("windows-1251");
+
+            await using var connection = await OpenConnectionAsync();
+            await using var cmd = connection.CreateCommand($"SELECT convertCharset('{str}', 'UTF8', 'windows-1251') AS c");
+
+            var strResult = await cmd.ExecuteScalarAsync(new ClickHouseColumnSettings(encoding));
+            Assert.Equal(str, strResult);
+        }
+
+        [Fact]
         public async Task ReadGuidScalar()
         {
             var guidValue = new Guid("74D47928-2423-4FE2-AD45-82E296BF6058");

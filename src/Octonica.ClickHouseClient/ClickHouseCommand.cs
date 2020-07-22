@@ -193,41 +193,71 @@ namespace Octonica.ClickHouseClient
 
         public override object ExecuteScalar()
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteScalar(false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(ExecuteScalar(null, false, CancellationToken.None));
+        }
+
+        public object ExecuteScalar(ClickHouseColumnSettings? columnSettings)
+        {
+            return TaskHelper.WaitNonAsyncTask(ExecuteScalar(columnSettings, false, CancellationToken.None));
         }
 
         public T ExecuteScalar<T>()
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(null, false, CancellationToken.None));
+        }
+
+        public T ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings)
+        {
+            return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(columnSettings, false, CancellationToken.None));
         }
 
         public override async Task<object> ExecuteScalarAsync(CancellationToken cancellationToken)
         {
-            return await ExecuteScalar(true, cancellationToken);
+            return await ExecuteScalar(null, true, cancellationToken);
+        }
+
+        public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings)
+        {
+            return await ExecuteScalar(columnSettings, true, CancellationToken.None);
+        }
+
+        public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
+        {
+            return await ExecuteScalar(columnSettings, true, cancellationToken);
         }
 
         public async Task<T> ExecuteScalarAsync<T>()
         {
-            return await ExecuteScalar<T>(true, CancellationToken.None);
+            return await ExecuteScalar<T>(null, true, CancellationToken.None);
         }
 
         public async Task<T> ExecuteScalarAsync<T>(CancellationToken cancellationToken)
         {
-            return await ExecuteScalar<T>(true, cancellationToken);
+            return await ExecuteScalar<T>(null, true, cancellationToken);
         }
 
-        private async ValueTask<T> ExecuteScalar<T>(bool async, CancellationToken cancellationToken)
+        public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings)
         {
-            var result = await ExecuteScalar(reader => reader.GetFieldValue<T>(0), async, cancellationToken);
+            return await ExecuteScalar<T>(columnSettings, true, CancellationToken.None);
+        }
+
+        public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
+        {
+            return await ExecuteScalar<T>(columnSettings, true, cancellationToken);
+        }
+
+        private async ValueTask<T> ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
+        {
+            var result = await ExecuteScalar(columnSettings, reader => reader.GetFieldValue<T>(0), async, cancellationToken);
             return (T) result;
         }
 
-        private ValueTask<object> ExecuteScalar(bool async, CancellationToken cancellationToken)
+        private ValueTask<object> ExecuteScalar(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
         {
-            return ExecuteScalar(reader => reader.GetValue(0), async, cancellationToken);
+            return ExecuteScalar(columnSettings, reader => reader.GetValue(0), async, cancellationToken);
         }
 
-        private async ValueTask<object> ExecuteScalar(Func<ClickHouseDataReader, object?> valueSelector, bool async, CancellationToken cancellationToken)
+        private async ValueTask<object> ExecuteScalar(ClickHouseColumnSettings? columnSettings, Func<ClickHouseDataReader, object?> valueSelector, bool async, CancellationToken cancellationToken)
         {
             ClickHouseDataReader? reader = null;
             try
@@ -236,6 +266,9 @@ namespace Octonica.ClickHouseClient
                 bool hasAnyColumn = reader.FieldCount > 0;
                 if (!hasAnyColumn)
                     return DBNull.Value;
+
+                if (columnSettings != null)
+                    reader.ConfigureColumn(0, columnSettings);
 
                 bool hasAnyRow = async ? await reader.ReadAsync(cancellationToken) : reader.Read();
                 if (!hasAnyRow)
