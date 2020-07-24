@@ -78,12 +78,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            if (_reversedEnumMap == null)
+            if (_enumMap == null || _reversedEnumMap == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
 
             var internalReader = CreateInternalColumnReader(rowCount);
-            return new EnumColumnReader(internalReader, _reversedEnumMap);
+            return CreateColumnReader(internalReader, _reversedEnumMap);
         }
+
+        protected abstract EnumColumnReaderBase CreateColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap);
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
@@ -140,12 +142,12 @@ namespace Octonica.ClickHouseClient.Types
 
         protected abstract bool TryParse(ReadOnlySpan<char> text, out TValue value);
 
-        private sealed class EnumColumnReader : IClickHouseColumnReader
+        protected abstract class EnumColumnReaderBase : IClickHouseColumnReader
         {
             private readonly StructureReaderBase<TValue> _internalReader;
             private readonly IReadOnlyDictionary<TValue, string> _reversedEnumMap;
-
-            public EnumColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap)
+            
+            public EnumColumnReaderBase(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap)
             {
                 _internalReader = internalReader;
                 _reversedEnumMap = reversedEnumMap;
@@ -164,8 +166,45 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
                 var column = _internalReader.EndRead();
+                var enumConverter = settings?.EnumConverter;
+                if (enumConverter != null)
+                {
+                    var dispatcher = CreateColumnDispatcher(column, _reversedEnumMap);
+                    return enumConverter.Dispatch(dispatcher);
+                }
+
                 return new EnumTableColumn<TValue>(column, _reversedEnumMap);
             }
+
+            protected abstract EnumTableColumnDispatcherBase CreateColumnDispatcher(IClickHouseTableColumn<TValue> column, IReadOnlyDictionary<TValue, string> reversedEnumMap);
+        }
+
+        protected abstract class EnumTableColumnDispatcherBase : IClickHouseEnumConverterDispatcher<IClickHouseTableColumn>
+        {
+            private readonly IClickHouseTableColumn<TValue> _column;
+            private readonly IReadOnlyDictionary<TValue, string> _reversedEnumMap;
+
+            public EnumTableColumnDispatcherBase(IClickHouseTableColumn<TValue> column, IReadOnlyDictionary<TValue, string> reversedEnumMap)
+            {
+                _column = column;
+                _reversedEnumMap = reversedEnumMap;
+            }
+
+            public IClickHouseTableColumn Dispatch<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter)
+                where TEnum : Enum
+            {
+                var map = new Dictionary<TValue, TEnum>(_reversedEnumMap.Count);
+                foreach (var pair in _reversedEnumMap)
+                {
+                    if (TryMap(enumConverter, pair.Key, pair.Value, out var enumValue))
+                        map.Add(pair.Key, enumValue);
+                }
+
+                return new EnumTableColumn<TValue, TEnum>(_column, map, _reversedEnumMap);
+            }
+
+            protected abstract bool TryMap<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter, TValue value, string stringValue, out TEnum enumValue)
+                where TEnum : Enum;
         }
     }
 }

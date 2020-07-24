@@ -34,6 +34,11 @@ namespace Octonica.ClickHouseClient.Types
         {
         }
 
+        protected override EnumColumnReaderBase CreateColumnReader(StructureReaderBase<sbyte> internalReader, IReadOnlyDictionary<sbyte, string> reversedEnumMap)
+        {
+            return new EnumColumnReader(internalReader, reversedEnumMap);
+        }
+
         protected override IClickHouseColumnTypeInfo CreateDetailedTypeInfo(string complexTypeName, IEnumerable<KeyValuePair<string, sbyte>> values)
         {
             return new Enum8TypeInfo(TypeName, complexTypeName, values);
@@ -55,6 +60,32 @@ namespace Octonica.ClickHouseClient.Types
         protected override bool TryParse(ReadOnlySpan<char> text, out sbyte value)
         {
             return sbyte.TryParse(text, out value);
+        }
+
+        private sealed class EnumColumnReader : EnumColumnReaderBase
+        {
+            public EnumColumnReader(StructureReaderBase<sbyte> internalReader, IReadOnlyDictionary<sbyte, string> reversedEnumMap)
+                : base(internalReader, reversedEnumMap)
+            {
+            }
+
+            protected override EnumTableColumnDispatcherBase CreateColumnDispatcher(IClickHouseTableColumn<sbyte> column, IReadOnlyDictionary<sbyte, string> reversedEnumMap)
+            {
+                return new EnumTableColumnDispatcher(column, reversedEnumMap);
+            }
+        }
+
+        private sealed class EnumTableColumnDispatcher : EnumTableColumnDispatcherBase
+        {
+            public EnumTableColumnDispatcher(IClickHouseTableColumn<sbyte> column, IReadOnlyDictionary<sbyte, string> reversedEnumMap)
+                : base(column, reversedEnumMap)
+            {
+            }
+
+            protected override bool TryMap<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter, sbyte value, string stringValue, out TEnum enumValue)
+            {
+                return enumConverter.TryMap(value, stringValue, out enumValue);
+            }
         }
     }
 }

@@ -21,18 +21,18 @@ using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class EnumTableColumn<TValue> : IClickHouseTableColumn<string>
-        where TValue : struct
+    internal sealed class EnumTableColumn<TKey> : IClickHouseTableColumn<string>
+        where TKey : struct
     {
-        private readonly IClickHouseTableColumn<TValue> _internalColumn;
-        private readonly IReadOnlyDictionary<TValue, string> _reversedEnumMap;
+        private readonly IClickHouseTableColumn<TKey> _internalColumn;
+        private readonly IReadOnlyDictionary<TKey, string> _valueMap;
 
         public int RowCount => _internalColumn.RowCount;
 
-        public EnumTableColumn(IClickHouseTableColumn<TValue> internalColumn, IReadOnlyDictionary<TValue, string> reversedEnumMap)
+        public EnumTableColumn(IClickHouseTableColumn<TKey> internalColumn, IReadOnlyDictionary<TKey, string> valueMap)
         {
             _internalColumn = internalColumn;
-            _reversedEnumMap = reversedEnumMap;
+            _valueMap = valueMap;
         }
 
         public bool IsNull(int index)
@@ -44,7 +44,7 @@ namespace Octonica.ClickHouseClient.Types
         public string GetValue(int index)
         {
             var value = _internalColumn.GetValue(index);
-            if (!_reversedEnumMap.TryGetValue(value, out var strValue))
+            if (!_valueMap.TryGetValue(value, out var strValue))
                 throw new InvalidCastException($"There is no string representation for the value {value} in the enum.");
 
             return strValue;
@@ -62,6 +62,63 @@ namespace Octonica.ClickHouseClient.Types
                 return new ReinterpretedTableColumn<T>(this, internalReinterpreted);
 
             return null;
+        }
+    }
+
+    internal sealed class EnumTableColumn<TKey, TEnum> : IClickHouseTableColumn<TEnum>
+        where TKey : struct
+        where TEnum : Enum
+    {
+        private readonly IClickHouseTableColumn<TKey> _internalColumn;
+        private readonly IReadOnlyDictionary<TKey, TEnum> _enumMap;
+        private readonly IReadOnlyDictionary<TKey, string> _stringMap;
+
+        public int RowCount => _internalColumn.RowCount;
+
+        public EnumTableColumn(IClickHouseTableColumn<TKey> internalColumn, IReadOnlyDictionary<TKey, TEnum> enumMap, IReadOnlyDictionary<TKey, string> stringMap)
+        {
+            _internalColumn = internalColumn;
+            _enumMap = enumMap;
+            _stringMap = stringMap;
+        }
+
+        public bool IsNull(int index)
+        {
+            Debug.Assert(!_internalColumn.IsNull(index));
+            return false;
+        }
+
+        public TEnum GetValue(int index)
+        {
+            var value = _internalColumn.GetValue(index);
+            if (!_enumMap.TryGetValue(value, out var strValue))
+            {
+                if (_stringMap.TryGetValue(value, out var nativeValue))
+                    throw new InvalidCastException($"The value '{nativeValue}'={value} of the enum can't be converted to the type '{typeof(Enum).FullName}'.");
+
+                throw new InvalidCastException($"The value {value} doesn't belong to the enum.");
+            }
+
+            return strValue;
+        }
+
+        object IClickHouseTableColumn.GetValue(int index)
+        {
+            return GetValue(index);
+        }
+
+        public IClickHouseTableColumn<T>? TryReinterpret<T>()
+        {
+            IClickHouseTableColumn<T>? reinterpretedColumn;
+            if (typeof(T) == typeof(string))
+                reinterpretedColumn = (IClickHouseTableColumn<T>) (object) new EnumTableColumn<TKey>(_internalColumn, _stringMap);
+            else
+                reinterpretedColumn = _internalColumn.TryReinterpret<T>();
+
+            if (reinterpretedColumn == null)
+                return null;
+
+            return new ReinterpretedTableColumn<T>(this, reinterpretedColumn);
         }
     }
 }

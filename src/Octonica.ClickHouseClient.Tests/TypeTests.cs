@@ -26,6 +26,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
 using TimeZoneConverter;
 using Xunit;
 
@@ -394,6 +395,18 @@ namespace Octonica.ClickHouseClient.Tests
 
             var result = await cmd.ExecuteScalarAsync();
             Assert.Equal("Hello, world! :)", result);
+        }
+
+        [Fact]
+        public async Task ReadClrEnumScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT CAST(42 AS Enum('' = 0, 'b' = -129, 'Hello, world! :)' = 42))");
+
+            var settings = new ClickHouseColumnSettings(new ClickHouseEnumConverter<TestEnum>());
+            var result = await cmd.ExecuteScalarAsync(settings);
+            Assert.Equal(TestEnum.Value1, result);
         }
 
         [Fact]

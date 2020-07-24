@@ -17,16 +17,30 @@
 
 using System;
 using System.Text;
+using Octonica.ClickHouseClient.Types;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
     public class ClickHouseColumnSettings
     {
-        public Encoding StringEncoding { get; }
+        public Encoding? StringEncoding { get; }
+
+        public IClickHouseEnumConverter? EnumConverter { get; }
 
         public ClickHouseColumnSettings(Encoding stringEncoding)
         {
             StringEncoding = stringEncoding ?? throw new ArgumentNullException(nameof(stringEncoding));
+        }
+
+        public ClickHouseColumnSettings(IClickHouseEnumConverter enumConverter)
+        {
+            EnumConverter = enumConverter ?? throw new ArgumentNullException(nameof(enumConverter));
+        }
+
+        public ClickHouseColumnSettings(Encoding? stringEncoding = null, IClickHouseEnumConverter? enumConverter = null)
+        {
+            StringEncoding = stringEncoding;
+            EnumConverter = enumConverter;
         }
     }
 }
