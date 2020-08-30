@@ -9,7 +9,7 @@ This is an implementation of .NET Core driver for ClickHouse in a form of ADO.NE
 * most clickhouse [column types](docs/TypeMapping.md) are supported ([aggregating ones](https://clickhouse.tech/docs/en/sql_reference/data_types/aggregatefunction/) are under development)
 * full support for .net async ADO.NET API
 * no unsafe code
-* tested in production
+* ~~tested~~- used in production
 
 ### Usage
 Install from [NuGet](https://www.nuget.org/packages/Octonica.ClickHouseClient/):
@@ -34,7 +34,7 @@ using var conn = new ClickHouseConnection(sb);
 await conn.OpenAsync();
 var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync();
 ```
-#### Insert data with parametrs
+#### Insert data with parameters
 ```csharp
 var sb = new ClickHouseConnectionStringBuilder();
 sb.Host = "127.0.0.1";
