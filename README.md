@@ -4,6 +4,7 @@ ClickHouse .NET Core driver
 This is an implementation of .NET Core driver for ClickHouse in a form of ADO.NET DbProvider API. This driver supports all ADO.NET features (with some exclusions like transaction support).
 
 ### Features
+* supports binary protocol
 * compression (send and recieve)
 * timezones
 * most clickhouse [column types](docs/TypeMapping.md) are supported ([aggregating ones](https://clickhouse.tech/docs/en/sql_reference/data_types/aggregatefunction/) are under development)
