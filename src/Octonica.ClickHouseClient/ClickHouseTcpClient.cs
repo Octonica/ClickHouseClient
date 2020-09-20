@@ -213,9 +213,9 @@ namespace Octonica.ClickHouseClient
                 var compression = _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
                 writer.BeginCompress(compression, _client._settings.CompressionBlockSize);
 
-                writer.WriteByte(BlockFieldCodes.Overflow);
+                writer.WriteByte(BlockFieldCodes.IsOverflows);
                 writer.WriteBool(false); // is overflow
-                writer.WriteByte(BlockFieldCodes.Size);
+                writer.WriteByte(BlockFieldCodes.BucketNum);
                 writer.WriteInt32(-1); // data size in block. -1 for null
                 writer.WriteByte(BlockFieldCodes.End);
 
@@ -263,18 +263,19 @@ namespace Octonica.ClickHouseClient
                 reader.BeginDecompress(compression);
 
                 int blockFieldCode;
-                bool overflow = false;
-                int size = -1;
+                bool isOverflows = false;
+                // It seems that this value is used only for internal purposes and does not affect the format of the block
+                int bucketNum = -1;
                 do
                 {
                     blockFieldCode = await reader.Read7BitInt32(async, cancellationToken);
                     switch (blockFieldCode)
                     {
-                        case BlockFieldCodes.Overflow:
-                            overflow = await reader.ReadBool(async, cancellationToken);
+                        case BlockFieldCodes.IsOverflows:
+                            isOverflows = await reader.ReadBool(async, cancellationToken);
                             break;
-                        case BlockFieldCodes.Size:
-                            size = await reader.ReadInt32(async, cancellationToken);
+                        case BlockFieldCodes.BucketNum:
+                            bucketNum = await reader.ReadInt32(async, cancellationToken);
                             break;
                         case BlockFieldCodes.End:
                             break;
@@ -286,8 +287,8 @@ namespace Octonica.ClickHouseClient
                 var columnCount = await reader.Read7BitInt32(async, cancellationToken);
                 var rowCount = await reader.Read7BitInt32(async, cancellationToken);
 
-                if (overflow || size >= 0)
-                    throw new NotImplementedException("TODO: implement support for overflow.");
+                if (isOverflows)
+                    throw new NotImplementedException("TODO: implement support for is_overflows.");
 
                 var columnInfos = new List<ColumnInfo>(columnCount);
                 var columns = new List<IClickHouseTableColumn>(columnCount);

@@ -17,10 +17,25 @@
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// https://github.com/ClickHouse/ClickHouse/blob/master/src/Core/BlockInfo.h
+    /// </summary>
     public static class BlockFieldCodes
     {
         public const int End = 0;
-        public const int Overflow = 1;
-        public const int Size = 2;
+
+        /// <summary>
+        /// * After running GROUP BY ... WITH TOTALS with the max_rows_to_group_by and group_by_overflow_mode = 'any' settings,
+        /// * a row is inserted in the separate block with aggregated values that have not passed max_rows_to_group_by.
+        /// * If it is such a block, then is_overflows is set to true for it.
+        /// </summary>
+        public const int IsOverflows = 1;
+
+        /// <summary>
+        ///* When using the two-level aggregation method, data with different key groups are scattered across different buckets.
+        ///* In this case, the bucket number is indicated here. It is used to optimize the merge for distributed aggregation.
+        ///* Otherwise -1.
+        /// </summary>
+        public const int BucketNum = 2;
     }
 }
