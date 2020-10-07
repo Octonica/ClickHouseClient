@@ -31,7 +31,7 @@ namespace Octonica.ClickHouseClient
         public const int DefaultReadWriteTimeout = 10000;
         public const int DefaultCommandTimeout = 15;
         public const int DefaultBufferSize = 4096;
-        public const string DefaultClientName = "Octonica.ClickHouse";
+        public const string DefaultClientName = "Octonica.ClickHouseClient";
         public const bool DefaultCompress = true;
 
         public static readonly ClickHouseVersion DefaultClientVersion;
