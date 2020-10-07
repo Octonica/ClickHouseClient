@@ -17,6 +17,7 @@
 
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -59,7 +60,7 @@ namespace Octonica.ClickHouseClient
             foreach (var buffer in readResult)
             {
                 if (async)
-                    await _stream.WriteAsync(buffer, cancellationToken);
+                    await WriteWithTimeoutAsync((networkStream, ct) => networkStream.WriteAsync(buffer, ct).AsTask(), cancellationToken);
                 else
                     _stream.Write(buffer.Span);
             }
@@ -67,7 +68,7 @@ namespace Octonica.ClickHouseClient
             _buffer.ConfirmRead((int) readResult.Length);
 
             if (async)
-                await _stream.FlushAsync(cancellationToken);
+                await WriteWithTimeoutAsync((networkStream, ct) => networkStream.FlushAsync(ct), cancellationToken);
             else
                 _stream.Flush();
         }
@@ -209,6 +210,27 @@ namespace Octonica.ClickHouseClient
             var buffer = GetSpan(1);
             buffer[0] = value;
             Advance(1);
+        }
+
+        private async Task WriteWithTimeoutAsync(Func<NetworkStream, CancellationToken, Task> writeAsync, CancellationToken cancellationToken)
+        {
+            if (cancellationToken == CancellationToken.None && _stream.WriteTimeout >= 0)
+            {
+                var timeout = TimeSpan.FromMilliseconds(_stream.WriteTimeout);
+                using var tokenSource = new CancellationTokenSource(timeout);
+                try
+                {
+                    await writeAsync(_stream, tokenSource.Token);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    throw new IOException($"Unable to write data to the transport connection: timeout exceeded ({timeout}).", ex);
+                }
+            }
+            else
+            {
+                await writeAsync(_stream, cancellationToken);
+            }
         }
 
         public void Write7BitInt32(int value)

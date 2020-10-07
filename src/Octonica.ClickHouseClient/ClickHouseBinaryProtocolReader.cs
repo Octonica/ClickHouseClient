@@ -17,6 +17,7 @@
 
 using System;
 using System.Buffers;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -349,7 +350,23 @@ namespace Octonica.ClickHouseClient
             int bytesRead;
             if (async)
             {
-                bytesRead = await _stream.ReadAsync(buffer, cancellationToken);
+                if (cancellationToken == CancellationToken.None && _stream.ReadTimeout >= 0)
+                {
+                    var timeout = TimeSpan.FromMilliseconds(_stream.ReadTimeout);
+                    using var tokenSource = new CancellationTokenSource(timeout);
+                    try
+                    {
+                        bytesRead = await _stream.ReadAsync(buffer, tokenSource.Token);
+                    }
+                    catch (OperationCanceledException ex)
+                    {
+                        throw new IOException($"Unable to read data from the transport connection: timeout exceeded ({timeout}).", ex);
+                    }
+                }
+                else
+                {
+                    bytesRead = await _stream.ReadAsync(buffer, cancellationToken);
+                }
             }
             else
             {
