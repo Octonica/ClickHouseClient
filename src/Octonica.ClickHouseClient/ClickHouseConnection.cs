@@ -19,6 +19,7 @@ using System;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -280,16 +281,17 @@ namespace Octonica.ClickHouseClient
                     throw new NotSupportedException($"Internal error. The state {_connectionState} is not supported.");
             }
 
+            const int defaultHttpPort = 8123;
             TcpClient? client = null;
             ClickHouseBinaryProtocolWriter? writer = null;
             ClickHouseBinaryProtocolReader? reader = null;
-
+            
             SetConnectionState(ConnectionState.Connecting);
             try
             {
                 try
                 {
-                    client = new TcpClient { SendTimeout = _connectionSettings.ReadWriteTimeout, ReceiveTimeout = _connectionSettings.ReadWriteTimeout };
+                    client = new TcpClient {SendTimeout = _connectionSettings.ReadWriteTimeout, ReceiveTimeout = _connectionSettings.ReadWriteTimeout};
 
                     if (async)
                         await client.ConnectAsync(_connectionSettings.Host, _connectionSettings.Port);
@@ -334,7 +336,7 @@ namespace Octonica.ClickHouseClient
 
                         if (hasExtraByte)
                         {
-                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Expected the end of the data. Unexpected byte ({extraByte:X}) received from the server.");
+                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Expected the end of the data. Unexpected byte (0x{extraByte:X}) received from the server.");
                         }
 
                         var serverInfo = helloMessage.ServerInfo;
@@ -346,15 +348,49 @@ namespace Octonica.ClickHouseClient
                         throw ((ServerErrorMessage) message).Exception;
 
                     default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected message ({message.MessageCode}) received from the server.");
+                        if ((int) message.MessageCode == 'H')
+                        {
+                            // It looks like HTTP
+                            string httpDetectedMessage;
+                            if (_connectionSettings.Port == defaultHttpPort)
+                            {
+                                // It's definitely HTTP
+                                httpDetectedMessage = $"Detected an attempt to connect by HTTP protocol with the default port {defaultHttpPort}. ";
+                            }
+                            else
+                            {
+                                httpDetectedMessage =
+                                    $"Internal error. Unexpected message code (0x{message.MessageCode}) received from the server." +
+                                    "This error may by caused by an attempt to connect with HTTP protocol. ";
+                            }
+
+                            httpDetectedMessage +=
+                                $"{ClickHouseConnectionStringBuilder.DefaultClientName} supports only ClickHouse native protocol. " +
+                                $"The default port for the native protocol is {ClickHouseConnectionStringBuilder.DefaultPort}.";
+
+                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, httpDetectedMessage);
+                        }
+
+                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected message code (0x{message.MessageCode}) received from the server.");
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 reader?.Dispose();
                 writer?.Dispose();
                 client?.Dispose();
                 SetConnectionState(ConnectionState.Closed);
+
+                if (_connectionSettings.Port == defaultHttpPort && ex is IOException)
+                {
+                    var extraMessage =
+                        $"{ex.Message} This error may be caused by an attempt to connect to the default HTTP port ({defaultHttpPort}). " +
+                        $"{ClickHouseConnectionStringBuilder.DefaultClientName} supports only ClickHouse native protocol. " +
+                        $"The default port for the native protocol is {ClickHouseConnectionStringBuilder.DefaultPort}.";
+
+                    throw new IOException(extraMessage, ex);
+                }
+
                 throw;
             }
 
