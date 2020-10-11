@@ -38,9 +38,11 @@ namespace Octonica.ClickHouseClient
         private bool _isClosed;
 
         private int _rowIndex = -1;
+        private bool _resultsetSwitched = false;
 
         private ClickHouseTable _currentTable;
-        
+        private ClickHouseTable? _totalsTable;
+
         private IClickHouseTableColumn[] _reinterpretedColumnsCache;
         private ClickHouseColumnSettings?[]? _columnSettings;
 
@@ -138,9 +140,9 @@ namespace Octonica.ClickHouseClient
             ReadOnlySpan<byte> source = value;
             Span<byte> target = buffer;
 
-            int resultLength = Math.Min(value.Length - (int) dataOffset, length);
+            int resultLength = Math.Min(value.Length - (int)dataOffset, length);
 
-            source = source.Slice((int) dataOffset, resultLength);
+            source = source.Slice((int)dataOffset, resultLength);
             target = target.Slice(bufferOffset, resultLength);
 
             source.CopyTo(target);
@@ -161,9 +163,9 @@ namespace Octonica.ClickHouseClient
             ReadOnlySpan<char> source = value;
             Span<char> target = buffer;
 
-            int resultLength = Math.Min(value.Length - (int) dataOffset, length);
+            int resultLength = Math.Min(value.Length - (int)dataOffset, length);
 
-            source = source.Slice((int) dataOffset, resultLength);
+            source = source.Slice((int)dataOffset, resultLength);
             target = target.Slice(bufferOffset, resultLength);
 
             source.CopyTo(target);
@@ -264,7 +266,7 @@ namespace Octonica.ClickHouseClient
                 return nullValue;
 
             var value = column.GetValue(_rowIndex);
-            return (T) value;
+            return (T)value;
         }
 
         [return: NotNullIfNotNull("nullValue")]
@@ -301,7 +303,7 @@ namespace Octonica.ClickHouseClient
                 return nullValue;
 
             var value = column.GetValue(_rowIndex);
-            return (T) value;
+            return (T)value;
         }
 
         public sealed override T GetFieldValue<T>(int ordinal)
@@ -325,7 +327,7 @@ namespace Octonica.ClickHouseClient
             }
 
             var value = column.GetValue(_rowIndex);
-            return (T) value;
+            return (T)value;
         }
 
         public sealed override object GetValue(int ordinal)
@@ -400,7 +402,7 @@ namespace Octonica.ClickHouseClient
             if (++_rowIndex < _currentTable.Header.RowCount)
                 return true;
 
-            while (true)
+            while (true && _resultsetSwitched == false)//if we simple switched the recordset no need to fetch data
             {
                 ClickHouseTable nextTable;
 
@@ -410,17 +412,17 @@ namespace Octonica.ClickHouseClient
                     switch (message.MessageCode)
                     {
                         case ServerMessageCode.Data:
-                            var dataMessage = (ServerDataMessage) message;
+                            var dataMessage = (ServerDataMessage)message;
                             nextTable = await _session.ReadTable(dataMessage, _columnSettings, async, cancellationToken);
                             break;
 
                         case ServerMessageCode.Error:
                             _isClosed = true;
                             _session.Dispose();
-                            throw ((ServerErrorMessage) message).Exception;
+                            throw ((ServerErrorMessage)message).Exception;
 
                         case ServerMessageCode.Progress:
-                            var progressMessage = (ServerProgressMessage) message;
+                            var progressMessage = (ServerProgressMessage)message;
                             _recordsAffected = progressMessage.Rows;
                             continue;
 
@@ -433,9 +435,13 @@ namespace Octonica.ClickHouseClient
                             continue;
 
                         case ServerMessageCode.Totals:
+                            var totalsMessage = (ServerDataMessage)message;
+                            _totalsTable = await _session.ReadTable(totalsMessage, _columnSettings, async, cancellationToken);
+                            continue; //or break? looks like we should break: totals is one row result and it occupy only 1 block
+
                         case ServerMessageCode.Extremes:
-                            var totalsMessage = (ServerDataMessage) message;
-                            await _session.SkipTable(totalsMessage, async, cancellationToken);
+                            var extermesMessage = (ServerDataMessage)message;
+                            await _session.SkipTable(extermesMessage, async, cancellationToken);
                             continue;
 
                         case ServerMessageCode.Pong:
@@ -474,11 +480,17 @@ namespace Octonica.ClickHouseClient
                 _rowIndex = 0;
                 return true;
             }
+            return false;
         }
 
         public override bool NextResult()
         {
-            throw new NotImplementedException();
+            if (_totalsTable == null)
+                return false;
+            _resultsetSwitched = true;
+            _rowIndex = -1;
+            _currentTable = _totalsTable;
+            return true;
         }
 
         public override void Close()
@@ -510,7 +522,7 @@ namespace Octonica.ClickHouseClient
                             case ServerMessageCode.Data:
                             case ServerMessageCode.Totals:
                             case ServerMessageCode.Extremes:
-                                var dataMessage = (ServerDataMessage) message;
+                                var dataMessage = (ServerDataMessage)message;
                                 await _session.SkipTable(dataMessage, async, CancellationToken.None);
                                 continue;
 
@@ -519,10 +531,10 @@ namespace Octonica.ClickHouseClient
                                 if (disposing)
                                     break;
 
-                                throw ((ServerErrorMessage) message).Exception;
+                                throw ((ServerErrorMessage)message).Exception;
 
                             case ServerMessageCode.Progress:
-                                var progressMessage = (ServerProgressMessage) message;
+                                var progressMessage = (ServerProgressMessage)message;
                                 _recordsAffected = progressMessage.Rows;
                                 continue;
 
