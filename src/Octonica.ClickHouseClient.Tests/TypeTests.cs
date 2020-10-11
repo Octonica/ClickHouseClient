@@ -237,6 +237,126 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadDateTime64Scalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT cast('2015-04-21 14:59:44.12345' AS DateTime64)");
+
+            var result = await cmd.ExecuteScalarAsync();
+            var resultDateTime = Assert.IsType<DateTimeOffset>(result);
+
+            Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).AddMilliseconds(123), resultDateTime.DateTime);
+        }
+
+        [Fact]
+        public async Task ReadDateTime64WithTimezoneScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            var tzName = TimeZoneInfo.Local.Id;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                tzName = TZConvert.WindowsToIana(TimeZoneInfo.Local.Id);
+
+            await using var cmd = connection.CreateCommand($"SELECT cast('2015-04-21 14:59:44.123456789' AS DateTime64(9,'{tzName}'))");
+
+            var result = await cmd.ExecuteScalarAsync();
+            var resultDateTime = Assert.IsType<DateTimeOffset>(result);
+
+            Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)), resultDateTime);
+        }
+
+        [Fact]
+        public async Task ReadDateTime64ParameterScalar()
+        {
+            var values = new[]
+            {
+                default,
+                DateTime.UnixEpoch.Add(TimeSpan.FromMilliseconds(1111.1111)),
+                new DateTime(2531, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
+                new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567))
+            };
+
+            await using var connection = await OpenConnectionAsync();
+            var timeZone = connection.GetServerTimeZone();
+
+            await using var cmd = connection.CreateCommand("SELECT {v}");
+            var parameter = new ClickHouseParameter("v") {ClickHouseDbType = ClickHouseDbType.DateTime64};
+            cmd.Parameters.Add(parameter);
+
+            for (int precision = 0; precision < 10; precision++)
+            {
+                parameter.Precision = (byte) precision;
+                var div = TimeSpan.TicksPerSecond / (long) Math.Pow(10, precision);
+                if (div == 0)
+                    div = -(long) Math.Pow(10, precision) / TimeSpan.TicksPerSecond;
+
+                foreach (var value in values)
+                {
+                    parameter.Value = value;
+
+                    var result = await cmd.ExecuteScalarAsync();
+                    var resultDateTime = Assert.IsType<DateTimeOffset>(result);
+
+                    DateTime expectedValue;
+                    if (value == default)
+                        expectedValue = default;
+                    else if (div > 0)
+                        expectedValue = new DateTime(value.Ticks / div * div);
+                    else
+                        expectedValue = value;
+
+                    Assert.Equal(expectedValue, resultDateTime.DateTime);
+                }
+
+                // Min and max values must be adjusted to the server's timezone
+
+                var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
+                var unixEpochValue = new DateTime(DateTime.UnixEpoch.Ticks + unixEpochOffset.Ticks);
+                parameter.Value = unixEpochValue;
+
+                var unixEpochResult = await cmd.ExecuteScalarAsync();
+                var unixEpochResultDto = Assert.IsType<DateTimeOffset>(unixEpochResult);
+
+                Assert.Equal(default, unixEpochResultDto);
+
+                if (div > 0)
+                {
+                    var offset = timeZone.GetUtcOffset(DateTime.MaxValue);
+                    long ticks = DateTime.MaxValue.Ticks;
+                    if (offset < TimeSpan.Zero)
+                        ticks += offset.Ticks;
+
+                    var maxValue = new DateTimeOffset(ticks, offset).DateTime;
+                    parameter.Value = maxValue;
+                    var result = await cmd.ExecuteScalarAsync<DateTime>();
+
+                    var expectedValue = new DateTime(maxValue.Ticks / div * div);
+                    Assert.Equal(expectedValue, result);
+                }
+                else
+                {
+                    DateTimeOffset maxValueDto;
+                    if (div == -100)
+                        maxValueDto = DateTimeOffset.ParseExact("2554-07-21T23:34:33.7095516Z", "O", CultureInfo.InvariantCulture);
+                    else
+                        maxValueDto = DateTimeOffset.ParseExact("7815-07-17T19:45:37.0955161Z", "O", CultureInfo.InvariantCulture);
+
+                    var offset = timeZone.GetUtcOffset(maxValueDto);
+                    var maxValue = new DateTime(maxValueDto.Ticks + offset.Ticks);
+
+                    parameter.Value = maxValue;
+                    var result = await cmd.ExecuteScalarAsync<DateTime>();
+                    Assert.Equal(maxValue, result);
+
+                    parameter.Value = maxValue.AddTicks(1);
+                    var exception = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
+                    Assert.IsAssignableFrom<OverflowException>(exception.InnerException);
+                }
+            }
+        }
+
+        [Fact]
         public async Task ReadFloatScalar()
         {
             await using var connection = await OpenConnectionAsync();

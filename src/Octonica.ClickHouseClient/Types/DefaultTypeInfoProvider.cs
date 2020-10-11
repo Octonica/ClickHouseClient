@@ -176,6 +176,7 @@ namespace Octonica.ClickHouseClient.Types
 
                 new DateTypeInfo(),
                 new DateTimeTypeInfo(),
+                new DateTime64TypeInfo(),
 
                 new DecimalTypeInfo(),
                 new Decimal32TypeInfo(),

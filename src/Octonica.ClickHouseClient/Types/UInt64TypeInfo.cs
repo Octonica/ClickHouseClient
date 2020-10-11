@@ -66,7 +66,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class UInt64Writer : StructureWriterBase<ulong>
+        internal sealed class UInt64Writer : StructureWriterBase<ulong>
         {
             public UInt64Writer(string columnName, string columnType, IReadOnlyList<ulong> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)

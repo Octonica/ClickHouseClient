@@ -61,6 +61,10 @@ namespace Octonica.ClickHouseClient
         /// Not supported
         /// </summary>
         Xml = DbType.Xml,
+
+        /// <summary>
+        /// <seealso cref="DateTime64"/> with an accuracy of 100 nanoseconds.
+        /// </summary>
         DateTime2 = DbType.DateTime2,
         DateTimeOffset = DbType.DateTimeOffset,
 
@@ -78,5 +82,7 @@ namespace Octonica.ClickHouseClient
         Nothing = ClickHouseSpecificTypeDelimiterCode + 5,
 
         Enum = ClickHouseSpecificTypeDelimiterCode + 6,
+
+        DateTime64 = ClickHouseSpecificTypeDelimiterCode + 7,
     }
 }

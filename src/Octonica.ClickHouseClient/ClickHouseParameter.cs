@@ -95,7 +95,7 @@ namespace Octonica.ClickHouseClient
 
         public override byte Precision
         {
-            get => _forcedPrecision ?? DecimalTypeInfoBase.DefaultPrecision;
+            get => _forcedPrecision ?? (ClickHouseDbType == ClickHouseDbType.DateTime64 ? (byte) DateTime64TypeInfo.DefaultPrecision : DecimalTypeInfoBase.DefaultPrecision);
             set => _forcedPrecision = value;
         }
 
@@ -254,7 +254,11 @@ namespace Octonica.ClickHouseClient
                     break;
                 }
                 case ClickHouseDbType.DateTime2:
-                    typeName = "DateTime";
+                    typeName = "DateTime64(7)";
+                    clrType = typeof(DateTime);
+                    break;
+                case ClickHouseDbType.DateTime64:
+                    typeName = string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", Precision);
                     clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.DateTimeOffset:
