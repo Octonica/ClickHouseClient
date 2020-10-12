@@ -329,5 +329,28 @@ namespace Octonica.ClickHouseClient.Tests
             var result = Convert.ToInt32(await cmdDrop.ExecuteScalarAsync());
             Assert.Equal(4, result);
         }
+
+        [Fact]
+        public async Task TotalsWithNextResult()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "select x, sum(y) as v from (SELECT number%2 + 1 as x, number as y FROM numbers(10)) group by x with totals;";
+            using var reader = await cmd.ExecuteReaderAsync();
+            ulong rowsTotal = 0;
+            while (reader.Read())
+            {
+                rowsTotal += reader.GetFieldValue<ulong>(1);
+
+            }
+            var hasTotals = reader.NextResult();
+            Assert.True(hasTotals);
+            while (reader.Read())
+            {
+                var total = reader.GetFieldValue<ulong>(1);
+                Assert.Equal(rowsTotal, total);
+            }
+        }
     }
 }
