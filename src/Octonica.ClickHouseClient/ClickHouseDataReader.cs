@@ -35,20 +35,22 @@ namespace Octonica.ClickHouseClient
         private readonly CancellationTokenSource? _sessionTokenSource;
 
         private int _recordsAffected;
-        private bool _isClosed;
 
         private int _rowIndex = -1;
 
+        private IServerMessage? _nextResultMessage;
         private ClickHouseTable _currentTable;
         
         private IClickHouseTableColumn[] _reinterpretedColumnsCache;
         private ClickHouseColumnSettings?[]? _columnSettings;
 
+        public ClickHouseDataReaderState State { get; private set; }
+
         public override int RecordsAffected => _recordsAffected;
 
         public override bool HasRows => _rowIndex < 0 || _recordsAffected > 0;
 
-        public override bool IsClosed => _isClosed;
+        public override bool IsClosed => State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken;
 
         public override int FieldCount => _blockHeader.Columns.Count;
 
@@ -62,6 +64,7 @@ namespace Octonica.ClickHouseClient
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = _currentTable.Header.RowCount;
             _blockHeader = _currentTable.Header;
+            State = ClickHouseDataReaderState.Data;
         }
 
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
@@ -374,31 +377,34 @@ namespace Octonica.ClickHouseClient
 
         public sealed override bool Read()
         {
-            return TaskHelper.WaitNonAsyncTask(Read(false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(Read(false, false, CancellationToken.None));
         }
 
         public new ValueTask<bool> ReadAsync()
         {
-            return Read(true, CancellationToken.None);
+            return Read(false, true, CancellationToken.None);
         }
 
         public new ValueTask<bool> ReadAsync(CancellationToken cancellationToken)
         {
-            return Read(true, cancellationToken);
+            return Read(false, true, cancellationToken);
         }
 
         protected sealed override async Task<bool> ReadAsyncInternal(CancellationToken cancellationToken)
         {
-            return await Read(true, cancellationToken);
+            return await Read(false, true, cancellationToken);
         }
 
-        private async ValueTask<bool> Read(bool async, CancellationToken cancellationToken)
+        private async ValueTask<bool> Read(bool nextResult, bool async, CancellationToken cancellationToken)
         {
-            if (_rowIndex == _currentTable.Header.RowCount)
-                return false;
+            if (!nextResult)
+            {
+                if (_rowIndex == _currentTable.Header.RowCount)
+                    return false;
 
-            if (++_rowIndex < _currentTable.Header.RowCount)
-                return true;
+                if (++_rowIndex < _currentTable.Header.RowCount)
+                    return true;
+            }
 
             while (true)
             {
@@ -406,16 +412,47 @@ namespace Octonica.ClickHouseClient
 
                 try
                 {
-                    var message = await _session.ReadMessage(async, cancellationToken);
+                    var message = _nextResultMessage;
+                    if (message == null)
+                        message = await _session.ReadMessage(async, cancellationToken);
+                    else
+                        _nextResultMessage = null;
+
                     switch (message.MessageCode)
                     {
                         case ServerMessageCode.Data:
-                            var dataMessage = (ServerDataMessage) message;
-                            nextTable = await _session.ReadTable(dataMessage, _columnSettings, async, cancellationToken);
+                            switch (State)
+                            {
+                                case ClickHouseDataReaderState.NextResultPending:
+                                    State = ClickHouseDataReaderState.Data;
+                                    goto case ClickHouseDataReaderState.Data;
+
+                                case ClickHouseDataReaderState.Data:
+                                {
+                                    var dataMessage = (ServerDataMessage) message;
+                                    nextTable = await _session.ReadTable(dataMessage, _columnSettings, async, cancellationToken);
+                                    break;
+                                }
+
+                                case ClickHouseDataReaderState.Totals:
+                                case ClickHouseDataReaderState.Extremes:
+                                {
+                                    var dataMessage = (ServerDataMessage) message;
+                                    var table = await _session.SkipTable(dataMessage, async, cancellationToken);
+                                    if (table.RowCount != 0 || table.Columns.Count != 0)
+                                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, "Unexpected data block after totals or extremes.");
+
+                                    continue;
+                                }
+
+                                default:
+                                    goto UNEXPECTED_RESPONSE;
+                            }
+
                             break;
 
                         case ServerMessageCode.Error:
-                            _isClosed = true;
+                            State = ClickHouseDataReaderState.Closed;
                             _session.Dispose();
                             throw ((ServerErrorMessage) message).Exception;
 
@@ -425,7 +462,7 @@ namespace Octonica.ClickHouseClient
                             continue;
 
                         case ServerMessageCode.EndOfStream:
-                            _isClosed = true;
+                            State = ClickHouseDataReaderState.Closed;
                             _session.Dispose();
                             return false;
 
@@ -433,14 +470,57 @@ namespace Octonica.ClickHouseClient
                             continue;
 
                         case ServerMessageCode.Totals:
+                            switch (State)
+                            {
+                                case ClickHouseDataReaderState.NextResultPending:
+                                    State = ClickHouseDataReaderState.Totals;
+                                    goto case ClickHouseDataReaderState.Totals;
+
+                                case ClickHouseDataReaderState.Totals:
+                                    var totalsMessage = (ServerDataMessage) message;
+                                    nextTable = await _session.ReadTable(totalsMessage, _columnSettings, async, cancellationToken);
+                                    break;
+
+                                case ClickHouseDataReaderState.Data:
+                                case ClickHouseDataReaderState.Extremes:
+                                    _nextResultMessage = message;
+                                    State = ClickHouseDataReaderState.NextResultPending;
+                                    return false;
+
+                                default:
+                                    goto UNEXPECTED_RESPONSE;
+                            }
+
+                            break;
+
                         case ServerMessageCode.Extremes:
-                            var totalsMessage = (ServerDataMessage) message;
-                            await _session.SkipTable(totalsMessage, async, cancellationToken);
-                            continue;
+                            switch (State)
+                            {
+                                case ClickHouseDataReaderState.NextResultPending:
+                                    State = ClickHouseDataReaderState.Extremes;
+                                    goto case ClickHouseDataReaderState.Extremes;
+
+                                case ClickHouseDataReaderState.Extremes:
+                                    var extremesMessage = (ServerDataMessage) message;
+                                    nextTable = await _session.ReadTable(extremesMessage, _columnSettings, async, cancellationToken);
+                                    break;
+
+                                case ClickHouseDataReaderState.Data:
+                                case ClickHouseDataReaderState.Totals:
+                                    _nextResultMessage = message;
+                                    State = ClickHouseDataReaderState.NextResultPending;
+                                    return false;
+
+                                default:
+                                    goto UNEXPECTED_RESPONSE;
+                            }
+
+                            break;
 
                         case ServerMessageCode.Pong:
                         case ServerMessageCode.Hello:
                         case ServerMessageCode.Log:
+                            UNEXPECTED_RESPONSE:
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
 
                         default:
@@ -457,7 +537,7 @@ namespace Octonica.ClickHouseClient
                 }
                 catch (Exception ex)
                 {
-                    _isClosed = true;
+                    State = ClickHouseDataReaderState.Broken;
                     var aggrEx = await _session.SetFailed(ex, true, async);
                     if (aggrEx != null)
                         throw aggrEx;
@@ -476,9 +556,33 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        public override async Task<bool> NextResultAsync(CancellationToken cancellationToken)
+        {
+            return await NextResult(true, cancellationToken);
+        }
+
         public override bool NextResult()
         {
-            throw new NotImplementedException();
+            return TaskHelper.WaitNonAsyncTask(NextResult(false, CancellationToken.None));
+        }
+
+        private async ValueTask<bool> NextResult(bool async, CancellationToken cancellationToken)
+        {
+            if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes)
+            {
+                bool canReadNext;
+                do
+                {
+                    _rowIndex = Math.Max(_rowIndex, _currentTable.Header.RowCount - 1);
+                    // TODO: skip without actual reading
+                    canReadNext = await Read(false, async, cancellationToken);
+                } while (canReadNext);
+            }
+
+            if (State != ClickHouseDataReaderState.NextResultPending)
+                return false;
+
+            return await Read(true, async, cancellationToken);
         }
 
         public override void Close()
@@ -496,7 +600,7 @@ namespace Octonica.ClickHouseClient
             if (_session.IsDisposed || _session.IsFailed)
                 return;
 
-            if (!_isClosed)
+            if (!(State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken))
             {
                 await _session.SendCancel(async);
 
@@ -504,7 +608,9 @@ namespace Octonica.ClickHouseClient
                 {
                     try
                     {
-                        var message = await _session.ReadMessage(async, CancellationToken.None);
+                        var message = _nextResultMessage ?? await _session.ReadMessage(async, CancellationToken.None);
+                        _nextResultMessage = null;
+
                         switch (message.MessageCode)
                         {
                             case ServerMessageCode.Data:
@@ -515,7 +621,7 @@ namespace Octonica.ClickHouseClient
                                 continue;
 
                             case ServerMessageCode.Error:
-                                _isClosed = true;
+                                State = ClickHouseDataReaderState.Closed;
                                 if (disposing)
                                     break;
 
@@ -527,7 +633,7 @@ namespace Octonica.ClickHouseClient
                                 continue;
 
                             case ServerMessageCode.EndOfStream:
-                                _isClosed = true;
+                                State = ClickHouseDataReaderState.Closed;
                                 break;
 
                             case ServerMessageCode.ProfileInfo:
@@ -547,13 +653,13 @@ namespace Octonica.ClickHouseClient
                         if (!disposing)
                             throw;
 
-                        _isClosed = true;
+                        State = ClickHouseDataReaderState.Broken;
                         await _session.SetFailed(ex.InnerException, false, async);
                         return;
                     }
                     catch (Exception ex)
                     {
-                        _isClosed = true;
+                        State = ClickHouseDataReaderState.Broken;
                         var aggrEx = await _session.SetFailed(ex, false, async);
 
                         if (disposing)

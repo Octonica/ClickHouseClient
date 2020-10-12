@@ -337,20 +337,30 @@ namespace Octonica.ClickHouseClient.Tests
 
             await using var cmd = cn.CreateCommand();
             cmd.CommandText = "select x, sum(y) as v from (SELECT number%2 + 1 as x, number as y FROM numbers(10)) group by x with totals;";
+            
             using var reader = await cmd.ExecuteReaderAsync();
+            Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+
             ulong rowsTotal = 0;
             while (reader.Read())
             {
+                Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
                 rowsTotal += reader.GetFieldValue<ulong>(1);
-
             }
+
+            Assert.Equal(ClickHouseDataReaderState.NextResultPending, reader.State);
             var hasTotals = reader.NextResult();
             Assert.True(hasTotals);
+            Assert.Equal(ClickHouseDataReaderState.Totals, reader.State);
+
             while (reader.Read())
             {
+                Assert.Equal(ClickHouseDataReaderState.Totals, reader.State);
                 var total = reader.GetFieldValue<ulong>(1);
                 Assert.Equal(rowsTotal, total);
             }
+
+            Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
         }
     }
 }
