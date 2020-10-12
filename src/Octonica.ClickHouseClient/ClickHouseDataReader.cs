@@ -551,7 +551,7 @@ namespace Octonica.ClickHouseClient
                 _currentTable = nextTable;
                 _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
                 _recordsAffected += nextTable.Header.RowCount;
-                _rowIndex = 0;
+                _rowIndex = nextResult ? -1 : 0;
                 return true;
             }
         }
