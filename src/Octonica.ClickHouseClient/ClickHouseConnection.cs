@@ -189,7 +189,9 @@ namespace Octonica.ClickHouseClient
             try
             {
                 session = await _tcpClient.OpenSession(async, CancellationToken.None, cancellationToken);
-                await session.SendQuery(insertFormatCommand, null, async, cancellationToken);
+
+                var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand};
+                await session.SendQuery(messageBuilder, null, async, cancellationToken);
 
                 cancelOnFailure = true;
                 var msg = await session.ReadMessage(async, cancellationToken);

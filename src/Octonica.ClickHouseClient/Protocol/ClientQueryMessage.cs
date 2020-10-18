@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -59,7 +60,7 @@ namespace Octonica.ClickHouseClient.Protocol
             ProtocolRevision = builder.ProtocolRevision ?? throw new ArgumentException("The revision of the protocol is required.", nameof(ProtocolRevision));
             Query = builder.Query ?? throw new ArgumentException("The query is required.", nameof(Query));
             CompressionEnabled = builder.CompressionEnabled ?? throw new ArgumentException("Unknown compression mode.", nameof(CompressionEnabled));
-            Settings = builder.Settings;
+            Settings = builder.Settings == null || builder.Settings.Count == 0 ? null : builder.Settings;
         }
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
@@ -102,9 +103,14 @@ namespace Octonica.ClickHouseClient.Protocol
 
             if (Settings != null)
             {
+                // All settings are serialized as strings. Before each value the flag `is_important` is serialized.
+                // https://github.com/ClickHouse/ClickHouse/blob/97d97f6b2e50ab3cf21a25a18cbf1aa327f242e5/src/Core/BaseSettings.h#L19
+
+                const int isImportantFlag = 0x1;
                 foreach (var pair in Settings)
                 {
                     writer.WriteString(pair.Key);
+                    writer.Write7BitInt32(isImportantFlag);
                     writer.WriteString(pair.Value);
                 }
             }
@@ -173,11 +179,7 @@ namespace Octonica.ClickHouseClient.Protocol
             /// <summary>
             /// Optional
             /// </summary>
-            public IReadOnlyCollection<KeyValuePair<string, string>>? Settings
-            {
-                // TODO: supported since revision 54429 (DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS)
-                get => null;
-            }
+            public IReadOnlyCollection<KeyValuePair<string, string>>? Settings { get; set; }
 
             public ClientQueryMessage Build()
             {

@@ -70,6 +70,11 @@ namespace Octonica.ClickHouseClient
 
         public override bool DesignTimeVisible { get; set; }
 
+        /// <summary>
+        /// Overrides the 'extremes' setting for the query
+        /// </summary>
+        public bool? Extremes { get; set; }
+
         internal ClickHouseCommand(ClickHouseConnection connection, ClickHouseTcpClient client)
         {
             Connection = connection ?? throw new ArgumentNullException(nameof(connection));
@@ -444,7 +449,14 @@ namespace Octonica.ClickHouseClient
                 throw ClickHouseHandledException.Wrap(ex);
             }
 
-            await session.SendQuery(commandText, tableWriters, async, cancellationToken);
+            List<KeyValuePair<string, string>>? setting = null;
+            if (Extremes != null)
+            {
+                setting = new List<KeyValuePair<string, string>>(1) {new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")};
+            }
+
+            var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting};
+            await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
         }

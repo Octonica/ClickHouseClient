@@ -363,5 +363,159 @@ namespace Octonica.ClickHouseClient.Tests
 
             Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
         }
+
+        [Fact]
+        public async Task ExtremesWithNextResult()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.Extremes = true;
+            cmd.CommandText = "select x, sum(y) as v from (SELECT number%2 + 1 as x, number as y FROM numbers(10)) group by x;";
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+
+            ulong minX = ulong.MaxValue, maxX = ulong.MinValue, minSum = ulong.MaxValue, maxSum = ulong.MinValue;
+            while (reader.Read())
+            {
+                Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+                var x = reader.GetFieldValue<ulong>(0);
+                var sum = reader.GetFieldValue<ulong>(1);
+
+                minX = Math.Min(minX, x);
+                maxX = Math.Max(maxX, x);
+
+                minSum = Math.Min(minSum, sum);
+                maxSum = Math.Max(maxSum, sum);
+            }
+
+            Assert.Equal(ClickHouseDataReaderState.NextResultPending, reader.State);
+
+            Assert.True(reader.NextResult());
+
+            Assert.True(reader.Read());
+            var extremeX = reader.GetFieldValue<ulong>(0);
+            var extremeSum = reader.GetFieldValue<ulong>(1);
+            Assert.Equal(minX, extremeX);
+            Assert.Equal(minSum, extremeSum);
+
+            Assert.True(reader.Read());
+            extremeX = reader.GetFieldValue<ulong>(0);
+            extremeSum = reader.GetFieldValue<ulong>(1);
+            Assert.Equal(maxX, extremeX);
+            Assert.Equal(maxSum, extremeSum);
+
+            Assert.False(reader.Read());
+
+            Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+        }
+
+        [Fact]
+        public async Task TotalsAndExtremes()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.Extremes = true;
+            cmd.CommandText = "select x, sum(y) as v from (SELECT number%2 + 1 as x, number as y FROM numbers(10)) group by x with totals;";
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+
+            ulong rowsTotal = 0;
+            ulong minX = ulong.MaxValue, maxX = ulong.MinValue, minSum = ulong.MaxValue, maxSum = ulong.MinValue;
+            while (reader.Read())
+            {
+                Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+                var x = reader.GetFieldValue<ulong>(0);
+                var sum = reader.GetFieldValue<ulong>(1);
+                
+                rowsTotal += sum;
+
+                minX = Math.Min(minX, x);
+                maxX = Math.Max(maxX, x);
+
+                minSum = Math.Min(minSum, sum);
+                maxSum = Math.Max(maxSum, sum);
+            }
+
+            Assert.Equal(ClickHouseDataReaderState.NextResultPending, reader.State);
+            var hasTotals = reader.NextResult();
+            Assert.True(hasTotals);
+            Assert.Equal(ClickHouseDataReaderState.Totals, reader.State);
+
+            Assert.True(reader.Read());
+
+            Assert.Equal(ClickHouseDataReaderState.Totals, reader.State);
+            var total = reader.GetFieldValue<ulong>(1);
+            Assert.Equal(rowsTotal, total);
+
+            Assert.False(reader.Read());
+
+            Assert.Equal(ClickHouseDataReaderState.NextResultPending, reader.State);
+
+            Assert.True(reader.NextResult());
+            
+            Assert.True(reader.Read());
+            var extremeX = reader.GetFieldValue<ulong>(0);
+            var extremeSum = reader.GetFieldValue<ulong>(1);
+            Assert.Equal(minX, extremeX);
+            Assert.Equal(minSum, extremeSum);
+
+            Assert.True(reader.Read());
+            extremeX = reader.GetFieldValue<ulong>(0);
+            extremeSum = reader.GetFieldValue<ulong>(1);
+            Assert.Equal(maxX, extremeX);
+            Assert.Equal(maxSum, extremeSum);
+
+            Assert.False(reader.Read());
+
+            Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+        }
+
+        [Theory]
+        [InlineData(ClickHouseDataReaderState.Data, 3)]
+        [InlineData(ClickHouseDataReaderState.Extremes, 2)]
+        [InlineData(ClickHouseDataReaderState.Totals, 1)]
+        public async Task SkipNextResult(ClickHouseDataReaderState readBlock, int expectedCount)
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.Extremes = true;
+            cmd.CommandText = "select x, sum(y) as v from (SELECT number%3 + 1 as x, number as y FROM numbers(10)) group by x with totals;";
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+
+            do
+            {
+                switch (reader.State)
+                {
+                    case ClickHouseDataReaderState.Data:
+                    case ClickHouseDataReaderState.Totals:
+                    case ClickHouseDataReaderState.Extremes:
+                        if (reader.State == readBlock)
+                            break;
+
+                        continue;
+
+                    default:
+                        Assert.True(false, $"Unexpected state: {reader.State}.");
+                        break;
+                }
+
+                int count = 0;
+                while (await reader.ReadAsync())
+                    ++count;
+
+                Assert.Equal(expectedCount, count);
+                Assert.True(reader.State == ClickHouseDataReaderState.NextResultPending || reader.State == ClickHouseDataReaderState.Closed);
+
+            } while (await reader.NextResultAsync());
+
+            Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+        }
     }
 }

@@ -133,7 +133,7 @@ namespace Octonica.ClickHouseClient
             }
 
             public async ValueTask SendQuery(
-                string query,
+                ClientQueryMessage.Builder messageBuilder,
                 IReadOnlyCollection<IClickHouseTableWriter>? tables,
                 bool async,
                 CancellationToken cancellationToken)
@@ -145,17 +145,23 @@ namespace Octonica.ClickHouseClient
                 {
                     var settings = _client._settings;
 
-                    var queryMessage = new ClientQueryMessage.Builder
+                    messageBuilder.ClientName = settings.ClientName;
+                    messageBuilder.ClientVersion = settings.ClientVersion;
+                    messageBuilder.Host = settings.Host;
+                    messageBuilder.RemoteAddress = ((IPEndPoint) _client._client.Client.RemoteEndPoint).ToString();
+                    messageBuilder.ProtocolRevision = Math.Min(Revisions.CurrentRevision, _client.ServerInfo.Revision);
+                    messageBuilder.CompressionEnabled = _client._settings.Compress;
+
+                    var queryMessage = messageBuilder.Build();
+                    if (queryMessage.Settings != null)
                     {
-                        ClientName = settings.ClientName,
-                        ClientVersion = settings.ClientVersion,
-                        Host = settings.Host,
-                        RemoteAddress = ((IPEndPoint)_client._client.Client.RemoteEndPoint).ToString(),
-                        ProtocolRevision = Revisions.CurrentRevision,
-                        QueryKind = QueryKind.InitialQuery,
-                        Query = query,
-                        CompressionEnabled = _client._settings.Compress
-                    }.Build();
+                        if (_client.ServerInfo.Revision < Revisions.MinRevisionWithSettingsSerializedAsStrings)
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ProtocolRevisionNotSupported,
+                                $"Query settings are not supported. Current protocol revision is {_client.ServerInfo.Revision}. Minimal required protocol revision is {Revisions.MinRevisionWithSettingsSerializedAsStrings}.");
+                        }
+                    }
 
                     queryMessage.Write(writer);
 

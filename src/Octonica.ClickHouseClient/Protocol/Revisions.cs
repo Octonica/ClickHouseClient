@@ -20,6 +20,7 @@ namespace Octonica.ClickHouseClient.Protocol
     public static class Revisions
     {
         public const int CurrentRevision = 54441;
+        public const int MinRevisionWithSettingsSerializedAsStrings = 54429;
         public const int MinSupportedRevision = 54423;
     }
 }
