@@ -136,7 +136,6 @@ namespace Octonica.ClickHouseClient
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
         {
             string typeName;
-            Type clrType;
             object? preparedValue = null;
             switch (_forcedType)
             {
@@ -149,86 +148,66 @@ namespace Octonica.ClickHouseClient
 
                 case ClickHouseDbType.Binary:
                     typeName = Size <= 0 ? "Array(UInt8)" : string.Format(CultureInfo.InvariantCulture, "FixedString({0})", Size);
-                    clrType = typeof(byte[]);
                     break;
                 case ClickHouseDbType.Byte:
                     typeName = "UInt8";
-                    clrType = typeof(byte);
                     break;
                 case ClickHouseDbType.Boolean:
                     typeName = "UInt8";
-                    clrType = typeof(byte);
                     break;
                 case ClickHouseDbType.Currency:
                     typeName = "Decimal(18, 4)";
-                    clrType = typeof(decimal);
                     break;
                 case ClickHouseDbType.Date:
                     typeName = "Date";
-                    clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.DateTime:
                     typeName = "DateTime";
-                    clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.Decimal:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale);
-                    clrType = typeof(decimal);
                     break;
                 case ClickHouseDbType.Double:
                     typeName = "Float64";
-                    clrType = typeof(double);
                     break;
                 case ClickHouseDbType.Guid:
                     typeName = "UUID";
-                    clrType = typeof(Guid);
                     break;
                 case ClickHouseDbType.Int16:
                     typeName = "Int16";
-                    clrType = typeof(short);
                     break;
                 case ClickHouseDbType.Int32:
                     typeName = "Int32";
-                    clrType = typeof(int);
                     break;
                 case ClickHouseDbType.Int64:
                     typeName = "Int64";
-                    clrType = typeof(long);
                     break;
                 case ClickHouseDbType.Object:
                     if (Value != null)
                         throw new NotSupportedException();
 
                     typeName = "Nothing";
-                    clrType = typeof(DBNull);
                     break;
                 case ClickHouseDbType.SByte:
                     typeName = "Int8";
-                    clrType = typeof(sbyte);
                     break;
                 case ClickHouseDbType.Single:
                     typeName = "Float32";
-                    clrType = typeof(float);
                     break;
                 case ClickHouseDbType.String:
                     typeName = "String";
-                    clrType = typeof(string);
                     break;
                 case ClickHouseDbType.UInt16:
                     typeName = "UInt16";
-                    clrType = typeof(ushort);
                     break;
                 case ClickHouseDbType.UInt32:
                     typeName = "UInt32";
-                    clrType = typeof(uint);
                     break;
                 case ClickHouseDbType.UInt64:
                     typeName = "UInt32";
-                    clrType = typeof(ulong);
                     break;
                 case ClickHouseDbType.VarNumeric:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", Precision, Scale);
-                    clrType = typeof(decimal);
                     break;
                 case ClickHouseDbType.StringFixedLength:
                 {
@@ -250,34 +229,27 @@ namespace Octonica.ClickHouseClient
                         preparedValue = bytes;
                     }
 
-                    clrType = typeof(byte[]);
                     break;
                 }
                 case ClickHouseDbType.DateTime2:
                     typeName = "DateTime64(7)";
-                    clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.DateTime64:
                     typeName = string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", Precision);
-                    clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.DateTimeOffset:
                     typeName = "DateTime";
-                    clrType = typeof(DateTime);
                     break;
                 case ClickHouseDbType.IpV4:
                     typeName = "IPv4";
-                    clrType = typeof(IPAddress);
                     break;
                 case ClickHouseDbType.IpV6:
                     typeName = "IPv6";
-                    clrType = typeof(IPAddress);
                     break;
                 case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
                     goto default;
                 case null:
                     typeName = GetTypeFromValue().clickHouseType;
-                    clrType = Value?.GetType() ?? typeof(DBNull);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -293,11 +265,7 @@ namespace Octonica.ClickHouseClient
             }
 
             var typeInfo = typeInfoProvider.GetTypeInfo(typeName);
-
-            if (!isNull)
-                clrType = (preparedValue ?? Value)!.GetType();
-            else if (clrType.IsValueType)
-                clrType = typeof(Nullable<>).MakeGenericType(clrType);
+            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();
 
             var columnSettings = StringEncoding == null ? null : new ClickHouseColumnSettings(StringEncoding);
             var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, columnSettings, typeInfo);
