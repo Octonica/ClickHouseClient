@@ -21,12 +21,14 @@ using System.Data.Common;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
+using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient
 {
@@ -107,6 +109,13 @@ namespace Octonica.ClickHouseClient
 
         public Encoding? StringEncoding { get; set; }
 
+        /// <summary>
+        /// This property allows to specify the timezone for datetime types (<see cref="ClickHouseClient.ClickHouseDbType.DateTime"/>,
+        /// <see cref="ClickHouseClient.ClickHouseDbType.DateTimeOffset"/>, <see cref="ClickHouseClient.ClickHouseDbType.DateTime2"/>
+        /// and <see cref="ClickHouseClient.ClickHouseDbType.DateTime64"/>).
+        /// </summary>
+        public TimeZoneInfo? TimeZone { get; set; }
+
         public ClickHouseParameter(string parameterName)
         {
             if (parameterName == null)
@@ -131,12 +140,14 @@ namespace Octonica.ClickHouseClient
             _forcedScale = null;
             Size = 0;
             StringEncoding = null;
+            TimeZone = null;
         }
 
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
         {
             string typeName;
             object? preparedValue = null;
+            string? tzCode;
             switch (_forcedType)
             {
                 case ClickHouseDbType.AnsiString:
@@ -160,9 +171,6 @@ namespace Octonica.ClickHouseClient
                     break;
                 case ClickHouseDbType.Date:
                     typeName = "Date";
-                    break;
-                case ClickHouseDbType.DateTime:
-                    typeName = "DateTime";
                     break;
                 case ClickHouseDbType.Decimal:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale);
@@ -232,13 +240,20 @@ namespace Octonica.ClickHouseClient
                     break;
                 }
                 case ClickHouseDbType.DateTime2:
-                    typeName = "DateTime64(7)";
+                    tzCode = GetTimeZoneCode();
+                    typeName = tzCode == null ? "DateTime64(7)" : $"DateTime64(7, '{tzCode}')";
                     break;
                 case ClickHouseDbType.DateTime64:
-                    typeName = string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", Precision);
+                    tzCode = GetTimeZoneCode();
+                    typeName = tzCode == null
+                        ? string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", Precision)
+                        : string.Format(CultureInfo.InvariantCulture, "DateTime64({0}, '{1}')", Precision, tzCode);
+
                     break;
+                case ClickHouseDbType.DateTime:
                 case ClickHouseDbType.DateTimeOffset:
-                    typeName = "DateTime";
+                    tzCode = GetTimeZoneCode();
+                    typeName = tzCode == null ? "DateTime" : $"DateTime('{tzCode}')";
                     break;
                 case ClickHouseDbType.IpV4:
                     typeName = "IPv4";
@@ -290,7 +305,8 @@ namespace Octonica.ClickHouseClient
                     return (ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale));
                 case DateTime _:
                 case DateTimeOffset _:
-                    return (ClickHouseDbType.DateTime, "DateTime");
+                    var tzCode = GetTimeZoneCode();
+                    return (ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')");
                 case double _:
                     return (ClickHouseDbType.Double, "Float64");
                 case Guid _:
@@ -325,6 +341,15 @@ namespace Octonica.ClickHouseClient
                 default:
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The type \"{Value.GetType()}\" of the parameter \"{ParameterName}\" is not supported.");
             }
+        }
+
+        private string? GetTimeZoneCode()
+        {
+            var tzCode = TimeZone?.Id;
+            if (tzCode != null && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                tzCode = TZConvert.WindowsToIana(tzCode);
+
+            return tzCode;
         }
 
         private class ParameterColumnWriterBuilder : ITypeDispatcher<IClickHouseColumnWriter>

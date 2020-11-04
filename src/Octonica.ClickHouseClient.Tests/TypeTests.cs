@@ -357,6 +357,53 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadDateTimeParameterWithTimezoneScalar()
+        {
+            var valueShort = new DateTime(2014, 7, 5, 12, 13, 14);
+            var value = valueShort.Add(TimeSpan.FromMilliseconds(123.4567));
+
+            const string targetTzCode = "Asia/Magadan";
+            var targetTz = TZConvert.GetTimeZoneInfo(targetTzCode);
+            
+            await using var connection = await OpenConnectionAsync();
+            await using var cmd = connection.CreateCommand($"SELECT toTimeZone({{d}}, '{targetTzCode}')");
+            var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TZConvert.GetTimeZoneInfo("Pacific/Niue"), Precision = 4};
+            cmd.Parameters.Add(parameter);
+            var deltaOffset = targetTz.GetUtcOffset(valueShort) - parameter.TimeZone.GetUtcOffset(valueShort);
+
+            object resultObj;
+            DateTimeOffset result;
+            foreach (var parameterType in new ClickHouseDbType?[] {null, ClickHouseDbType.DateTime, ClickHouseDbType.DateTimeOffset})
+            {
+                if (parameterType != null)
+                    parameter.ClickHouseDbType = parameterType.Value;
+
+                resultObj = await cmd.ExecuteScalarAsync();
+                result = Assert.IsType<DateTimeOffset>(resultObj);
+                Assert.Equal(valueShort + deltaOffset, result.DateTime);
+                Assert.Equal(targetTz.GetUtcOffset(result), result.Offset);
+            }
+
+            parameter.ClickHouseDbType = ClickHouseDbType.DateTime2;
+            resultObj = await cmd.ExecuteScalarAsync();
+            result = Assert.IsType<DateTimeOffset>(resultObj);
+            Assert.Equal(value + deltaOffset, result.DateTime);
+            Assert.Equal(targetTz.GetUtcOffset(result), result.Offset);
+
+            parameter.ClickHouseDbType = ClickHouseDbType.DateTime64;
+            resultObj = await cmd.ExecuteScalarAsync();
+            result = Assert.IsType<DateTimeOffset>(resultObj);
+            Assert.Equal(valueShort + deltaOffset + TimeSpan.FromMilliseconds(123.4), result.DateTime);
+            Assert.Equal(targetTz.GetUtcOffset(result), result.Offset);
+
+            parameter.ResetDbType();
+            resultObj = await cmd.ExecuteScalarAsync();
+            result = Assert.IsType<DateTimeOffset>(resultObj);
+            deltaOffset = targetTz.GetUtcOffset(valueShort) - connection.GetServerTimeZone().GetUtcOffset(valueShort);
+            Assert.Equal(valueShort + deltaOffset, result.DateTime);
+        }
+
+        [Fact]
         public async Task ReadFloatScalar()
         {
             await using var connection = await OpenConnectionAsync();
