@@ -287,7 +287,7 @@ namespace Octonica.ClickHouseClient
                 case bool _:
                     return (ClickHouseDbType.Boolean, "UInt8");
                 case decimal _:
-                    return (ClickHouseDbType.Decimal, "Decimal");
+                    return (ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale));
                 case DateTime _:
                 case DateTimeOffset _:
                     return (ClickHouseDbType.DateTime, "DateTime");
