@@ -1616,6 +1616,36 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadIntegerParameterScalar()
+        {
+            object[] values =
+            {
+                sbyte.MinValue, sbyte.MaxValue, (sbyte) 0,
+                byte.MinValue, byte.MaxValue, 
+                short.MinValue, short.MaxValue, (short) 0,
+                ushort.MinValue, ushort.MaxValue,
+                int.MinValue, int.MaxValue, (int) 0,
+                uint.MinValue, uint.MaxValue,
+                long.MinValue, long.MaxValue, (long) 0, 
+                ulong.MinValue, ulong.MaxValue
+            };
+
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {integerParam}");
+            var param = new ClickHouseParameter("integerParam");
+            cmd.Parameters.Add(param);
+            foreach (var value in values)
+            {
+                param.Value = value;
+                var result = await cmd.ExecuteScalarAsync();
+
+                Assert.IsType(value.GetType(), result);
+                Assert.Equal(result, value);
+            }
+        }
+
+        [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
             const string ddl = @"

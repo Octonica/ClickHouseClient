@@ -310,7 +310,7 @@ namespace Octonica.ClickHouseClient
                 case uint _:
                     return (ClickHouseDbType.UInt32, "UInt32");
                 case ulong _:
-                    return (ClickHouseDbType.UInt64, "UInt32");
+                    return (ClickHouseDbType.UInt64, "UInt64");
 
                 case IPAddress ipAddress:
                     if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
