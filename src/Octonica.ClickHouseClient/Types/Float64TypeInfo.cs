@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -38,7 +39,12 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (!(rows is IReadOnlyList<double> doubleRows))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                if (rows is IReadOnlyList<float> floatRows)
+                    doubleRows = new MappedReadOnlyList<float, double>(floatRows, v => v);
+                else
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new Float64Writer(columnName, ComplexTypeName, doubleRows);
         }

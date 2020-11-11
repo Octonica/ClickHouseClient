@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -38,7 +39,18 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (!(rows is IReadOnlyList<int> intRows))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                if (rows is IReadOnlyList<short> shortRows)
+                    intRows = new MappedReadOnlyList<short, int>(shortRows, v => v);
+                else if (rows is IReadOnlyList<ushort> ushortRows)
+                    intRows = new MappedReadOnlyList<ushort, int>(ushortRows, v => v);
+                else if (rows is IReadOnlyList<sbyte> sbyteRows)
+                    intRows = new MappedReadOnlyList<sbyte, int>(sbyteRows, v => v);
+                else if (rows is IReadOnlyList<byte> byteRows)
+                    intRows = new MappedReadOnlyList<byte, int>(byteRows, v => v);
+                else
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new Int32Writer(columnName, ComplexTypeName, intRows);
         }

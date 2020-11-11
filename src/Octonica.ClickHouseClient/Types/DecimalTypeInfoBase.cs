@@ -22,6 +22,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -92,7 +93,26 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
 
             if (!(rows is IReadOnlyList<decimal> decimalRows))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                if (rows is IReadOnlyList<long> longRows)
+                    decimalRows = new MappedReadOnlyList<long, decimal>(longRows, v => v);
+                else if (rows is IReadOnlyList<ulong> ulongRows)
+                    decimalRows = new MappedReadOnlyList<ulong, decimal>(ulongRows, v => v);
+                else if (rows is IReadOnlyList<int> intRows)
+                    decimalRows = new MappedReadOnlyList<int, decimal>(intRows, v => v);
+                else if (rows is IReadOnlyList<uint> uintRows)
+                    decimalRows = new MappedReadOnlyList<uint, decimal>(uintRows, v => v);
+                else if (rows is IReadOnlyList<short> shortRows)
+                    decimalRows = new MappedReadOnlyList<short, decimal>(shortRows, v => v);
+                else if (rows is IReadOnlyList<ushort> ushortRows)
+                    decimalRows = new MappedReadOnlyList<ushort, decimal>(ushortRows, v => v);
+                else if (rows is IReadOnlyList<sbyte> sbyteRows)
+                    decimalRows = new MappedReadOnlyList<sbyte, decimal>(sbyteRows, v => v);
+                else if (rows is IReadOnlyList<byte> byteRows)
+                    decimalRows = new MappedReadOnlyList<byte, decimal>(byteRows, v => v);
+                else
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
         }
