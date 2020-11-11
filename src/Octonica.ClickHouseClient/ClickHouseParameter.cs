@@ -174,7 +174,6 @@ namespace Octonica.ClickHouseClient
             Size = 0;
             StringEncoding = null;
             TimeZone = null;
-            IsArray = false;
         }
 
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
