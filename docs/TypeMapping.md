@@ -23,6 +23,7 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Decimal | decimal | | `GetDecimal` |
 | Date | System.DateTime | | `GetDateTime` |
 | DateTime | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
+| DateTime64 | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | String | string | | `GetString` |
 | FixedString | byte[] | string | |
 | UUID | System.Guid | | `GetGuid` |
