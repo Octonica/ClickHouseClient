@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
@@ -43,6 +44,7 @@ namespace Octonica.ClickHouseClient
         private ClickHouseDbType? _forcedType;
         private byte? _forcedScale;
         private byte? _forcedPrecision;
+        private int? _forcedArrayRank;
 
         internal string Id { get; }
 
@@ -77,7 +79,7 @@ namespace Octonica.ClickHouseClient
 
         public override bool IsNullable
         {
-            get => _forcedNullable ?? Value == null || Value == DBNull.Value;
+            get => _forcedNullable ?? GetTypeFromValue().isNullable;
             set => _forcedNullable = value;
         }
 
@@ -116,6 +118,36 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public TimeZoneInfo? TimeZone { get; set; }
 
+        public bool IsArray
+        {
+            get => ArrayRank > 0;
+            set
+            {
+                if (value)
+                {
+                    if (ArrayRank == 0)
+                        ArrayRank = 1;
+                }
+                else
+                {
+                    if (ArrayRank > 0)
+                        ArrayRank = 0;
+                }
+            }
+        }
+
+        public int ArrayRank
+        {
+            get => _forcedArrayRank ?? GetTypeFromValue().arrayRank;
+            set
+            {
+                if (value < 0)
+                    throw new ArgumentException("The rank of an array must be a non-negative number.", nameof(value));
+
+                _forcedArrayRank = value;
+            }
+        }
+
         public ClickHouseParameter(string parameterName)
         {
             if (parameterName == null)
@@ -138,9 +170,11 @@ namespace Octonica.ClickHouseClient
             _forcedNullable = null;
             _forcedPrecision = null;
             _forcedScale = null;
+            _forcedArrayRank = null;
             Size = 0;
             StringEncoding = null;
             TimeZone = null;
+            IsArray = false;
         }
 
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
@@ -148,6 +182,7 @@ namespace Octonica.ClickHouseClient
             string typeName;
             object? preparedValue = null;
             string? tzCode;
+            (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank)? valueTypeInfo = null;
             switch (_forcedType)
             {
                 case ClickHouseDbType.AnsiString:
@@ -264,7 +299,8 @@ namespace Octonica.ClickHouseClient
                 case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
                     goto default;
                 case null:
-                    typeName = GetTypeFromValue().clickHouseType;
+                    valueTypeInfo = GetTypeFromValue();
+                    typeName = valueTypeInfo.Value.clickHouseType;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -274,73 +310,179 @@ namespace Octonica.ClickHouseClient
             if (isNull && _forcedNullable == false)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The parameter \"{ParameterName}\" is declared as non-nullable but its value is null.");
 
-            if (_forcedNullable == true || isNull)
+            bool isNullable;
+            if (_forcedNullable != null)
             {
-                typeName = $"Nullable({typeName})";
+                isNullable = _forcedNullable.Value;
             }
+            else if(isNull)
+            {
+                isNullable = true;
+            }
+            else
+            {
+                if (valueTypeInfo == null)
+                    valueTypeInfo = GetTypeFromValue();
+
+                isNullable = valueTypeInfo.Value.isNullable;
+            }
+
+            int arrayRank;
+            if (_forcedArrayRank != null)
+            {
+                arrayRank = _forcedArrayRank.Value;
+            }
+            else
+            {
+                if (valueTypeInfo == null)
+                    valueTypeInfo = GetTypeFromValue();
+
+                arrayRank = valueTypeInfo.Value.arrayRank;
+            }
+
+            if (isNullable)
+                typeName = $"Nullable({typeName})";
+
+            for (int i = 0; i < arrayRank; i++)
+                typeName = $"Array({typeName})";
 
             var typeInfo = typeInfoProvider.GetTypeInfo(typeName);
             var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();
-
             var columnSettings = StringEncoding == null ? null : new ClickHouseColumnSettings(StringEncoding);
             var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, columnSettings, typeInfo);
             var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
-
             return column;
         }
 
-        private (ClickHouseDbType dbType, string clickHouseType) GetTypeFromValue()
+        private (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank) GetTypeFromValue()
         {
-            switch (Value)
+            if (Value == null)
+                return (ClickHouseDbType.Object, "Nothing", true, 0);
+
+            if (Value is IPAddress ipAddress)
             {
-                case string _:
-                    return (ClickHouseDbType.String, "String");
-                case byte[] _:
-                    return (ClickHouseDbType.Binary, "Array(UInt8)");
-                case byte _:
-                    return (ClickHouseDbType.Byte, "UInt8");
-                case bool _:
-                    return (ClickHouseDbType.Boolean, "UInt8");
-                case decimal _:
-                    return (ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale));
-                case DateTime _:
-                case DateTimeOffset _:
-                    var tzCode = GetTimeZoneCode();
-                    return (ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')");
-                case double _:
-                    return (ClickHouseDbType.Double, "Float64");
-                case Guid _:
-                    return (ClickHouseDbType.Guid, "UUID");
-                case short _:
-                    return (ClickHouseDbType.Int16, "Int16");
-                case int _:
-                    return (ClickHouseDbType.Int32, "Int32");
-                case long _:
-                    return (ClickHouseDbType.Int64, "Int64");
-                case sbyte _:
-                    return (ClickHouseDbType.SByte, "Int8");
-                case float _:
-                    return (ClickHouseDbType.Single, "Float32");
-                case ushort _:
-                    return (ClickHouseDbType.UInt16, "UInt16");
-                case uint _:
-                    return (ClickHouseDbType.UInt32, "UInt32");
-                case ulong _:
-                    return (ClickHouseDbType.UInt64, "UInt64");
-
-                case IPAddress ipAddress:
-                    if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
-                        return (ClickHouseDbType.IpV4, "IPv4");
-                    if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
-                        return (ClickHouseDbType.IpV6, "IPv6");
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"Parameter \"{ParameterName}\". The type \"{ipAddress.AddressFamily}\" of the network address is not supported.");
-
-                case DBNull _:
-                case null:
-                    return (ClickHouseDbType.Object, "Nothing");
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The type \"{Value.GetType()}\" of the parameter \"{ParameterName}\" is not supported.");
+                if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
+                    return (ClickHouseDbType.IpV4, "IPv4", false, 0);
+                if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
+                    return (ClickHouseDbType.IpV6, "IPv6", false, 0);
+                throw new ClickHouseException(
+                    ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                    $"Parameter \"{ParameterName}\". The type \"{ipAddress.AddressFamily}\" of the network address is not supported.");
             }
+
+            return GetTypeFromValue(Value.GetType(), false);
+        }
+
+        private (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank) GetTypeFromValue(Type valueType, bool valueCanBeNull)
+        {
+            if (valueType == typeof(string))
+                return (ClickHouseDbType.String, "String", valueCanBeNull, 0);
+            if (valueType == typeof(byte))
+                return (ClickHouseDbType.Byte, "UInt8", false, 0);
+            if (valueType == typeof(bool))
+                return (ClickHouseDbType.Boolean, "UInt8", false, 0);
+            if (valueType == typeof(decimal))
+                return (ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
+            if (valueType == typeof(double))
+                return (ClickHouseDbType.Double, "Float64", false, 0);
+            if (valueType == typeof(Guid))
+                return (ClickHouseDbType.Guid, "UUID", false, 0);
+            if (valueType == typeof(short))
+                return (ClickHouseDbType.Int16, "Int16", false, 0);
+            if (valueType == typeof(int))
+                return (ClickHouseDbType.Int32, "Int32", false, 0);
+            if (valueType == typeof(long))
+                return (ClickHouseDbType.Int64, "Int64", false, 0);
+            if (valueType == typeof(sbyte))
+                return (ClickHouseDbType.SByte, "Int8", false, 0);
+            if (valueType == typeof(float))
+                return (ClickHouseDbType.Single, "Float32", false, 0);
+            if (valueType == typeof(ushort))
+                return (ClickHouseDbType.UInt16, "UInt16", false, 0);
+            if (valueType == typeof(uint))
+                return (ClickHouseDbType.UInt32, "UInt32", false, 0);
+            if (valueType == typeof(ulong))
+                return (ClickHouseDbType.UInt64, "UInt64", false, 0);
+            if (valueType == typeof(IPAddress))
+                return (ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
+            if (valueType == typeof(DBNull))
+                return (ClickHouseDbType.Object, "Nothing", true, 0);
+
+            if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
+            {
+                var tzCode = GetTimeZoneCode();
+                return (ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')", false, 0);
+            }
+
+            int arrayRank = 1;
+            Type? elementType = null;
+            if (valueType.IsArray)
+            {
+                arrayRank = valueType.GetArrayRank();
+                elementType = valueType.GetElementType();
+            }
+            else
+            {
+                foreach (var itf in valueType.GetInterfaces())
+                {
+                    if (!itf.IsGenericType)
+                        continue;
+
+                    if (itf.GetGenericTypeDefinition() != typeof(IReadOnlyList<>))
+                        continue;
+
+                    var listElementType = itf.GetGenericArguments()[0];
+                    if (elementType != null)
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                            $"The type \"{valueType}\" of the parameter \"{ParameterName}\" implements \"{typeof(IReadOnlyList<>)}\" at least twice with generic arguments \"{elementType}\" and \"{listElementType}\".");
+                    }
+
+                    elementType = listElementType;
+                }
+            }
+
+            if (elementType != null)
+            {
+                try
+                {
+                    var elementInfo = GetTypeFromValue(elementType, true);
+                    return (elementInfo.dbType, elementInfo.clickHouseType, elementInfo.isNullable, elementInfo.arrayRank + arrayRank);
+                }
+                catch (ClickHouseException ex)
+                {
+                    if (ex.ErrorCode != ClickHouseErrorCodes.InvalidQueryParameterConfiguration)
+                        throw;
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                        $"The type \"{valueType}\" of the parameter \"{ParameterName}\" is not supported. See the inner exception for details.",
+                        ex);
+                }
+            }
+
+            if (valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                elementType = valueType.GetGenericArguments()[0];
+                try
+                {
+                    var elementInfo = GetTypeFromValue(elementType, false);
+                    return (elementInfo.dbType, elementInfo.clickHouseType, true, elementInfo.arrayRank);
+                }
+                catch (ClickHouseException ex)
+                {
+                    if (ex.ErrorCode != ClickHouseErrorCodes.InvalidQueryParameterConfiguration)
+                        throw;
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                        $"The type \"{valueType}\" of the parameter \"{ParameterName}\" is not supported. See the inner exception for details.",
+                        ex);
+                }
+            }
+
+            throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The type \"{valueType}\" of the parameter \"{ParameterName}\" is not supported.");
         }
 
         private string? GetTimeZoneCode()

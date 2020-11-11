@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -60,8 +61,30 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
+            var rowType = typeof(T);
             Type? elementType = null;
-            foreach (var genericItf in typeof(T).GetInterfaces().Where(itf => itf.IsGenericType))
+            if (rowType.IsArray)
+            {
+                var rank = rowType.GetArrayRank();
+                if (rank > 1)
+                {
+                    elementType = rowType.GetElementType()!;
+                    Debug.Assert(elementType != null);
+
+                    var listAdapterInfo = MultiDimensionalArrayReadOnlyListAdapter.Dispatch(elementType, rowType.GetArrayRank());
+                    var mdaDispatcher = new MultiDimensionalArrayColumnWriterDispatcher(
+                        columnName,
+                        ComplexTypeName,
+                        (IReadOnlyList<Array>) rows,
+                        columnSettings,
+                        _elementTypeInfo,
+                        listAdapterInfo.createList);
+
+                    return TypeDispatcher.Dispatch(listAdapterInfo.listElementType, mdaDispatcher);
+                }
+            }
+
+            foreach (var genericItf in rowType.GetInterfaces().Where(itf => itf.IsGenericType))
             {
                 if (genericItf.GetGenericTypeDefinition() != typeof(IReadOnlyList<>))
                     continue;
@@ -349,6 +372,40 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseColumnWriter Dispatch<T>()
             {
                 var linearizedList = new ArrayLinearizedList<T>((IReadOnlyList<IReadOnlyList<T>?>) _rows);
+                var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
+                return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);
+            }
+        }
+
+        private sealed class MultiDimensionalArrayColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
+        {
+            private readonly string _columnName;
+            private readonly string _columnType;
+            private readonly IReadOnlyList<Array> _rows;
+            private readonly ClickHouseColumnSettings? _columnSettings;
+            private readonly IClickHouseColumnTypeInfo _elementTypeInfo;
+            private readonly Func<Array, object> _dispatchArray;
+
+            public MultiDimensionalArrayColumnWriterDispatcher(
+                string columnName,
+                string columnType,
+                IReadOnlyList<Array> rows,
+                ClickHouseColumnSettings? columnSettings,
+                IClickHouseColumnTypeInfo elementTypeInfo,
+                Func<Array, object> dispatchArray)
+            {
+                _columnName = columnName;
+                _columnType = columnType;
+                _rows = rows;
+                _columnSettings = columnSettings;
+                _elementTypeInfo = elementTypeInfo;
+                _dispatchArray = dispatchArray;
+            }
+
+            public IClickHouseColumnWriter Dispatch<T>()
+            {
+                var mappedRows = new MappedReadOnlyList<Array, IReadOnlyList<T>>(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
+                var linearizedList = new ArrayLinearizedList<T>(mappedRows);
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
                 return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);
             }

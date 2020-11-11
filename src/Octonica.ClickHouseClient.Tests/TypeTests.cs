@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
@@ -551,6 +552,104 @@ namespace Octonica.ClickHouseClient.Tests
             var resultArr = Assert.IsType<object?[]>(result);
 
             Assert.Equal(new object[3], resultArr);
+        }
+
+        [Fact]
+        public async Task ReadArrayParameterScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {p}");
+            var expectedResult = new[] {4, 8, 15, 16, 23, 42};
+            var param = cmd.Parameters.AddWithValue("p", expectedResult);
+
+            var result = await cmd.ExecuteScalarAsync();
+            var intResult = Assert.IsType<int[]>(result);
+
+            Assert.Equal(expectedResult, intResult);
+
+            param.IsArray = true;
+            param.DbType = DbType.Decimal;
+
+            result = await cmd.ExecuteScalarAsync();
+            var decResult = Assert.IsType<decimal[]>(result);
+
+            Assert.Equal(expectedResult.Select(v => (decimal) v), decResult);
+        }
+
+        [Fact]
+        public async Task ReadArrayOfArraysParameterScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {p}");
+            var expectedResult = new List<int[]> {new[] {4, 8}, new[] {15, 16, 23}, new[] {42}};
+            var param = cmd.Parameters.AddWithValue("p", expectedResult);
+
+            var result = await cmd.ExecuteScalarAsync();
+            var intResult = Assert.IsType<int[][]>(result);
+
+            Assert.Equal(expectedResult.Count, intResult.Length);
+            for (int i = 0; i < expectedResult.Count; i++)
+                Assert.Equal(expectedResult[i], intResult[i]);
+
+            param.ArrayRank = 2;
+            param.DbType = DbType.Decimal;
+            param.IsNullable = true;
+
+            result = await cmd.ExecuteScalarAsync();
+            var decResult = Assert.IsType<decimal?[][]>(result);
+
+            Assert.Equal(expectedResult.Count, decResult.Length);
+            for (int i = 0; i < decResult.Length; i++)
+                Assert.Equal(expectedResult[i].Select(v => (decimal?) v), decResult[i]);
+        }
+
+        [Fact]
+        public async Task ReadMultidimensionalArrayParameterScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {p}");
+            var expectedResult = new List<int?[,]> {new[,] {{(int?) 4, 8}, {15, 16}, {23, 42}}, new[,] {{1}, {(int?) null}, {3}}, new[,] {{(int?) -4, -8, -15}, {-16, -23, -42}}};
+            var param = cmd.Parameters.AddWithValue("p", expectedResult);
+
+            var result = await cmd.ExecuteScalarAsync();
+            var intResult = Assert.IsType<int?[][][]>(result);
+
+            Assert.Equal(expectedResult.Count, intResult.Length);
+            for (int i = 0; i < expectedResult.Count; i++)
+            {
+                var expectedLengthI = expectedResult[i].GetLength(0);
+                var expectedLengthJ = expectedResult[i].GetLength(1);
+                Assert.Equal(expectedLengthI, intResult[i].Length);
+                for (int j = 0; j < expectedLengthI; j++)
+                {
+                    Assert.Equal(expectedLengthJ, intResult[i][j].Length);
+                    for (int k = 0; k < expectedLengthJ; k++)
+                        Assert.Equal(expectedResult[i][j, k], intResult[i][j][k]);
+                }
+            }
+
+            param.ArrayRank = 3;
+            param.DbType = DbType.Decimal;
+
+            result = await cmd.ExecuteScalarAsync();
+            var decResult = Assert.IsType<decimal?[][][]>(result);
+
+            Assert.Equal(expectedResult.Count, decResult.Length);
+            for (int i = 0; i < expectedResult.Count; i++)
+            {
+                var expectedLengthI = expectedResult[i].GetLength(0);
+                var expectedLengthJ = expectedResult[i].GetLength(1);
+                Assert.Equal(expectedLengthI, decResult[i].Length);
+                for (int j = 0; j < expectedLengthI; j++)
+                {
+                    Assert.Equal(expectedLengthJ, decResult[i][j].Length);
+                    for (int k = 0; k < expectedLengthJ; k++)
+                        Assert.Equal(expectedResult[i][j, k], decResult[i][j][k]);
+                }
+            }
         }
 
         [Fact]
