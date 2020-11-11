@@ -246,7 +246,7 @@ namespace Octonica.ClickHouseClient
                     typeName = "UInt32";
                     break;
                 case ClickHouseDbType.UInt64:
-                    typeName = "UInt32";
+                    typeName = "UInt64";
                     break;
                 case ClickHouseDbType.VarNumeric:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", Precision, Scale);

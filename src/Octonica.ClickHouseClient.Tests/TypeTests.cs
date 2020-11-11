@@ -583,26 +583,26 @@ namespace Octonica.ClickHouseClient.Tests
             await using var connection = await OpenConnectionAsync();
 
             await using var cmd = connection.CreateCommand("SELECT {p}");
-            var expectedResult = new List<int[]> {new[] {4, 8}, new[] {15, 16, 23}, new[] {42}};
+            var expectedResult = new List<uint[]> {new uint[] {4, 8}, new uint[] {15, 16, 23}, new uint[] {42}};
             var param = cmd.Parameters.AddWithValue("p", expectedResult);
 
             var result = await cmd.ExecuteScalarAsync();
-            var intResult = Assert.IsType<int[][]>(result);
+            var intResult = Assert.IsType<uint[][]>(result);
 
             Assert.Equal(expectedResult.Count, intResult.Length);
             for (int i = 0; i < expectedResult.Count; i++)
                 Assert.Equal(expectedResult[i], intResult[i]);
 
             param.ArrayRank = 2;
-            param.DbType = DbType.Decimal;
+            param.DbType = DbType.UInt64;
             param.IsNullable = true;
 
             result = await cmd.ExecuteScalarAsync();
-            var decResult = Assert.IsType<decimal?[][]>(result);
+            var decResult = Assert.IsType<ulong?[][]>(result);
 
             Assert.Equal(expectedResult.Count, decResult.Length);
             for (int i = 0; i < decResult.Length; i++)
-                Assert.Equal(expectedResult[i].Select(v => (decimal?) v), decResult[i]);
+                Assert.Equal(expectedResult[i].Select(v => (ulong?) v), decResult[i]);
         }
 
         [Fact]
