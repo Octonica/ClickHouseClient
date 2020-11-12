@@ -1,4 +1,4 @@
-### Octonica.ClickHouseClient relese v1.0.13, 2020-11-11
+### Octonica.ClickHouseClient release v1.0.13, 2020-11-11
 
 #### Backward Incompatible Change
 
