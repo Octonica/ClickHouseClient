@@ -34,12 +34,16 @@ using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient
 {
-    public class ClickHouseParameter : DbParameter
+    public class ClickHouseParameter : DbParameter, ICloneable
     {
         // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
         private static readonly Regex ParameterNameRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*$");
 
-        private readonly string _parameterName;
+        private string _parameterName;
+
+        private object? _value;
+        private int _size;
+        private TimeZoneInfo? _timeZone;
 
         private bool? _forcedNullable;
         private ClickHouseDbType? _forcedType;
@@ -47,11 +51,15 @@ namespace Octonica.ClickHouseClient
         private byte? _forcedPrecision;
         private int? _forcedArrayRank;
 
-        internal string Id { get; }
+        private ValueTypeInfo? _valueTypeInfo;
+
+        internal string Id { get; private set; }
+
+        public ClickHouseParameterCollection? Collection { get; internal set; }
 
         public ClickHouseDbType ClickHouseDbType
         {
-            get=> _forcedType ?? GetTypeFromValue().dbType;
+            get => _forcedType ?? GetTypeFromValue().DbType;
             set => _forcedType = value;
         }
 
@@ -80,23 +88,70 @@ namespace Octonica.ClickHouseClient
 
         public override bool IsNullable
         {
-            get => _forcedNullable ?? GetTypeFromValue().isNullable;
+            get => _forcedNullable ?? GetTypeFromValue().IsNullable;
             set => _forcedNullable = value;
         }
 
         public sealed override string ParameterName
         {
             get => _parameterName;
-            set => throw new NotSupportedException("The name of the parameter is read-only.");
+            set
+            {
+                var id = GetId(value);
+                if (StringComparer.Ordinal.Equals(id, Id))
+                {
+                    _parameterName = value;
+                    return;
+                }
+
+                if (Collection == null)
+                {
+                    Id = id;
+                    _parameterName = value;
+                    return;
+                }
+
+                var oldId = Id;
+                var oldParameterName = _parameterName;
+                Id = id;
+                _parameterName = value;
+
+                try
+                {
+                    Collection.OnParameterIdChanged(oldId, this);
+                }
+                catch
+                {
+                    Id = oldId;
+                    _parameterName = oldParameterName;
+                    throw;
+                }
+            }
         }
 
         public override string? SourceColumn { get; set; }
 
-        public override object? Value { get; set; }
+        public override object? Value
+        {
+            get => _value;
+            set
+            {
+                _value = value;
+                _valueTypeInfo = null;
+            }
+        }
 
         public override bool SourceColumnNullMapping { get; set; }
 
-        public override int Size { get; set; }
+        public override int Size
+        {
+            get => _size;
+            set
+            {
+                _size = value;
+                _valueTypeInfo = null;
+            }
+        }
 
         public override byte Precision
         {
@@ -117,7 +172,15 @@ namespace Octonica.ClickHouseClient
         /// <see cref="ClickHouseClient.ClickHouseDbType.DateTimeOffset"/>, <see cref="ClickHouseClient.ClickHouseDbType.DateTime2"/>
         /// and <see cref="ClickHouseClient.ClickHouseDbType.DateTime64"/>).
         /// </summary>
-        public TimeZoneInfo? TimeZone { get; set; }
+        public TimeZoneInfo? TimeZone
+        {
+            get => _timeZone;
+            set
+            {
+                _timeZone = value;
+                _valueTypeInfo = null;
+            }
+        }
 
         public bool IsArray
         {
@@ -139,7 +202,7 @@ namespace Octonica.ClickHouseClient
 
         public int ArrayRank
         {
-            get => _forcedArrayRank ?? GetTypeFromValue().arrayRank;
+            get => _forcedArrayRank ?? GetTypeFromValue().ArrayRank;
             set
             {
                 if (value < 0)
@@ -147,6 +210,11 @@ namespace Octonica.ClickHouseClient
 
                 _forcedArrayRank = value;
             }
+        }
+
+        public ClickHouseParameter()
+            : this("parameter")
+        {
         }
 
         public ClickHouseParameter(string parameterName)
@@ -165,9 +233,47 @@ namespace Octonica.ClickHouseClient
             _forcedPrecision = null;
             _forcedScale = null;
             _forcedArrayRank = null;
-            Size = 0;
+
+            _size = 0;
             StringEncoding = null;
-            TimeZone = null;
+            _timeZone = null;
+            _valueTypeInfo = null;
+        }
+
+        object ICloneable.Clone()
+        {
+            return Clone();
+        }
+
+        public virtual ClickHouseParameter Clone()
+        {
+            var result = new ClickHouseParameter(ParameterName);
+            CopyTo(result);
+            return result;
+        }
+
+        /// <summary>
+        /// Copy all properties except <see cref="ParameterName"/> of this parameter to the target parameter.
+        /// </summary>
+        public void CopyTo(ClickHouseParameter parameter)
+        {
+            parameter._forcedType = _forcedType;
+            parameter._forcedArrayRank = _forcedArrayRank;
+            parameter._forcedNullable = _forcedNullable;
+            parameter._forcedPrecision = _forcedPrecision;
+            parameter._forcedScale = _forcedScale;
+            parameter._forcedArrayRank = _forcedArrayRank;
+
+            parameter._size = _size;
+            parameter.StringEncoding = StringEncoding;
+            parameter._timeZone = _timeZone;
+            parameter._value = _value;
+
+            parameter.SourceColumn = SourceColumn;
+            parameter.SourceColumnNullMapping = SourceColumnNullMapping;
+            parameter.SourceVersion = SourceVersion;
+
+            parameter._valueTypeInfo = null;
         }
 
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
@@ -175,13 +281,17 @@ namespace Octonica.ClickHouseClient
             string typeName;
             object? preparedValue = null;
             string? tzCode;
-            (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank)? valueTypeInfo = null;
             switch (_forcedType)
             {
                 case ClickHouseDbType.AnsiString:
                 case ClickHouseDbType.AnsiStringFixedLength:
-                    throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported. String encoding can be specified with the property \"{nameof(Encoding)}\".");
+                    throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported. String encoding can be specified with the property \"{nameof(StringEncoding)}\".");
+                case ClickHouseDbType.Array:
+                    throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported. An array could be declared with properties \"{nameof(ArrayRank)}\" or \"{nameof(IsArray)}\".");
+                case ClickHouseDbType.Enum:
+                case ClickHouseDbType.Nothing:
                 case ClickHouseDbType.Time:
+                case ClickHouseDbType.Tuple:
                 case ClickHouseDbType.Xml:
                     throw new NotSupportedException($"Parameter \"{ParameterName}\". The type \"{_forcedType}\" is not supported.");
 
@@ -248,7 +358,11 @@ namespace Octonica.ClickHouseClient
                 case ClickHouseDbType.StringFixedLength:
                 {
                     if (Size <= 0)
-                        throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"Parameter \"{ParameterName}\". The size of the fixed string must be a positive number.");
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                            $"Parameter \"{ParameterName}\". The size of the fixed string must be a positive number.");
+                    }
 
                     typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", Size);
                     if (Value is string strValue)
@@ -292,8 +406,7 @@ namespace Octonica.ClickHouseClient
                 case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
                     goto default;
                 case null:
-                    valueTypeInfo = GetTypeFromValue();
-                    typeName = valueTypeInfo.Value.clickHouseType;
+                    typeName = GetTypeFromValue().ClickHouseType;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -305,37 +418,16 @@ namespace Octonica.ClickHouseClient
 
             bool isNullable;
             if (_forcedNullable != null)
-            {
                 isNullable = _forcedNullable.Value;
-            }
-            else if(isNull)
-            {
+            else if (isNull)
                 isNullable = true;
-            }
             else
-            {
-                if (valueTypeInfo == null)
-                    valueTypeInfo = GetTypeFromValue();
-
-                isNullable = valueTypeInfo.Value.isNullable;
-            }
-
-            int arrayRank;
-            if (_forcedArrayRank != null)
-            {
-                arrayRank = _forcedArrayRank.Value;
-            }
-            else
-            {
-                if (valueTypeInfo == null)
-                    valueTypeInfo = GetTypeFromValue();
-
-                arrayRank = valueTypeInfo.Value.arrayRank;
-            }
+                isNullable = GetTypeFromValue().IsNullable;
 
             if (isNullable)
                 typeName = $"Nullable({typeName})";
 
+            int arrayRank = _forcedArrayRank ?? GetTypeFromValue().ArrayRank;
             for (int i = 0; i < arrayRank; i++)
                 typeName = $"Array({typeName})";
 
@@ -347,64 +439,81 @@ namespace Octonica.ClickHouseClient
             return column;
         }
 
-        private (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank) GetTypeFromValue()
+        private ValueTypeInfo GetTypeFromValue()
         {
-            if (Value == null)
-                return (ClickHouseDbType.Object, "Nothing", true, 0);
+            if (_valueTypeInfo != null)
+                return _valueTypeInfo.Value;
 
-            if (Value is IPAddress ipAddress)
+            ValueTypeInfo result;
+            if (Value == null)
+            {
+                result = new ValueTypeInfo(ClickHouseDbType.Object, "Nothing", true, 0);
+            }
+            else if (Value is IPAddress ipAddress)
             {
                 if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
-                    return (ClickHouseDbType.IpV4, "IPv4", false, 0);
-                if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
-                    return (ClickHouseDbType.IpV6, "IPv6", false, 0);
-                throw new ClickHouseException(
-                    ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
-                    $"Parameter \"{ParameterName}\". The type \"{ipAddress.AddressFamily}\" of the network address is not supported.");
+                {
+                    result = new ValueTypeInfo(ClickHouseDbType.IpV4, "IPv4", false, 0);
+                }
+                else if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
+                {
+                    result = new ValueTypeInfo(ClickHouseDbType.IpV6, "IPv6", false, 0);
+                }
+                else
+                {
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
+                        $"Parameter \"{ParameterName}\". The type \"{ipAddress.AddressFamily}\" of the network address is not supported.");
+                }
+            }
+            else
+            {
+                result = GetTypeFromValue(Value.GetType(), false);
             }
 
-            return GetTypeFromValue(Value.GetType(), false);
+            _valueTypeInfo = result;
+            return result;
         }
 
-        private (ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank) GetTypeFromValue(Type valueType, bool valueCanBeNull)
+        private ValueTypeInfo GetTypeFromValue(Type valueType, bool valueCanBeNull)
         {
             if (valueType == typeof(string))
-                return (ClickHouseDbType.String, "String", valueCanBeNull, 0);
+                return new ValueTypeInfo(ClickHouseDbType.String, "String", valueCanBeNull, 0);
             if (valueType == typeof(byte))
-                return (ClickHouseDbType.Byte, "UInt8", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 0);
             if (valueType == typeof(bool))
-                return (ClickHouseDbType.Boolean, "UInt8", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Boolean, "UInt8", false, 0);
             if (valueType == typeof(decimal))
-                return (ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
             if (valueType == typeof(double))
-                return (ClickHouseDbType.Double, "Float64", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Double, "Float64", false, 0);
             if (valueType == typeof(Guid))
-                return (ClickHouseDbType.Guid, "UUID", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Guid, "UUID", false, 0);
             if (valueType == typeof(short))
-                return (ClickHouseDbType.Int16, "Int16", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Int16, "Int16", false, 0);
             if (valueType == typeof(int))
-                return (ClickHouseDbType.Int32, "Int32", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Int32, "Int32", false, 0);
             if (valueType == typeof(long))
-                return (ClickHouseDbType.Int64, "Int64", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Int64, "Int64", false, 0);
             if (valueType == typeof(sbyte))
-                return (ClickHouseDbType.SByte, "Int8", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.SByte, "Int8", false, 0);
             if (valueType == typeof(float))
-                return (ClickHouseDbType.Single, "Float32", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Single, "Float32", false, 0);
             if (valueType == typeof(ushort))
-                return (ClickHouseDbType.UInt16, "UInt16", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.UInt16, "UInt16", false, 0);
             if (valueType == typeof(uint))
-                return (ClickHouseDbType.UInt32, "UInt32", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.UInt32, "UInt32", false, 0);
             if (valueType == typeof(ulong))
-                return (ClickHouseDbType.UInt64, "UInt64", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.UInt64, "UInt64", false, 0);
             if (valueType == typeof(IPAddress))
-                return (ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
+                return new ValueTypeInfo(ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
             if (valueType == typeof(DBNull))
-                return (ClickHouseDbType.Object, "Nothing", true, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Object, "Nothing", true, 0);
 
             if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
             {
                 var tzCode = GetTimeZoneCode();
-                return (ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')", false, 0);
+                return new ValueTypeInfo(ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')", false, 0);
             }
 
             int arrayRank = 1;
@@ -441,7 +550,7 @@ namespace Octonica.ClickHouseClient
                 try
                 {
                     var elementInfo = GetTypeFromValue(elementType, true);
-                    return (elementInfo.dbType, elementInfo.clickHouseType, elementInfo.isNullable, elementInfo.arrayRank + arrayRank);
+                    return new ValueTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, elementInfo.IsNullable, elementInfo.ArrayRank + arrayRank);
                 }
                 catch (ClickHouseException ex)
                 {
@@ -461,7 +570,7 @@ namespace Octonica.ClickHouseClient
                 try
                 {
                     var elementInfo = GetTypeFromValue(elementType, false);
-                    return (elementInfo.dbType, elementInfo.clickHouseType, true, elementInfo.arrayRank);
+                    return new ValueTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, true, elementInfo.ArrayRank);
                 }
                 catch (ClickHouseException ex)
                 {
@@ -542,11 +651,27 @@ namespace Octonica.ClickHouseClient
                 _typeInfo = typeInfo ?? throw new ArgumentNullException(nameof(typeInfo));
             }
 
-            
+
             public IClickHouseColumnWriter Dispatch<T>()
             {
-                var singleElementColumn = new ConstantReadOnlyList<T>((T)_value, 1);
+                var singleElementColumn = new ConstantReadOnlyList<T>((T) _value, 1);
                 return _typeInfo.CreateColumnWriter(_parameterId, singleElementColumn, _columnSettings);
+            }
+        }
+
+        private readonly struct ValueTypeInfo
+        {
+            public ClickHouseDbType DbType { get; }
+            public string ClickHouseType { get; }
+            public bool IsNullable { get; }
+            public int ArrayRank { get; }
+
+            public ValueTypeInfo(ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank)
+            {
+                DbType = dbType;
+                ClickHouseType = clickHouseType;
+                IsNullable = isNullable;
+                ArrayRank = arrayRank;
             }
         }
     }

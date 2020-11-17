@@ -33,6 +33,7 @@ namespace Octonica.ClickHouseClient
 
         private readonly TcpClient _client;
         private readonly ClickHouseConnectionSettings _settings;
+        private readonly IClickHouseTypeInfoProvider _typeInfoProvider;
         private readonly ClickHouseBinaryProtocolReader _reader;
         private readonly ClickHouseBinaryProtocolWriter _writer;
 
@@ -42,8 +43,6 @@ namespace Octonica.ClickHouseClient
         public event EventHandler<Exception?>? OnFailed;
 
         public ClickHouseServerInfo ServerInfo { get; }
-
-        public IClickHouseTypeInfoProvider TypeInfoProvider { get; }
 
         public ClickHouseTcpClient(
             TcpClient client,
@@ -58,7 +57,7 @@ namespace Octonica.ClickHouseClient
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             ServerInfo = serverInfo;
-            TypeInfoProvider = typeInfoProvider;
+            _typeInfoProvider = typeInfoProvider;
         }
 
         public async ValueTask<Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
@@ -121,6 +120,8 @@ namespace Octonica.ClickHouseClient
         {
             private readonly ClickHouseTcpClient _client;
             private readonly CancellationToken _sessionCancellationToken;
+
+            public IClickHouseTypeInfoProvider TypeInfoProvider => _client._typeInfoProvider;
 
             public bool IsDisposed { get; private set; }
 
@@ -302,7 +303,7 @@ namespace Octonica.ClickHouseClient
                 {
                     var columnName = await reader.ReadString(async, cancellationToken);
                     var columnTypeName = await reader.ReadString(async, cancellationToken);
-                    var columnType = _client.TypeInfoProvider.GetTypeInfo(columnTypeName);
+                    var columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
                     columnInfos.Add(new ColumnInfo(columnName, columnType));
 
                     var columnRowCount = rowCount;

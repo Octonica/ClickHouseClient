@@ -47,7 +47,7 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseParameter AddWithValue(string parameterName, object? value)
         {
-            var parameter = new ClickHouseParameter(parameterName) { Value = value };
+            var parameter = new ClickHouseParameter(parameterName) {Value = value};
             Add(parameter);
             return parameter;
         }
@@ -69,18 +69,31 @@ namespace Octonica.ClickHouseClient
             if (item == null)
                 throw new ArgumentNullException(nameof(item));
 
+            if (item.Collection != null)
+            {
+                var errorText = ReferenceEquals(item.Collection, this)
+                    ? $"The parameter \"{item.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
+                    : $"The parameter \"{item.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+
+                throw new ArgumentException(errorText, nameof(item));
+            }
+
             if (_parameters.ContainsKey(item.Id))
                 throw new ArgumentException($"A parameter with the name \"{item.ParameterName}\" already exists in the collection.", nameof(item));
 
             _parameters.Add(item.Id, item);
             var result = _parameterNames.Count;
             _parameterNames.Add(item.Id);
+            item.Collection = this;
 
             return result;
         }
 
         public override void Clear()
         {
+            foreach (var parameter in _parameters.Values)
+                parameter.Collection = null;
+
             _parameters.Clear();
             _parameterNames.Clear();
         }
@@ -136,8 +149,30 @@ namespace Octonica.ClickHouseClient
 
             _parameterNames.RemoveAt(index);
             var result = _parameters.Remove(name);
+            item.Collection = null;
 
             Debug.Assert(result);
+            return true;
+        }
+
+        public bool Remove(string parameterName)
+        {
+            return Remove(parameterName, out _);
+        }
+
+        public bool Remove(string parameterName, [MaybeNullWhen(false)] out ClickHouseParameter parameter)
+        {
+            if (parameterName == null)
+                throw new ArgumentNullException(nameof(parameterName));
+
+            var name = ClickHouseParameter.TrimParameterName(parameterName);
+            if (!_parameters.Remove(name, out parameter))
+                return false;
+
+            parameter.Collection = null;
+            var comparer = _parameters.Comparer;
+            var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
+            _parameterNames.RemoveAt(index);
             return true;
         }
 
@@ -169,32 +204,35 @@ namespace Octonica.ClickHouseClient
             if (item == null)
                 throw new ArgumentNullException(nameof(item));
 
+            if (item.Collection != null)
+            {
+                var errorText = ReferenceEquals(item.Collection, this)
+                    ? $"The parameter \"{item.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
+                    : $"The parameter \"{item.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+
+                throw new ArgumentException(errorText, nameof(item));
+            }
+
             if (_parameters.ContainsKey(item.Id))
                 throw new ArgumentException($"A parameter with the name \"{item.ParameterName}\" already exists in the collection.", nameof(item));
 
             _parameterNames.Insert(index, item.Id);
             _parameters.Add(item.Id, item);
+            item.Collection = this;
         }
 
         public override void RemoveAt(int index)
         {
             var name = _parameterNames[index];
-            _parameters.Remove(name);
+            if (_parameters.Remove(name, out var parameter))
+                parameter.Collection = null;
+
             _parameterNames.RemoveAt(index);
         }
 
         public override void RemoveAt(string parameterName)
         {
-            if (parameterName == null)
-                throw new ArgumentNullException(nameof(parameterName));
-
-            var name = ClickHouseParameter.TrimParameterName(parameterName);
-            if (!_parameters.Remove(name))
-                return;
-
-            var comparer = _parameters.Comparer;
-            var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
-            _parameterNames.RemoveAt(index);
+            Remove(parameterName, out _);
         }
 
         protected override void SetParameter(int index, DbParameter value)
@@ -208,17 +246,43 @@ namespace Octonica.ClickHouseClient
             var comparer = _parameters.Comparer;
             if (comparer.Equals(name, parameter.Id))
             {
-                _parameters[name] = parameter;
+                var existingParameter = _parameters[name];
+                if (!ReferenceEquals(parameter, existingParameter))
+                {
+                    if (parameter.Collection != null)
+                    {
+                        var errorText = ReferenceEquals(parameter.Collection, this)
+                            ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
+                            : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+
+                        throw new ArgumentException(errorText, nameof(value));
+                    }
+
+                    _parameters[name] = parameter;
+                    existingParameter.Collection = null;
+                    parameter.Collection = this;
+                }
             }
             else
             {
+                if (parameter.Collection != null)
+                {
+                    var errorText = ReferenceEquals(parameter.Collection, this)
+                        ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
+                        : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+
+                    throw new ArgumentException(errorText, nameof(value));
+                }
+
                 if (_parameters.ContainsKey(parameter.Id))
                     throw new ArgumentException($"A parameter with the name \"{parameter.ParameterName}\" already exists in the collection.", nameof(value));
 
-                _parameters.Remove(name);
+                if(_parameters.Remove(name, out var existingParameter))
+                    existingParameter.Collection = null;
 
                 _parameters.Add(parameter.Id, parameter);
                 _parameterNames[index] = parameter.Id;
+                parameter.Collection = this;
             }
         }
 
@@ -232,9 +296,21 @@ namespace Octonica.ClickHouseClient
             var name = ClickHouseParameter.TrimParameterName(parameterName);
             var parameter = (ClickHouseParameter) value;
 
-            if (_parameters.ContainsKey(name))
+            var comparer = _parameters.Comparer;
+            if (_parameters.TryGetValue(name, out var existingParameter))
             {
-                var comparer = _parameters.Comparer;
+                if (!ReferenceEquals(parameter, existingParameter))
+                {
+                    if (parameter.Collection != null)
+                    {
+                        var errorText = ReferenceEquals(parameter.Collection, this)
+                            ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
+                            : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+
+                        throw new ArgumentException(errorText, nameof(value));
+                    }
+                }
+
                 if (comparer.Equals(name, parameter.Id))
                 {
                     _parameters[name] = parameter;
@@ -250,10 +326,22 @@ namespace Octonica.ClickHouseClient
                     _parameters.Remove(name);
                     _parameters.Add(parameter.Id, parameter);
                 }
+
+                if (!ReferenceEquals(parameter, existingParameter))
+                {
+                    existingParameter.Collection = null;
+                    parameter.Collection = this;
+                }
+            }
+            else if (comparer.Equals(name, parameter.Id))
+            {
+                Add(parameter);
             }
             else
             {
-                Add(parameter);
+                throw new ArgumentException(
+                    $"A parameter with the name \"{parameterName}\" is not present in the collection. It can't be replaced with the parameter \"{parameter.ParameterName}\".",
+                    nameof(parameterName));
             }
         }
 
@@ -326,6 +414,15 @@ namespace Octonica.ClickHouseClient
 
             var name = ClickHouseParameter.TrimParameterName(parameterName);
             return _parameters.TryGetValue(name, out parameter);
+        }
+
+        internal void OnParameterIdChanged(string originalId, ClickHouseParameter parameter)
+        {
+            Debug.Assert(ReferenceEquals(parameter.Collection, this));
+            if (_parameters.Comparer.Equals(originalId, parameter.Id))
+                return;
+
+            SetParameter(originalId, parameter);
         }
 
         public new ClickHouseParameter this[int index]

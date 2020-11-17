@@ -28,14 +28,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
     public class ClickHouseCommand : DbCommand
     {
-        private readonly ClickHouseTcpClient _client;
-
         public override string? CommandText { get; set; }
 
         public override int CommandTimeout
@@ -50,12 +49,12 @@ namespace Octonica.ClickHouseClient
 
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
-        public new ClickHouseConnection Connection { get; }
+        public new ClickHouseConnection? Connection { get; set; }
 
-        protected override DbConnection DbConnection
+        protected override DbConnection? DbConnection
         {
             get => Connection;
-            set => throw new NotSupportedException($"{nameof(DbConnection)} is read only.'");
+            set => Connection = (ClickHouseConnection?) value;
         }
 
         public new ClickHouseParameterCollection Parameters { get; } = new ClickHouseParameterCollection();
@@ -75,10 +74,13 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public bool? Extremes { get; set; }
 
-        internal ClickHouseCommand(ClickHouseConnection connection, ClickHouseTcpClient client)
+        public ClickHouseCommand()
+        {
+        }
+
+        internal ClickHouseCommand(ClickHouseConnection connection)
         {
             Connection = connection ?? throw new ArgumentNullException(nameof(connection));
-            _client = client ?? throw new ArgumentNullException(nameof(client));
         }
 
         public override void Cancel()
@@ -117,7 +119,7 @@ namespace Octonica.ClickHouseClient
                 if (CommandTimeoutSpan > TimeSpan.Zero)
                     tokenSource = new CancellationTokenSource(CommandTimeoutSpan);
 
-                session = await _client.OpenSession(async, tokenSource?.Token ?? CancellationToken.None, cancellationToken);
+                session = await OpenSession(async, tokenSource, cancellationToken);
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
@@ -383,6 +385,10 @@ namespace Octonica.ClickHouseClient
             if (behavior != CommandBehavior.Default)
                 throw new ArgumentException($"Command behavior \"{behavior}\" not supported.", nameof(behavior));
 
+            var connection = Connection;
+            if(connection==null)
+                throw new InvalidOperationException("The command does not ");
+
             ClickHouseTcpClient.Session? session = null;
             CancellationTokenSource? sessionTokenSource = null;
             bool cancelOnFailure = false;
@@ -391,7 +397,7 @@ namespace Octonica.ClickHouseClient
                 if (CommandTimeoutSpan > TimeSpan.Zero)
                     sessionTokenSource = new CancellationTokenSource(CommandTimeoutSpan);
 
-                session = await _client.OpenSession(async, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
+                session = await OpenSession(async, sessionTokenSource, cancellationToken);
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
@@ -452,7 +458,7 @@ namespace Octonica.ClickHouseClient
                 commandText = PrepareCommandText(parametersTable, out var parameters);
 
                 if (parameters != null)
-                    tableWriters = new[] {CreateParameterTableWriter(parametersTable)};
+                    tableWriters = new[] {CreateParameterTableWriter(session.TypeInfoProvider, parametersTable)};
             }
             catch (Exception ex)
             {
@@ -471,9 +477,18 @@ namespace Octonica.ClickHouseClient
             return commandText;
         }
 
-        private IClickHouseTableWriter CreateParameterTableWriter(string tableName)
+        private ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationTokenSource? sessionTokenSource, CancellationToken cancellationToken)
         {
-            return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(_client.TypeInfoProvider)));
+            var connection = Connection;
+            if (connection == null)
+                throw new InvalidOperationException("The connection is not set. The command can't be executed without a connection.");
+
+            return connection.OpenSession(async, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
+        }
+
+        private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
+        {
+            return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
         }
 
         private string PrepareCommandText(string parametersTable, out HashSet<string>? parameters)

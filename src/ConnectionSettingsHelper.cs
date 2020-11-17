@@ -24,6 +24,16 @@ namespace Octonica.ClickHouseClient
     {
         public static ClickHouseConnectionSettings GetConnectionSettings()
         {
+            return GetConnectionSettingsInternal().settings;
+        }
+
+        public static string GetConnectionString()
+        {
+            return GetConnectionSettingsInternal().connectionString;
+        }
+
+        private static (ClickHouseConnectionSettings settings, string connectionString) GetConnectionSettingsInternal()
+        {
             const string configFileName = "clickHouse.dbconfig";
             const string conStrExample = "host=domain.com; port=9000; user=default;";
 
@@ -35,7 +45,7 @@ namespace Octonica.ClickHouseClient
             try
             {
                 var builder = new ClickHouseConnectionStringBuilder(configText);
-                return builder.BuildSettings();
+                return (builder.BuildSettings(), configText);
             }
             catch (Exception ex)
             {

@@ -36,28 +36,70 @@ namespace Octonica.ClickHouseClient
     {
         private const int MinBufferSize = 32;
 
-        private readonly ClickHouseConnectionSettings _connectionSettings;
-        private readonly IClickHouseTypeInfoProvider _typeInfoProvider;
-        
+        private readonly IClickHouseTypeInfoProvider? _typeInfoProvider;
+
+        private ClickHouseConnectionState _connectionState;
         private ClickHouseTcpClient? _tcpClient;
 
-        private volatile ConnectionState _connectionState;
-
-        public override string ConnectionString
+        public override string? ConnectionString
         {
-            get => new ClickHouseConnectionStringBuilder(_connectionSettings).ConnectionString;
-            set => throw new NotSupportedException();
+            get
+            {
+                var state = _connectionState;
+                if (state.Settings == null)
+                    return null;
+
+                return new ClickHouseConnectionStringBuilder(state.Settings).ConnectionString;
+            }
+            set
+            {
+                var newSettings = value == null ? null : new ClickHouseConnectionStringBuilder(value).BuildSettings();
+                var state = _connectionState;
+                while (true)
+                {
+                    if (ReferenceEquals(state.Settings, newSettings))
+                        break;
+
+                    if (state.State != ConnectionState.Closed && state.State != ConnectionState.Broken)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection string can not be modified because the connection is active or broken.");
+
+                    var newState = new ClickHouseConnectionState(state.State, newSettings);
+                    var previousState = Interlocked.CompareExchange(ref _connectionState, newState, state);
+                    if (ReferenceEquals(previousState, state))
+                        break;
+
+                    if (!ReferenceEquals(previousState.Settings, state.Settings))
+                        break; // Settings were modified
+
+                    state = previousState;
+                }
+            }
         }
 
         public override int ConnectionTimeout => Timeout.Infinite;
 
-        public override string? Database => _connectionSettings.Database;
+        public override string? Database => _connectionState.Settings?.Database;
 
-        public override string DataSource => _connectionSettings.Host + (_connectionSettings.Port != ClickHouseConnectionStringBuilder.DefaultPort ? ":" + _connectionSettings.Port : string.Empty);
+        public override string? DataSource
+        {
+            get
+            {
+                var state = _connectionState;
+                if (state.Settings == null)
+                    return null;
+
+                return state.Settings.Host + (state.Settings.Port != ClickHouseConnectionStringBuilder.DefaultPort ? ":" + state.Settings.Port : string.Empty);
+            }
+        }
 
         public override string? ServerVersion => _tcpClient?.ServerInfo.Version.ToString();
 
-        public override ConnectionState State => _connectionState;
+        public override ConnectionState State => _connectionState.State;
+
+        public ClickHouseConnection()
+        {
+            _connectionState = new ClickHouseConnectionState();
+        }
 
         public ClickHouseConnection(string connectionString, IClickHouseTypeInfoProvider? typeInfoProvider = null)
             : this(new ClickHouseConnectionStringBuilder(connectionString), typeInfoProvider)
@@ -69,14 +111,19 @@ namespace Octonica.ClickHouseClient
             if (stringBuilder == null)
                 throw new ArgumentNullException(nameof(stringBuilder));
 
-            _connectionSettings = stringBuilder.BuildSettings();
-            _typeInfoProvider = typeInfoProvider ?? DefaultTypeInfoProvider.Instance;
+            var connectionSettings = stringBuilder.BuildSettings();
+
+            _connectionState = new ClickHouseConnectionState(ConnectionState.Closed, connectionSettings);
+            _typeInfoProvider = typeInfoProvider;
         }
 
         public ClickHouseConnection(ClickHouseConnectionSettings connectionSettings, IClickHouseTypeInfoProvider? typeInfoProvider = null)
         {
-            _connectionSettings = connectionSettings ?? throw new ArgumentNullException(nameof(connectionSettings));
-            _typeInfoProvider = typeInfoProvider ?? DefaultTypeInfoProvider.Instance;
+            if (connectionSettings == null)
+                throw new ArgumentNullException(nameof(connectionSettings));
+
+            _connectionState = new ClickHouseConnectionState(ConnectionState.Closed, connectionSettings);
+            _typeInfoProvider = typeInfoProvider;
         }
 
         public override void ChangeDatabase(string databaseName)
@@ -141,24 +188,13 @@ namespace Octonica.ClickHouseClient
 
         public new ClickHouseCommand CreateCommand()
         {
-            if (_tcpClient == null)
-            {
-                Debug.Assert(_connectionState != ConnectionState.Open);
-                throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
-            }
-
-            return new ClickHouseCommand(this, _tcpClient) {CommandTimeout = _connectionSettings.CommandTimeout};
+            return new ClickHouseCommand(this) {CommandTimeout = _connectionState.Settings?.CommandTimeout ?? ClickHouseConnectionStringBuilder.DefaultCommandTimeout};
         }
 
         public ClickHouseCommand CreateCommand(string commandText)
         {
-            if (_tcpClient == null)
-            {
-                Debug.Assert(_connectionState != ConnectionState.Open);
-                throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
-            }
-
-            return new ClickHouseCommand(this, _tcpClient) {CommandText = commandText, CommandTimeout = _connectionSettings.CommandTimeout};
+            var settings = _connectionState.Settings;
+            return new ClickHouseCommand(this) {CommandText = commandText, CommandTimeout = settings?.CommandTimeout ?? ClickHouseConnectionStringBuilder.DefaultCommandTimeout};
         }
 
         protected override DbCommand CreateDbCommand()
@@ -180,7 +216,7 @@ namespace Octonica.ClickHouseClient
         {
             if (_tcpClient == null)
             {
-                Debug.Assert(_connectionState != ConnectionState.Open);
+                Debug.Assert(_connectionState.State != ConnectionState.Open);
                 throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
             }
 
@@ -250,7 +286,7 @@ namespace Octonica.ClickHouseClient
         public TimeZoneInfo GetServerTimeZone()
         {
             var serverInfo = _tcpClient?.ServerInfo;
-            if (serverInfo == null || _connectionState != ConnectionState.Open)
+            if (serverInfo == null || _connectionState.State != ConnectionState.Open)
                 throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
 
             return TZConvert.GetTimeZoneInfo(serverInfo.Timezone);
@@ -269,7 +305,8 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Open(bool async, CancellationToken cancellationToken)
         {
-            switch (_connectionState)
+            var connectionState = _connectionState;
+            switch (connectionState.State)
             {
                 case ConnectionState.Closed:
                     break;
@@ -283,22 +320,29 @@ namespace Octonica.ClickHouseClient
                     throw new NotSupportedException($"Internal error. The state {_connectionState} is not supported.");
             }
 
+            connectionState = SetConnectionState(ConnectionState.Connecting);
+            var connectionSettings = connectionState.Settings;
+            if (connectionSettings == null)
+            {
+                SetConnectionState(ConnectionState.Closed);
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is not initialized.");
+            }
+
             const int defaultHttpPort = 8123;
             TcpClient? client = null;
             ClickHouseBinaryProtocolWriter? writer = null;
             ClickHouseBinaryProtocolReader? reader = null;
-            
-            SetConnectionState(ConnectionState.Connecting);
+
             try
             {
                 try
                 {
-                    client = new TcpClient {SendTimeout = _connectionSettings.ReadWriteTimeout, ReceiveTimeout = _connectionSettings.ReadWriteTimeout};
+                    client = new TcpClient {SendTimeout = connectionSettings.ReadWriteTimeout, ReceiveTimeout = connectionSettings.ReadWriteTimeout};
 
                     if (async)
-                        await client.ConnectAsync(_connectionSettings.Host, _connectionSettings.Port);
+                        await client.ConnectAsync(connectionSettings.Host, connectionSettings.Port);
                     else
-                        client.Connect(_connectionSettings.Host, _connectionSettings.Port);
+                        client.Connect(connectionSettings.Host, connectionSettings.Port);
                 }
                 catch
                 {
@@ -306,15 +350,15 @@ namespace Octonica.ClickHouseClient
                     throw;
                 }
 
-                writer = new ClickHouseBinaryProtocolWriter(client.GetStream(), Math.Max(_connectionSettings.BufferSize, MinBufferSize));
+                writer = new ClickHouseBinaryProtocolWriter(client.GetStream(), Math.Max(connectionSettings.BufferSize, MinBufferSize));
 
                 var clientHello = new ClientHelloMessage.Builder
                 {
-                    ClientName = _connectionSettings.ClientName,
-                    ClientVersion = _connectionSettings.ClientVersion,
-                    User = _connectionSettings.User,
-                    Database = _connectionSettings.Database,
-                    Password = _connectionSettings.Password,
+                    ClientName = connectionSettings.ClientName,
+                    ClientVersion = connectionSettings.ClientVersion,
+                    User = connectionSettings.User,
+                    Database = connectionSettings.Database,
+                    Password = connectionSettings.Password,
                     ProtocolRevision = Revisions.CurrentRevision
                 }.Build();
 
@@ -322,8 +366,9 @@ namespace Octonica.ClickHouseClient
 
                 await writer.Flush(async, cancellationToken);
 
-                reader = new ClickHouseBinaryProtocolReader(client.GetStream(), Math.Max(_connectionSettings.BufferSize, MinBufferSize));
+                reader = new ClickHouseBinaryProtocolReader(client.GetStream(), Math.Max(connectionSettings.BufferSize, MinBufferSize));
                 var message = await reader.ReadMessage(false, async, cancellationToken);
+
                 switch (message.MessageCode)
                 {
                     case ServerMessageCode.Hello:
@@ -342,8 +387,8 @@ namespace Octonica.ClickHouseClient
                         }
 
                         var serverInfo = helloMessage.ServerInfo;
-                        var configuredTypeInfoProvider = _typeInfoProvider.Configure(serverInfo);
-                        _tcpClient = new ClickHouseTcpClient(client, reader, writer, _connectionSettings, serverInfo, configuredTypeInfoProvider);
+                        var configuredTypeInfoProvider = (_typeInfoProvider ?? DefaultTypeInfoProvider.Instance).Configure(serverInfo);
+                        _tcpClient = new ClickHouseTcpClient(client, reader, writer, connectionSettings, serverInfo, configuredTypeInfoProvider);
                         break;
 
                     case ServerMessageCode.Error:
@@ -354,7 +399,7 @@ namespace Octonica.ClickHouseClient
                         {
                             // It looks like HTTP
                             string httpDetectedMessage;
-                            if (_connectionSettings.Port == defaultHttpPort)
+                            if (connectionSettings.Port == defaultHttpPort)
                             {
                                 // It's definitely HTTP
                                 httpDetectedMessage = $"Detected an attempt to connect by HTTP protocol with the default port {defaultHttpPort}. ";
@@ -383,7 +428,7 @@ namespace Octonica.ClickHouseClient
                 client?.Dispose();
                 SetConnectionState(ConnectionState.Closed);
 
-                if (_connectionSettings.Port == defaultHttpPort && ex is IOException)
+                if (connectionSettings.Port == defaultHttpPort && ex is IOException)
                 {
                     var extraMessage =
                         $"{ex.Message} This error may be caused by an attempt to connect to the default HTTP port ({defaultHttpPort}). " +
@@ -395,9 +440,19 @@ namespace Octonica.ClickHouseClient
 
                 throw;
             }
-
             _tcpClient.OnFailed += OnClientFailed;
             SetConnectionState(ConnectionState.Open);
+        }
+
+        internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+        {
+            if (_tcpClient == null)
+            {
+                Debug.Assert(_connectionState.State != ConnectionState.Open);
+                throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
+            }
+
+            return _tcpClient.OpenSession(async, sessionCancellationToken, cancellationToken);
         }
 
         private void OnClientFailed(object? sender, Exception? e)
@@ -411,7 +466,8 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Close(bool async)
         {
-            switch (_connectionState)
+            var connectionState = _connectionState;
+            switch (connectionState.State)
             {
                 case ConnectionState.Closed:
                     break; // Re-entrance is allowed
@@ -426,7 +482,7 @@ namespace Octonica.ClickHouseClient
                         }
                         catch (ObjectDisposedException)
                         {
-                            if (_connectionState != ConnectionState.Open)
+                            if (connectionState.State != ConnectionState.Open)
                             {
                                 await Close(async);
                             }
@@ -460,14 +516,27 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        private void SetConnectionState(ConnectionState state)
+        private ClickHouseConnectionState SetConnectionState(ConnectionState state)
         {
             var originalState = _connectionState;
-            if (state == originalState)
-                return;
+            while (true)
+            {
+                if (originalState.State == state)
+                    return originalState;
 
-            _connectionState = state;
-            OnStateChange(new StateChangeEventArgs(originalState, state));
+                var newState = new ClickHouseConnectionState(state, originalState.Settings);
+                var previousState = Interlocked.CompareExchange(ref _connectionState, newState, originalState);
+                if (ReferenceEquals(originalState, previousState))
+                {
+                    OnStateChange(new StateChangeEventArgs(originalState.State, state));
+                    return newState;
+                }
+
+                if (previousState.State != originalState.State)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The state of the connection was modified.");
+
+                originalState = previousState;
+            }
         }
     }
 }
