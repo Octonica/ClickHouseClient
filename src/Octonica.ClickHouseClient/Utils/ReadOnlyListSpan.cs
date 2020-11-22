@@ -53,9 +53,9 @@ namespace Octonica.ClickHouseClient.Utils
         {
             if (innerList == null)
                 throw new ArgumentNullException(nameof(innerList));
-            if (offset < 0 || offset > _innerList.Count)
+            if (offset < 0 || offset > innerList.Count)
                 throw new ArgumentOutOfRangeException(nameof(offset));
-            if (count < 0 || offset + count > _innerList.Count)
+            if (count < 0 || offset + count > innerList.Count)
                 throw new ArgumentOutOfRangeException(nameof(count));
 
             Count = count;

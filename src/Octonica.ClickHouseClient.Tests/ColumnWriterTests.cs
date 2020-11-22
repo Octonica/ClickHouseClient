@@ -620,6 +620,91 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(startId + rowCount, expectedId);
         }
 
+        [Fact]
+        public async Task InsertFromSecondaryInterfaces()
+        {
+            const int startId = 200_000, rowCount = 100;
+
+            // Each wrapper implements only one interface
+            var ids = new EnumerableListWrapper<int>(Enumerable.Range(startId, rowCount).ToList());
+            var strings = new GenericEnumerableListWrapper<string>(Enumerable.Range(1, rowCount).Select(num => $"Str #{num}").ToList());
+            var numbers = new ListWrapper<decimal?>(
+                Enumerable.Range(0, rowCount).Select(num => num % 17 == 0 ? (decimal?) null : Math.Round(num / (decimal) 17, 6)).ToList());
+
+            var connection = await OpenConnectionAsync();
+
+            var writeCount = (int) (rowCount * 0.9);
+            await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}(id, str, num) VALUES"))
+            {
+                var table = new object[] {ids, strings, numbers};
+                await writer.WriteTableAsync(table, writeCount, CancellationToken.None);
+                await writer.EndWriteAsync(CancellationToken.None);
+            }
+
+            await using var cmd = connection.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            await using var reader = cmd.ExecuteReader();
+            int count = 0;
+            while (await reader.ReadAsync())
+            {
+                var id = reader.GetInt32(0);
+                var str = reader.GetString(1);
+                var num = reader.GetFieldValue<decimal>(2, null);
+
+                Assert.Equal(ids.List[count], id);
+                Assert.Equal(strings.List[count], str);
+                Assert.Equal(numbers.List[count], num);
+
+                ++count;
+            }
+
+            Assert.Equal(writeCount, count);
+        }
+
+        [Fact]
+        public async Task InsertValuesWithLowRowCount()
+        {
+            const int startId = 200_100, rowCount = 100, rowCap = 71;
+
+            await using var con = await OpenConnectionAsync();
+
+            var ids = Enumerable.Range(startId, rowCount).ToList();
+            var nums = Enumerable.Range(0, rowCount).Select(v => -100 + Math.Round(200m / (rowCount - 1) * v, 6)).ToArray();
+            await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
+            {
+                var columns = new object?[writer.FieldCount];
+                columns[writer.GetOrdinal("id")] = ids;
+                columns[writer.GetOrdinal("num")] = nums;
+
+                await writer.WriteTableAsync(columns, rowCap, CancellationToken.None);
+            }
+
+            await using var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            int count = 0;
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    var str = reader.GetFieldValue(1, "NULL");
+                    var num = reader.GetDecimal(2);
+
+                    Assert.Equal(ids[count], id);
+                    Assert.Equal("NULL", str);
+                    Assert.Equal(nums[count], num);
+
+                    ++count;
+                }
+            }
+
+            Assert.Equal(rowCap, count);
+        }
+
         public class TableFixture : ClickHouseTestsBase, IDisposable
         {
             public TableFixture()

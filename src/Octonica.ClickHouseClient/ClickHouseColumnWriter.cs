@@ -528,6 +528,7 @@ namespace Octonica.ClickHouseClient
                 }
                 else
                 {
+                    int count = 0;
                     foreach (object? item in (IEnumerable) _collection)
                     {
                         // T may be nullable but there is no way to declare T?
@@ -539,6 +540,9 @@ namespace Octonica.ClickHouseClient
                         {
                             rows.Add((T) item!);
                         }
+
+                        if (++count == _rowCount)
+                            break;
                     }
                 }
 
