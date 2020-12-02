@@ -219,7 +219,7 @@ namespace Octonica.ClickHouseClient
             return true;
         }
 
-        public async ValueTask<IServerMessage> ReadMessage(bool async, CancellationToken cancellationToken)
+        public async ValueTask<IServerMessage> ReadMessage(bool throwOnUnknownMessage, bool async, CancellationToken cancellationToken)
         {
             var messageCode = (ServerMessageCode) await Read7BitInt32(async, cancellationToken);
             switch (messageCode)
@@ -255,7 +255,10 @@ namespace Octonica.ClickHouseClient
                     throw new NotImplementedException();
 
                 default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Not supported message code ({messageCode:X}) received from the server.");
+                    if (throwOnUnknownMessage)
+                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Not supported message code (0x{messageCode:X}) received from the server.");
+
+                    return new UnknownServerMessage(messageCode);
             }
         }
 

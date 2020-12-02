@@ -246,7 +246,7 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<IServerMessage> ReadMessage(bool async, CancellationToken cancellationToken)
             {
-                return await WithCancellationToken(cancellationToken, ct => _client._reader.ReadMessage(async, ct));
+                return await WithCancellationToken(cancellationToken, ct => _client._reader.ReadMessage(true, async, ct));
             }
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)

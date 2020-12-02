@@ -323,7 +323,7 @@ namespace Octonica.ClickHouseClient
                 await writer.Flush(async, cancellationToken);
 
                 reader = new ClickHouseBinaryProtocolReader(client.GetStream(), Math.Max(_connectionSettings.BufferSize, MinBufferSize));
-                var message = await reader.ReadMessage(async, cancellationToken);
+                var message = await reader.ReadMessage(false, async, cancellationToken);
                 switch (message.MessageCode)
                 {
                     case ServerMessageCode.Hello:
