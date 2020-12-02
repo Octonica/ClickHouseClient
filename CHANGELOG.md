@@ -1,3 +1,11 @@
+### Octonica.ClickHouseClient release v1.0.14, 2020-12-02
+
+#### Bug Fix
+
+* The driver was incompatible with ClickHouse v2.10 and higher.
+* Fixed writing columns from a source which contains more rows than `rowCount`.
+* Fixed writing columns from a source which implements `IList<T>` but doesn't implement `IReadOnlyList<T>`.
+
 ### Octonica.ClickHouseClient release v1.0.13, 2020-11-11
 
 #### Backward Incompatible Change
