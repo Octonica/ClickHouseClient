@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -153,14 +154,7 @@ namespace Octonica.ClickHouseClient
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
-            if (parameterName.Length > 0 && parameterName[0] == '{' && parameterName[^1] == '}')
-                Id = parameterName[1..^1];
-            else
-                Id = parameterName;
-
-            if (!ParameterNameRegex.IsMatch(Id))
-                throw new ArgumentException("The name of the parameter must be a valid ClickHouse identifier.", nameof(parameterName));
-            
+            Id = GetId(parameterName);
             _parameterName = parameterName;
         }
 
@@ -491,6 +485,35 @@ namespace Octonica.ClickHouseClient
                 tzCode = TZConvert.WindowsToIana(tzCode);
 
             return tzCode;
+        }
+
+        public static bool IsValidParameterName(string? parameterName)
+        {
+            return ValidateParameterName(parameterName, out _);
+        }
+
+        private static string GetId(string parameterName)
+        {
+            if (!ValidateParameterName(parameterName, out var id))
+                throw new ArgumentException("The name of the parameter must be a valid ClickHouse identifier.", nameof(parameterName));
+
+            return id;
+        }
+
+        private static bool ValidateParameterName(string? parameterName, [MaybeNullWhen(false)] out string id)
+        {
+            if (string.IsNullOrWhiteSpace(parameterName))
+            {
+                id = null;
+                return false;
+            }
+
+            if (parameterName.Length > 0 && parameterName[0] == '{' && parameterName[^1] == '}')
+                id = parameterName[1..^1];
+            else
+                id = parameterName;
+
+            return ParameterNameRegex.IsMatch(id);
         }
 
         private class ParameterColumnWriterBuilder : ITypeDispatcher<IClickHouseColumnWriter>
