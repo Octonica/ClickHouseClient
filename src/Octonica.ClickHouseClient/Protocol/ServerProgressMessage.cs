@@ -24,17 +24,17 @@ namespace Octonica.ClickHouseClient.Protocol
     {
         public ServerMessageCode MessageCode => ServerMessageCode.Progress;
 
-        public int Rows { get; }
+        public ulong Rows { get; }
 
-        public int Bytes { get; }
+        public ulong Bytes { get; }
 
-        public int Totals { get; }
+        public ulong Totals { get; }
 
-        public int WrittenRows { get; }
+        public ulong WrittenRows { get; }
 
-        public int WrittenBytes { get; }
+        public ulong WrittenBytes { get; }
 
-        private ServerProgressMessage(int rows, int bytes, int totals, int writtenRows, int writtenBytes)
+        private ServerProgressMessage(ulong rows, ulong bytes, ulong totals, ulong writtenRows, ulong writtenBytes)
         {
             Rows = rows;
             Bytes = bytes;
@@ -45,11 +45,11 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async ValueTask<ServerProgressMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
         {
-            int rows = await reader.Read7BitInt32(async, cancellationToken);
-            int bytes = await reader.Read7BitInt32(async, cancellationToken);
-            int totals = await reader.Read7BitInt32(async, cancellationToken);
-            int writtenRows = await reader.Read7BitInt32(async, cancellationToken);
-            int writtenBytes = await reader.Read7BitInt32(async, cancellationToken);
+            ulong rows = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong bytes = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong totals = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong writtenRows = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong writtenBytes = await reader.Read7BitUInt64(async, cancellationToken);
 
             return new ServerProgressMessage(rows, bytes, totals, writtenRows, writtenBytes);
         }

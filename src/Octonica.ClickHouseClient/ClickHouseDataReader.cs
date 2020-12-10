@@ -34,7 +34,7 @@ namespace Octonica.ClickHouseClient
         private readonly ClickHouseTcpClient.Session _session;
         private readonly CancellationTokenSource? _sessionTokenSource;
 
-        private int _recordsAffected;
+        private ulong _recordsAffected;
 
         private int _rowIndex = -1;
 
@@ -46,7 +46,18 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseDataReaderState State { get; private set; }
 
-        public override int RecordsAffected => _recordsAffected;
+        public override int RecordsAffected
+        {
+            get
+            {
+                if (_recordsAffected <= int.MaxValue)
+                    return (int) _recordsAffected;
+
+                throw new OverflowException($"The number of affected records is too large. Use the property \"{nameof(RecordsAffectedLong)}\" to get this number.");
+            }
+        }
+
+        public ulong RecordsAffectedLong => _recordsAffected;
 
         public override bool HasRows => _rowIndex < 0 || _recordsAffected > 0;
 
@@ -62,7 +73,7 @@ namespace Octonica.ClickHouseClient
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _sessionTokenSource = sessionTokenSource;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
-            _recordsAffected = _currentTable.Header.RowCount;
+            _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
             _blockHeader = _currentTable.Header;
             State = ClickHouseDataReaderState.Data;
         }
@@ -550,7 +561,7 @@ namespace Octonica.ClickHouseClient
 
                 _currentTable = nextTable;
                 _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
-                _recordsAffected += nextTable.Header.RowCount;
+                _recordsAffected = checked(_recordsAffected + (ulong) nextTable.Header.RowCount);
                 _rowIndex = nextResult ? -1 : 0;
                 return true;
             }

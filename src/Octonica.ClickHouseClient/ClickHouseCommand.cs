@@ -88,15 +88,25 @@ namespace Octonica.ClickHouseClient
 
         public override int ExecuteNonQuery()
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteNonQuery(false, CancellationToken.None));
+            var result = TaskHelper.WaitNonAsyncTask(ExecuteNonQuery(false, CancellationToken.None));
+
+            if (result > int.MaxValue)
+                return int.MinValue;
+
+            return (int) result;
         }
 
         public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
         {
-            return await ExecuteNonQuery(true, cancellationToken);
+            var result = await ExecuteNonQuery(true, cancellationToken);
+            
+            if (result > int.MaxValue)
+                return int.MinValue;
+
+            return (int) result;
         }
 
-        private async ValueTask<int> ExecuteNonQuery(bool async, CancellationToken cancellationToken)
+        private async ValueTask<ulong> ExecuteNonQuery(bool async, CancellationToken cancellationToken)
         {
             ClickHouseTcpClient.Session? session = null;
 
@@ -111,7 +121,7 @@ namespace Octonica.ClickHouseClient
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
-                (int read, int written) result = (0, 0), progress = (0, 0);
+                (ulong read, ulong written) result = (0, 0), progress = (0, 0);
                 while (true)
                 {
                     var message = await session.ReadMessage(async, cancellationToken);

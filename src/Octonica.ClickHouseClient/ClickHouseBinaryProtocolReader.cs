@@ -124,6 +124,11 @@ namespace Octonica.ClickHouseClient
             return unchecked((int) longValue);
         }
 
+        public ValueTask<ulong> Read7BitUInt64(bool async, CancellationToken cancellationToken)
+        {
+            return Read7BitInteger(async, cancellationToken);
+        }
+
         public async ValueTask<int> ReadInt32(bool async, CancellationToken cancellationToken)
         {
             do

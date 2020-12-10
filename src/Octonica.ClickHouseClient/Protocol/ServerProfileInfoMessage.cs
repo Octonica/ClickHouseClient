@@ -24,19 +24,19 @@ namespace Octonica.ClickHouseClient.Protocol
     {
         public ServerMessageCode MessageCode => ServerMessageCode.ProfileInfo;
 
-        public int Rows { get; }
+        public ulong Rows { get; }
 
-        public int Blocks { get; }
+        public ulong Blocks { get; }
 
-        public int Bytes { get; }
+        public ulong Bytes { get; }
 
         public bool LimitApplied { get; }
 
-        public int RowsBeforeLimit { get; }
+        public ulong RowsBeforeLimit { get; }
 
-        public int CalculatedRowsBeforeLimit { get; }
+        public bool CalculatedRowsBeforeLimit { get; }
 
-        private ServerProfileInfoMessage(int rows, int blocks, int bytes, bool limitApplied, int rowsBeforeLimit, int calculatedRowsBeforeLimit)
+        private ServerProfileInfoMessage(ulong rows, ulong blocks, ulong bytes, bool limitApplied, ulong rowsBeforeLimit, bool calculatedRowsBeforeLimit)
         {
             Rows = rows;
             Blocks = blocks;
@@ -48,12 +48,12 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async ValueTask<ServerProfileInfoMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
         {
-            int rows = await reader.Read7BitInt32(async, cancellationToken);
-            int blocks = await reader.Read7BitInt32(async, cancellationToken);
-            int bytes = await reader.Read7BitInt32(async, cancellationToken);
+            ulong rows = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong blocks = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong bytes = await reader.Read7BitUInt64(async, cancellationToken);
             bool limitApplied = await reader.ReadBool(async, cancellationToken);
-            int rowsBeforeLimit = await reader.Read7BitInt32(async, cancellationToken);
-            int calculatedRowsBeforeLimit = await reader.Read7BitInt32(async, cancellationToken);
+            ulong rowsBeforeLimit = await reader.Read7BitUInt64(async, cancellationToken);
+            bool calculatedRowsBeforeLimit = await reader.ReadBool(async, cancellationToken);
 
             return new ServerProfileInfoMessage(rows, blocks, bytes, limitApplied, rowsBeforeLimit, calculatedRowsBeforeLimit);
         }
