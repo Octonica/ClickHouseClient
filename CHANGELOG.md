@@ -1,3 +1,14 @@
+### Octonica.ClickHouseClient release v1.0.17, 2020-12-10
+
+#### Bug Fix
+
+* Fixed execution of queries which affect large (greater than 2^31) number of rows ([#15](https://github.com/Octonica/ClickHouseClient/issues/15)).
+* Fixed comparison of parameter's names in ClickHouseParameterCollection.
+
+#### Improvement
+
+* Added public method `ClickHouseParameter.IsValidParameterName` which allows to check if the string can be used as the name of a parameter.
+
 ### Octonica.ClickHouseClient release v1.0.14, 2020-12-02
 
 #### Bug Fix
