@@ -188,7 +188,7 @@ namespace Octonica.ClickHouseClient
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
-            var name = parameterName.StartsWith('@') ? parameterName.Substring(1) : parameterName;
+            var name = ClickHouseParameter.TrimParameterName(parameterName);
             if (!_parameters.Remove(name))
                 return;
 
@@ -229,7 +229,7 @@ namespace Octonica.ClickHouseClient
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
 
-            var name = parameterName.StartsWith('@') ? parameterName.Substring(1) : parameterName;
+            var name = ClickHouseParameter.TrimParameterName(parameterName);
             var parameter = (ClickHouseParameter) value;
 
             if (_parameters.ContainsKey(name))
@@ -262,7 +262,7 @@ namespace Octonica.ClickHouseClient
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
-            var name = parameterName.StartsWith('@') ? parameterName.Substring(1) : parameterName;
+            var name = ClickHouseParameter.TrimParameterName(parameterName);
             var comparer = _parameters.Comparer;
 
             return _parameterNames.FindIndex(n => comparer.Equals(n, name));
@@ -273,7 +273,7 @@ namespace Octonica.ClickHouseClient
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
 
-            var parameterName = value.StartsWith('@') ? value.Substring(1) : value;
+            var parameterName = ClickHouseParameter.TrimParameterName(value);
             return _parameters.ContainsKey(parameterName);
         }
 
@@ -304,11 +304,7 @@ namespace Octonica.ClickHouseClient
 
         protected override DbParameter GetParameter(string parameterName)
         {
-            if (parameterName == null)
-                throw new ArgumentNullException(nameof(parameterName));
-
-            var name = parameterName.StartsWith('@') ? parameterName.Substring(1) : parameterName;
-            if (!_parameters.TryGetValue(name, out var parameter))
+            if (!TryGetValue(parameterName, out var parameter))
                 throw new ArgumentException($"Parameter \"{parameterName}\" not found.", nameof(parameterName));
 
             return parameter;
@@ -328,7 +324,8 @@ namespace Octonica.ClickHouseClient
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
-            return _parameters.TryGetValue(parameterName, out parameter);
+            var name = ClickHouseParameter.TrimParameterName(parameterName);
+            return _parameters.TryGetValue(name, out parameter);
         }
 
         public new ClickHouseParameter this[int index]

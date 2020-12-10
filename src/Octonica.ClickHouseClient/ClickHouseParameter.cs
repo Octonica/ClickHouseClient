@@ -508,12 +508,23 @@ namespace Octonica.ClickHouseClient
                 return false;
             }
 
-            if (parameterName.Length > 0 && parameterName[0] == '{' && parameterName[^1] == '}')
-                id = parameterName[1..^1];
-            else
-                id = parameterName;
-
+            id = TrimParameterName(parameterName);
             return ParameterNameRegex.IsMatch(id);
+        }
+
+        internal static string TrimParameterName(string parameterName)
+        {
+            if (parameterName.Length > 0)
+            {
+                if (parameterName[0] == '{' && parameterName[^1] == '}')
+                    return parameterName[1..^1];
+
+                // MSSQL-style parameter name
+                if (parameterName[0] == '@')
+                    return parameterName[1..];
+            }
+
+            return parameterName;
         }
 
         private class ParameterColumnWriterBuilder : ITypeDispatcher<IClickHouseColumnWriter>
