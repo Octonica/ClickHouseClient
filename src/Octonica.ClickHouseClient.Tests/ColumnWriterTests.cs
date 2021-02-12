@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -703,6 +703,261 @@ namespace Octonica.ClickHouseClient.Tests
             }
 
             Assert.Equal(rowCap, count);
+        }
+
+        [Fact]
+        public async Task InsertArrayFromMemory()
+        {
+            var ints = Enumerable.Range(0, 1000).ToArray();
+            var nums = ints.Select(v => -100 + Math.Round(200m / (ints.Length - 1) * v, 6)).ToArray();
+
+            var intsArr = new List<Memory<int>>();
+            var numsArr = new List<ReadOnlyMemory<decimal>>();
+            int expectedCount = 0;
+            for (int i = 0; i < ints.Length;)
+            {
+                var size = i % 13 == 0 ? 13 : i % 7;
+                if (size == 0)
+                    size = 3;
+
+                if (i + size > ints.Length)
+                    break;
+                
+                var intsMem = new Memory<int>(ints, i, size);
+                var numsMem = new Memory<decimal>(nums, i, size);
+
+                intsArr.Add(intsMem);
+                numsArr.Add(numsMem);
+
+                i += size;
+                expectedCount = i;
+            }
+
+            await WithTemporaryTable("mem", "id Array(Int32), num Array(Decimal64(6))", RunTest);
+
+            async Task RunTest(ClickHouseConnection connection, string tableName)
+            {
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {tableName}(num, id) VALUES"))
+                {
+                    var source = new object[] { numsArr, intsArr };
+
+                    await writer.WriteTableAsync(source, numsArr.Count, CancellationToken.None);
+                    await writer.EndWriteAsync(CancellationToken.None);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT id, num FROM {tableName}");
+
+                int count = 0;
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                while (reader.Read())
+                {
+                    var idArr = reader.GetFieldValue<int[]>(0);
+                    var numArr = reader.GetFieldValue<decimal[]>(1);
+
+                    Assert.Equal(idArr.Length, numArr.Length);
+
+                    for (int i = 0; i < idArr.Length; i++)
+                        Assert.Equal(nums[idArr[i]], numArr[i]);
+
+                    count += idArr.Length;
+                }
+
+                Assert.Equal(expectedCount, count);
+            }
+        }
+
+        [Fact]
+        public async Task InsertStringFromMemory()
+        {
+            const int startId = 200_200, rowCount = 400;
+
+            const string someText =
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " +
+    "Donec varius tortor iaculis sapien malesuada, nec eleifend risus ultrices. " +
+    "Suspendisse ac ligula nec nunc finibus lobortis sed ac ipsum. " +
+    "Curabitur rutrum ligula feugiat, finibus enim id, vulputate purus. " +
+    "Aliquam facilisis sem vel mattis fringilla. " +
+    "Nullam in mauris feugiat, pulvinar nibh id, pretium quam. " +
+    "Suspendisse hendrerit sapien et nisi rutrum, eu vestibulum magna convallis. " +
+    "Nam sed turpis vulputate, volutpat augue eget, pulvinar sapien.";
+
+            var ids = new List<int>(Enumerable.Range(0, 100));
+            var mem = new List<Memory<char>>();
+            var roMem = new List<ReadOnlyMemory<char>>();
+            var bytes = new List<Memory<byte>>();
+            var roBytes = new List<ReadOnlyMemory<byte>>();
+
+            var someTextChars = someText.ToCharArray();
+            var someTextBytes = Encoding.ASCII.GetBytes(someText);
+            Assert.Equal(someTextChars.Length, someTextBytes.Length);
+
+            int position = 0;
+            char[] separators = { ' ', ',', '.' };
+            for (int i = 0; i < ids.Count; i++)
+            {
+                while (separators.Contains(someText[position]))
+                    position = (position + 1) % someText.Length;
+
+                var idx = someText.IndexOfAny(separators, position);
+                var len = idx < 0 ? someText.Length - position : idx - position;
+
+                mem.Add(new Memory<char>(someTextChars, position, len));
+                roMem.Add(someText.AsMemory(position, len));
+                var bytesMem = new Memory<byte>(someTextBytes, position, len);
+                bytes.Add(bytesMem);
+                roBytes.Add(bytesMem);
+
+                position = (position + len) % someText.Length;
+            }
+
+            var connection = await OpenConnectionAsync();
+
+            await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
+            {
+                var columns = new object?[writer.FieldCount];
+                columns[writer.GetOrdinal("id")] = ids.Select(id => id + startId);
+                columns[writer.GetOrdinal("str")] = mem;
+
+                await writer.WriteTableAsync(columns, ids.Count, CancellationToken.None);
+
+                columns[writer.GetOrdinal("id")] = ids.Select(id => id + startId + ids.Count);
+                columns[writer.GetOrdinal("str")] = roMem;
+
+                await writer.WriteTableAsync(columns, ids.Count, CancellationToken.None);
+
+                columns[writer.GetOrdinal("id")] = ids.Select(id => id + startId + ids.Count * 2);
+                columns[writer.GetOrdinal("str")] = bytes;
+
+                await writer.WriteTableAsync(columns, ids.Count, CancellationToken.None);
+
+                columns[writer.GetOrdinal("id")] = ids.Select(id => id + startId + ids.Count * 3);
+                columns[writer.GetOrdinal("str")] = roBytes;
+
+                await writer.WriteTableAsync(columns, ids.Count, CancellationToken.None);
+            }
+
+            await using var cmd = connection.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            int count = 0;
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    var str = reader.GetString(1);
+                    var num = reader.GetFieldValue(2, (decimal?) null);
+
+                    Assert.Equal(mem[(id - startId) % ids.Count].ToString(), str);
+                    Assert.Null(num);
+
+                    ++count;
+                }
+            }
+
+            Assert.Equal(rowCount, count);
+        }
+
+        [Fact]
+        public async Task InsertFixedStringFromMemory()
+        {
+            const string someText =
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " +
+                "Donec varius tortor iaculis sapien malesuada, nec eleifend risus ultrices. " +
+                "Suspendisse ac ligula nec nunc finibus lobortis sed ac ipsum. " +
+                "Curabitur rutrum ligula feugiat, finibus enim id, vulputate purus. " +
+                "Aliquam facilisis sem vel mattis fringilla. " +
+                "Nullam in mauris feugiat, pulvinar nibh id, pretium quam. " +
+                "Suspendisse hendrerit sapien et nisi rutrum, eu vestibulum magna convallis. " +
+                "Nam sed turpis vulputate, volutpat augue eget, pulvinar sapien.";
+
+            var id = new List<int>(Enumerable.Range(0, 100));
+            var mem = new List<Memory<char>>();
+            var roMem = new List<ReadOnlyMemory<char>>();
+            var bytes = new List<Memory<byte>>();
+            var roBytes = new List<ReadOnlyMemory<byte>>();
+
+            var someTextChars = someText.ToCharArray();
+            var someTextBytes = Encoding.ASCII.GetBytes(someText);
+            Assert.Equal(someTextChars.Length, someTextBytes.Length);
+
+            int position = 0;
+            int maxLength = 0;
+            char[] separators = {' ', ',', '.'};
+            for (int i = 0; i < id.Count; i++)
+            {
+                while (separators.Contains(someText[position]))
+                    position = (position + 1) % someText.Length;
+
+                var idx = someText.IndexOfAny(separators, position);
+                var len = idx < 0 ? someText.Length - position : idx - position;
+
+                mem.Add(new Memory<char>(someTextChars, position, len));
+                roMem.Add(someText.AsMemory(position, len));
+                var bytesMem = new Memory<byte>(someTextBytes, position, len);
+                bytes.Add(bytesMem);
+                roBytes.Add(bytesMem);
+
+                maxLength = Math.Max(maxLength, len);
+                position = (position + len) % someText.Length;
+            }
+
+            await WithTemporaryTable("fsm", $"id Int32, str FixedString({maxLength})", RunTest);
+
+            async Task RunTest(ClickHouseConnection connection, string tableName)
+            {
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {tableName}(id, str) VALUES"))
+                {
+                    writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.ASCII));
+                    await writer.WriteTableAsync(new object[] {id, mem}, id.Count, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] {id.Select(i => i + id.Count), roMem}, id.Count, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] {id.Select(i => i + id.Count*2), bytes}, id.Count, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] {id.Select(i => i + id.Count*3), roBytes}, id.Count, CancellationToken.None);
+                    await writer.EndWriteAsync(CancellationToken.None);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT id, str FROM {tableName}");
+
+                int count = 0;
+                await using var reader = await cmd.ExecuteReaderAsync();
+                reader.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.ASCII));
+
+                while (reader.Read())
+                {
+                    var idVal = reader.GetFieldValue<int>(0);
+                    var strVal = reader.GetFieldValue<string>(1);
+
+                    Assert.Equal(roMem[idVal % id.Count].ToString(), strVal);
+                    count++;
+                }
+
+                Assert.Equal(id.Count * 4, count);
+            }
+        }
+
+        private async Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, Task> runTest)
+        {
+            var tableName = $"{TestTableName}_{tableNameSuffix}";
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand($"CREATE TABLE {tableName}({columns}) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                await runTest(connection, tableName);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         public class TableFixture : ClickHouseTestsBase, IDisposable

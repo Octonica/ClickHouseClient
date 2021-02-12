@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,21 +57,32 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (!(rows is IReadOnlyList<byte[]> byteRows))
-            {
-                if (rows is IReadOnlyList<string?> stringRows)
-                {
-                    var columnEncoding = columnSettings?.StringEncoding ?? Encoding.UTF8;
-                    byteRows = new MappedReadOnlyList<string?, byte[]>(stringRows, str => str == null ? new byte[0] : columnEncoding.GetBytes(str));
-                }
-                else
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
-
             if (_length == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
 
-            return new FixedStringWriter(columnName, ComplexTypeName, byteRows, _length.Value);
+            switch (rows)
+            {
+                case IReadOnlyList<byte[]?> byteRows:
+                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, byteRows, _length.Value);
+
+                case IReadOnlyList<string?> stringRows:
+                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, stringRows, _length.Value, columnSettings?.StringEncoding);
+
+                case IReadOnlyList<ReadOnlyMemory<byte>> roMemByteRows:
+                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, roMemByteRows, _length.Value);
+
+                case IReadOnlyList<Memory<byte>> memByteRows:
+                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, memByteRows, _length.Value);
+
+                case IReadOnlyList<ReadOnlyMemory<char>> roCharRows:
+                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, roCharRows, _length.Value, columnSettings?.StringEncoding);
+
+                case IReadOnlyList<Memory<char>> charRows:
+                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, charRows, _length.Value, columnSettings?.StringEncoding);
+
+                default:
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -150,20 +161,94 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class FixedStringWriter : IClickHouseColumnWriter
+        private sealed class FixedStringBytesColumnWriter : FixedStringColumnWriterBase
         {
-            private readonly IReadOnlyList<byte[]> _rows;
+            private readonly IReadOnlyList<ReadOnlyMemory<byte>> _rows;
+
+            protected override int RowCount => _rows.Count;
+
+            public FixedStringBytesColumnWriter(string columnName, string columnType, IReadOnlyList<byte[]?> rows, int length)
+                : this(columnName, columnType, new MappedReadOnlyList<byte[]?, ReadOnlyMemory<byte>>(rows, b => b.AsMemory()), length)
+            {
+            }
+
+            public FixedStringBytesColumnWriter(string columnName, string columnType, IReadOnlyList<Memory<byte>> rows, int length)
+                : this(columnName, columnType, new MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>(rows, m => m), length)
+            {
+            }
+
+            public FixedStringBytesColumnWriter(string columnName, string columnType, IReadOnlyList<ReadOnlyMemory<byte>> rows, int length)
+                : base(columnName, columnType, length)
+            {
+                _rows = rows;
+            }
+
+            protected override int GetBytes(int position, Span<byte> buffer)
+            {
+                var bytes = _rows[position];
+                if (bytes.Length > buffer.Length)
+                    throw new InvalidCastException($"The length of the array ({bytes.Length}) is greater than the maximum length ({buffer.Length}).");
+
+                bytes.Span.CopyTo(buffer);
+                return bytes.Length;
+            }
+        }
+
+        private sealed class FixedStringStringColumnWriter : FixedStringColumnWriterBase
+        {
+            private readonly IReadOnlyList<ReadOnlyMemory<char>> _rows;
+            private readonly Encoding _stringEncoding;
+
+            protected override int RowCount => _rows.Count;
+
+            public FixedStringStringColumnWriter(string columnName, string columnType, IReadOnlyList<Memory<char>> rows, int length, Encoding? stringEncoding)
+                : this(columnName, columnType, new MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>(rows, m => m), length, stringEncoding)
+            {
+            }
+
+            public FixedStringStringColumnWriter(string columnName, string columnType, IReadOnlyList<string?> rows, int length, Encoding? stringEncoding)
+                : this(columnName, columnType, new MappedReadOnlyList<string?, ReadOnlyMemory<char>>(rows, str => str.AsMemory()), length, stringEncoding)
+            {
+            }
+
+            public FixedStringStringColumnWriter(string columnName, string columnType, IReadOnlyList<ReadOnlyMemory<char>> rows, int length, Encoding? stringEncoding)
+                : base(columnName, columnType, length)
+            {
+                _rows = rows;
+                _stringEncoding = stringEncoding ?? Encoding.UTF8;
+            }
+
+            protected override int GetBytes(int position, Span<byte> buffer)
+            {
+                var str = _rows[position].Span;
+                var bytesCount = _stringEncoding.GetByteCount(str);
+                if (bytesCount == 0)
+                    return 0;
+
+                if (bytesCount <= buffer.Length)
+                {
+                    _stringEncoding.GetBytes(str, buffer);
+                    return bytesCount;
+                }
+
+                throw new InvalidCastException($"The length of the string ({bytesCount}) is greater than the maximum length ({buffer.Length}).");
+            }
+        }
+
+        private abstract class FixedStringColumnWriterBase : IClickHouseColumnWriter
+        {
             private readonly int _length;
 
             public string ColumnName { get; }
 
             public string ColumnType { get; }
 
+            protected abstract int RowCount { get; }
+
             private int _position;
 
-            public FixedStringWriter(string columnName, string columnType, IReadOnlyList<byte[]> rows, int length)
+            public FixedStringColumnWriterBase(string columnName, string columnType, int length)
             {
-                _rows = rows;
                 _length = length;
                 ColumnName = columnName ?? throw new ArgumentNullException(nameof(columnName));
                 ColumnType = columnType;
@@ -171,22 +256,20 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var size = Math.Min(_rows.Count - _position, writeTo.Length / _length);
+                var size = Math.Min(RowCount - _position, writeTo.Length / _length);
 
-                Span<byte> zeroSpan = new byte[_length];
+                ReadOnlySpan<byte> zeroSpan = new byte[_length];
                 var span = writeTo;
                 for (int i = 0; i < size; i++, span = span.Slice(_length))
                 {
-                    Span<byte> bytes = _rows[_position++];
-                    if (bytes.Length > _length)
-                        throw new InvalidCastException($"The length of the array ({bytes.Length}) is greater than the maximum length ({_length}).");
-
-                    bytes.CopyTo(span);
-                    zeroSpan.Slice(bytes.Length).CopyTo(span.Slice(bytes.Length));
+                    var bytesCount = GetBytes(_position++, span.Slice(0, _length));
+                    zeroSpan.Slice(bytesCount).CopyTo(span.Slice(bytesCount));
                 }
 
                 return new SequenceSize(size * _length, size);
             }
+
+            protected abstract int GetBytes(int position, Span<byte> buffer);
         }
     }
 }

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,15 +100,46 @@ namespace Octonica.ClickHouseClient.Types
                     if (elementType.IsAssignableFrom(elementTypeCandidate))
                         elementType = elementTypeCandidate;
                     else if (!elementTypeCandidate.IsAssignableFrom(elementType))
-                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Can't detect a type of the array's element. Candidates are: \"{elementType}\" and \"{elementTypeCandidate}\".");
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.TypeNotSupported,
+                            $"Can't detect a type of the array's element. Candidates are: \"{elementType}\" and \"{elementTypeCandidate}\".");
                 }
             }
 
+            ArrayColumnWriterDispatcherBase dispatcher;
             if (elementType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Can't detect a type of the array's element. The type \"{typeof(T)}\" doesn't implement \"{typeof(IReadOnlyList<>)}\".");
+            {
+                var rowGenericTypeDef = rowType.GetGenericTypeDefinition();
+                if (rowGenericTypeDef == typeof(ReadOnlyMemory<>))
+                {
+                    elementType = rowType.GetGenericArguments()[0]!;
+                    dispatcher = new ReadOnlyColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+                }
+                else if (rowGenericTypeDef == typeof(Memory<>))
+                {
+                    elementType = rowType.GetGenericArguments()[0]!;
+                    dispatcher = new MemoryColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+                }
+                else
+                {
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.TypeNotSupported,
+                        $"Can't detect a type of the array's element. The type \"{typeof(T)}\" doesn't implement \"{typeof(IReadOnlyList<>)}\".");
+                }
+            }
+            else
+            {
+                dispatcher = new ArrayColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+            }
 
-            var dispatcher = new ArrayColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
-            return TypeDispatcher.Dispatch(elementType, dispatcher);
+            try
+            {
+                return TypeDispatcher.Dispatch(elementType, dispatcher);
+            }
+            catch (ClickHouseException ex) when (ex.ErrorCode == ClickHouseErrorCodes.TypeNotSupported)
+            {
+                throw new ClickHouseException(ex.ErrorCode, $"The type \"{rowType}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\". See the inner exception for details.", ex);
+            }
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -352,7 +383,46 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class ArrayColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
+        private sealed class ArrayColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
+        {
+            public ArrayColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            {
+            }
+
+            protected override ArrayLinearizedList<T> ToList<T>(object rows)
+            {
+                return new ArrayLinearizedList<T>((IReadOnlyList<IReadOnlyList<T>?>) rows);
+            }
+        }
+
+        private sealed class MemoryColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
+        {
+            public MemoryColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            {
+            }
+
+            protected override ArrayLinearizedList<T> ToList<T>(object rows)
+            {
+                return new ArrayLinearizedList<T>(new MappedReadOnlyList<Memory<T>, IReadOnlyList<T>?>((IReadOnlyList<Memory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+            }
+        }
+
+        private sealed class ReadOnlyColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
+        {
+            public ReadOnlyColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            {
+            }
+
+            protected override ArrayLinearizedList<T> ToList<T>(object rows)
+            {
+                return new ArrayLinearizedList<T>(new MappedReadOnlyList<ReadOnlyMemory<T>, IReadOnlyList<T>?>((IReadOnlyList<ReadOnlyMemory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+            }
+        }
+
+        private abstract class ArrayColumnWriterDispatcherBase : ITypeDispatcher<IClickHouseColumnWriter>
         {
             private readonly string _columnName;
             private readonly string _columnType;
@@ -360,7 +430,7 @@ namespace Octonica.ClickHouseClient.Types
             private readonly ClickHouseColumnSettings? _columnSettings;
             private readonly IClickHouseColumnTypeInfo _elementTypeInfo;
 
-            public ArrayColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+            protected ArrayColumnWriterDispatcherBase(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
             {
                 _columnName = columnName;
                 _columnType = columnType;
@@ -371,10 +441,12 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseColumnWriter Dispatch<T>()
             {
-                var linearizedList = new ArrayLinearizedList<T>((IReadOnlyList<IReadOnlyList<T>?>) _rows);
+                var linearizedList = ToList<T>(_rows);
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
                 return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);
             }
+
+            protected abstract ArrayLinearizedList<T> ToList<T>(object rows);
         }
 
         private sealed class MultiDimensionalArrayColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>

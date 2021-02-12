@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -38,11 +39,35 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (rows is IReadOnlyList<string> stringRows)
-                return new StringColumnWriter(columnName, ComplexTypeName, stringRows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            if (typeof(T) == typeof(string))
+                return new StringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string>) rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
 
-            if (rows is IReadOnlyList<byte[]> byteRows)
-                return new BinaryStringColumnWriter(columnName, ComplexTypeName, byteRows);
+            if (typeof(T) == typeof(char[]))
+            {
+                var mappedList = new MappedReadOnlyList<char[]?, ReadOnlyMemory<char>>((IReadOnlyList<char[]?>)rows, m => m.AsMemory());
+                return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            }
+
+            if (typeof(T) == typeof(ReadOnlyMemory<char>))
+                return new StringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>) rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+
+            if (typeof(T) == typeof(Memory<char>))
+            {
+                var mappedList = new MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>((IReadOnlyList<Memory<char>>) rows, m => m);
+                return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            }
+
+            if (typeof(T) == typeof(byte[]))
+                return new BinaryStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<byte[]>) rows);
+
+            if (typeof(T) == typeof(ReadOnlyMemory<byte>))
+                return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>) rows);
+
+            if (typeof(T) == typeof(Memory<byte>))
+            {
+                var mappedList = new MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>((IReadOnlyList<Memory<byte>>) rows, m => m);
+                return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, mappedList);
+            }
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
@@ -147,107 +172,158 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private class BinaryStringColumnWriter : IClickHouseColumnWriter
+        private sealed class BinaryStringColumnWriter : StringColumnWriterBase
         {
             private readonly IReadOnlyList<byte[]> _rows;
 
-            public string ColumnName { get; }
-
-            public string ColumnType { get; }
-
-            private int _position;
+            protected override int RowCount => _rows.Count;
 
             public BinaryStringColumnWriter(string columnName, string columnType, IReadOnlyList<byte[]> rows)
+                : base(columnName, columnType)
             {
                 _rows = rows;
-                ColumnName = columnName;
-                ColumnType = columnType;
             }
 
-            public SequenceSize WriteNext(Span<byte> writeTo)
+            protected override int GetByteCount(int rowIndex)
             {
-                if (_position == _rows.Count)
-                    return new SequenceSize(0, 0);
+                return _rows[rowIndex]?.Length ?? 0;
+            }
 
-                var result = new SequenceSize(0, 0);
-                for (; _position < _rows.Count; _position++)
-                {
-                    var span = writeTo.Slice(result.Bytes);
-                    if (span.IsEmpty)
-                        break;
-
-                    var bytes = _rows[_position];
-                    if (bytes == null)
-                    {
-                        span[0] = 0;
-                        result = new SequenceSize(result.Bytes + 1, result.Bytes + 1);
-                    }
-                    else
-                    {
-                        var prefixLength = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(span, (ulong) bytes.Length);
-                        if (prefixLength <= 0 || prefixLength + bytes.Length > span.Length)
-                            return result;
-
-                        bytes.CopyTo(span.Slice(prefixLength, bytes.Length));
-                        result = new SequenceSize(result.Bytes + prefixLength + bytes.Length, result.Elements + 1);
-                    }
-                }
-
-                return result;
+            protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
+            {
+                _rows[rowIndex].CopyTo(writeTo);
             }
         }
 
-        private class StringColumnWriter : IClickHouseColumnWriter
+        private sealed class BinaryStringSpanColumnWriter : StringColumnWriterBase
+        {
+            private readonly IReadOnlyList<ReadOnlyMemory<byte>> _rows;
+
+            protected override int RowCount => _rows.Count;
+
+            public BinaryStringSpanColumnWriter(string columnName, string columnType, IReadOnlyList<ReadOnlyMemory<byte>> rows)
+                : base(columnName, columnType)
+            {
+                _rows = rows;
+            }
+
+            protected override int GetByteCount(int rowIndex)
+            {
+                return _rows[rowIndex].Length;
+            }
+
+            protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
+            {
+                _rows[rowIndex].Span.CopyTo(writeTo);
+            }
+        }
+
+        private sealed class StringColumnWriter : StringColumnWriterBase
         {
             private readonly IReadOnlyList<string> _rows;
             private readonly Encoding _encoding;
 
+            protected override int RowCount => _rows.Count;
+
+            public StringColumnWriter(string columnName, string columnType, IReadOnlyList<string> rows, Encoding encoding)
+                : base(columnName, columnType)
+            {
+                _rows = rows;
+                _encoding = encoding;
+            }
+
+            protected override int GetByteCount(int rowIndex)
+            {
+                var str = _rows[rowIndex];
+                if (string.IsNullOrEmpty(str))
+                    return 0;
+
+                return _encoding.GetByteCount(str);
+            }
+
+            protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
+            {
+                _encoding.GetBytes(_rows[rowIndex], writeTo);
+            }
+        }
+
+        private sealed class StringSpanColumnWriter : StringColumnWriterBase
+        {
+            private readonly IReadOnlyList<ReadOnlyMemory<char>> _rows;
+            private readonly Encoding _encoding;
+
+            protected override int RowCount => _rows.Count;
+
+            public StringSpanColumnWriter(string columnName, string columnType, IReadOnlyList<ReadOnlyMemory<char>> rows, Encoding encoding)
+                : base(columnName, columnType)
+            {
+                _rows = rows;
+                _encoding = encoding;
+            }
+
+            protected override int GetByteCount(int rowIndex)
+            {
+                return _encoding.GetByteCount(_rows[rowIndex].Span);
+            }
+
+            protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
+            {
+                _encoding.GetBytes(_rows[rowIndex].Span, writeTo);
+            }
+        }
+
+        private abstract class StringColumnWriterBase : IClickHouseColumnWriter
+        {
             public string ColumnName { get; }
 
             public string ColumnType { get; }
 
+            protected abstract int RowCount { get; }
+
             private int _position;
 
-            public StringColumnWriter(string columnName, string columnType, IReadOnlyList<string> rows, Encoding encoding)
+            protected StringColumnWriterBase(string columnName, string columnType)
             {
-                _rows = rows;
-                _encoding = encoding;
                 ColumnName = columnName;
                 ColumnType = columnType;
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                if (_position == _rows.Count)
+                var rowCount = RowCount;
+                if (_position == rowCount)
                     return new SequenceSize(0, 0);
 
                 var result = new SequenceSize(0, 0);
-                for (; _position < _rows.Count; _position++)
+                for (; _position < rowCount; _position++)
                 {
                     var span = writeTo.Slice(result.Bytes);
                     if (span.IsEmpty)
                         break;
-                    
-                    var str = _rows[_position];
-                    if (string.IsNullOrEmpty(str))
+
+                    var byteCount = GetByteCount(_position);
+                    if (byteCount == 0)
                     {
                         span[0] = 0;
                         result = new SequenceSize(result.Bytes + 1, result.Elements + 1);
                     }
                     else
                     {
-                        var byteCount = _encoding.GetByteCount(str);
-                        var prefixLength = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(span, (ulong) byteCount);
+                        var prefixLength = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(span, checked((ulong) byteCount));
                         if (prefixLength <= 0 || prefixLength + byteCount > span.Length)
                             return result;
 
-                        _encoding.GetBytes(str, span.Slice(prefixLength, byteCount));
+                        WriteBytes(_position, span.Slice(prefixLength, byteCount));
                         result = new SequenceSize(result.Bytes + prefixLength + byteCount, result.Elements + 1);
                     }
                 }
 
                 return result;
             }
+
+            protected abstract int GetByteCount(int rowIndex);
+
+            protected abstract void WriteBytes(int rowIndex, Span<byte> writeTo);
         }
     }
 }

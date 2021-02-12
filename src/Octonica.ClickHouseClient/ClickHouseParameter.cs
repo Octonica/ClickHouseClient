@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -189,12 +189,12 @@ namespace Octonica.ClickHouseClient
             {
                 if (value)
                 {
-                    if (ArrayRank == 0)
+                    if (_forcedArrayRank == null || ArrayRank == 0)
                         ArrayRank = 1;
                 }
                 else
                 {
-                    if (ArrayRank > 0)
+                    if (_forcedArrayRank == null || ArrayRank > 0)
                         ArrayRank = 0;
                 }
             }
@@ -202,7 +202,17 @@ namespace Octonica.ClickHouseClient
 
         public int ArrayRank
         {
-            get => _forcedArrayRank ?? GetTypeFromValue().ArrayRank;
+            get
+            {
+                if (_forcedArrayRank != null)
+                    return _forcedArrayRank.Value;
+
+                var typeInfo = GetTypeFromValue();
+                if (typeInfo.ArrayRank > 0 && typeInfo.DbType == ClickHouseDbType.Byte && (_forcedType == ClickHouseDbType.String || _forcedType == ClickHouseDbType.StringFixedLength))
+                    return typeInfo.ArrayRank - 1;
+
+                return typeInfo.ArrayRank;
+            }
             set
             {
                 if (value < 0)
@@ -365,17 +375,38 @@ namespace Octonica.ClickHouseClient
                     }
 
                     typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", Size);
+                    
+                    ReadOnlySpan<char> strSpan = default;
+                    bool isStr = false;
                     if (Value is string strValue)
                     {
+                        strSpan = strValue;
+                        isStr = true;
+                    }
+                    else if (Value is Memory<char> mem)
+                    {
+                        strSpan = mem.Span;
+                        isStr = true;
+                    }
+                    else if (Value is ReadOnlyMemory<char> roMem)
+                    {
+                        strSpan = roMem.Span;
+                        isStr = true;
+                    }
+
+                    if (isStr)
+                    {
                         var encoding = StringEncoding ?? Encoding.UTF8;
-                        var bytes = encoding.GetBytes(strValue);
-                        if (bytes.Length > Size)
+                        var size = encoding.GetByteCount(strSpan);
+                        if (size > Size)
                         {
                             throw new ClickHouseException(
                                 ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
                                 $"Parameter \"{ParameterName}\". The length of the string in bytes with encoding \"{encoding.EncodingName}\" is greater than the size of the parameter.");
                         }
 
+                        var bytes = new byte[size];
+                        encoding.GetBytes(strSpan, bytes);
                         preparedValue = bytes;
                     }
 
@@ -427,7 +458,7 @@ namespace Octonica.ClickHouseClient
             if (isNullable)
                 typeName = $"Nullable({typeName})";
 
-            int arrayRank = _forcedArrayRank ?? GetTypeFromValue().ArrayRank;
+            int arrayRank = ArrayRank;
             for (int i = 0; i < arrayRank; i++)
                 typeName = $"Array({typeName})";
 
@@ -447,7 +478,7 @@ namespace Octonica.ClickHouseClient
             ValueTypeInfo result;
             if (Value == null)
             {
-                result = new ValueTypeInfo(ClickHouseDbType.Object, "Nothing", true, 0);
+                result = new ValueTypeInfo(ClickHouseDbType.Nothing, "Nothing", true, 0);
             }
             else if (Value is IPAddress ipAddress)
             {
@@ -508,7 +539,7 @@ namespace Octonica.ClickHouseClient
             if (valueType == typeof(IPAddress))
                 return new ValueTypeInfo(ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
             if (valueType == typeof(DBNull))
-                return new ValueTypeInfo(ClickHouseDbType.Object, "Nothing", true, 0);
+                return new ValueTypeInfo(ClickHouseDbType.Nothing, "Nothing", true, 0);
 
             if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
             {
@@ -522,6 +553,12 @@ namespace Octonica.ClickHouseClient
             {
                 arrayRank = valueType.GetArrayRank();
                 elementType = valueType.GetElementType();
+
+                if (elementType == typeof(char))
+                {
+                    elementType = typeof(string);
+                    --arrayRank;
+                }
             }
             else
             {
@@ -545,11 +582,24 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
+            if (elementType == null && valueType.IsGenericType)
+            {
+                var valueTypeDef = valueType.GetGenericTypeDefinition();
+                if (valueTypeDef == typeof(Memory<>) || valueTypeDef == typeof(ReadOnlyMemory<>))
+                {
+                    elementType = valueType.GetGenericArguments()[0];
+
+                    // Memory<char> or ReadOnlyMemory<char> should be interpreted as string
+                    if (elementType == typeof(char))
+                        return GetTypeFromValue(typeof(string), false);
+                }
+            }
+
             if (elementType != null)
             {
                 try
                 {
-                    var elementInfo = GetTypeFromValue(elementType, true);
+                    var elementInfo = GetTypeFromValue(elementType, arrayRank > 0 || valueCanBeNull);
                     return new ValueTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, elementInfo.IsNullable, elementInfo.ArrayRank + arrayRank);
                 }
                 catch (ClickHouseException ex)

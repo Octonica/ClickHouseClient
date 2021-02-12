@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.Linq.Expressions;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using Octonica.ClickHouseClient.Utils;
@@ -49,8 +50,8 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void Clone()
         {
-            var p1 = new ClickHouseParameter("p1") {Value = new[] {42}, ClickHouseDbType = ClickHouseDbType.VarNumeric, Precision = 19, Scale = 7};
-            
+            var p1 = new ClickHouseParameter("p1") { Value = new[] { 42 }, ClickHouseDbType = ClickHouseDbType.VarNumeric, Precision = 19, Scale = 7 };
+
             var p2 = p1.Clone();
 
             Assert.NotSame(p1, p2);
@@ -67,7 +68,7 @@ namespace Octonica.ClickHouseClient.Tests
             p2.StringEncoding = Encoding.ASCII;
             p2.IsNullable = true;
 
-            var collection = new ClickHouseParameterCollection {p2};
+            var collection = new ClickHouseParameterCollection { p2 };
 
             var p3 = p2.Clone();
             Assert.NotSame(p2, p3);
@@ -113,7 +114,7 @@ namespace Octonica.ClickHouseClient.Tests
                 Value = 123.456m
             };
 
-            var collection = new ClickHouseParameterCollection {p1, new ClickHouseParameter("p2")};
+            var collection = new ClickHouseParameterCollection { p1, new ClickHouseParameter("p2") };
             var p2 = collection["p2"];
             p1.CopyTo(p2);
 
@@ -138,6 +139,62 @@ namespace Octonica.ClickHouseClient.Tests
 
             p.SourceVersion = DataRowVersion.Proposed;
             Assert.Equal(DataRowVersion.Default, p.SourceVersion);
+        }
+
+        [Fact]
+        public void TypeDetection()
+        {
+            var testData = new (object? value, ClickHouseDbType expectedType, bool expectedNullable, int expectedArrayRank)[]
+            {
+                (null, ClickHouseDbType.Nothing, true, 0),
+                (DBNull.Value, ClickHouseDbType.Nothing, true, 0),
+                (new[] {DBNull.Value}, ClickHouseDbType.Nothing, true, 1),
+                
+                (true, ClickHouseDbType.Boolean, false, 0),
+
+                ((byte) 1, ClickHouseDbType.Byte, false, 0),
+                ((sbyte) 1, ClickHouseDbType.SByte, false, 0),
+                ((short) 1, ClickHouseDbType.Int16, false, 0),
+                ((ushort) 1, ClickHouseDbType.UInt16, false, 0),
+                ((int) 1, ClickHouseDbType.Int32, false, 0),
+                ((uint) 1, ClickHouseDbType.UInt32, false, 0),
+                ((long) 1, ClickHouseDbType.Int64, false, 0),
+                ((ulong) 1, ClickHouseDbType.UInt64, false, 0),
+
+                ((float) 1, ClickHouseDbType.Single, false, 0),
+                ((double) 1, ClickHouseDbType.Double, false, 0),
+                ((decimal) 1, ClickHouseDbType.Decimal, false, 0),
+
+                (DateTime.Now, ClickHouseDbType.DateTime, false, 0),
+                (DateTimeOffset.Now, ClickHouseDbType.DateTime, false, 0),
+
+                (Guid.Empty, ClickHouseDbType.Guid, false, 0),
+
+                (new IPAddress(new byte[] {127, 0, 0, 1}), ClickHouseDbType.IpV4, false, 0),
+                (IPAddress.Parse("2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d"), ClickHouseDbType.IpV6, false, 0),
+
+                (string.Empty, ClickHouseDbType.String, false, 0),
+                (new[] {'!'}, ClickHouseDbType.String, false, 0),
+                (string.Empty.AsMemory(), ClickHouseDbType.String, false, 0),
+                (new[] {'!'}.AsMemory(), ClickHouseDbType.String, false, 0),
+
+                (new byte[0], ClickHouseDbType.Byte, false, 1),
+                (new byte[0].AsMemory(), ClickHouseDbType.Byte, false, 1),
+                ((ReadOnlyMemory<byte>) new byte[0].AsMemory(), ClickHouseDbType.Byte, false, 1),
+
+                (new Guid?[0, 0, 0], ClickHouseDbType.Guid, true, 3),
+            };
+
+            var p = new ClickHouseParameter("p");
+            foreach(var testCase in testData)
+            {
+                p.Value = testCase.value;
+
+                Assert.Equal(testCase.expectedType, p.ClickHouseDbType);
+                Assert.Equal(testCase.expectedArrayRank, p.ArrayRank);
+                Assert.Equal(testCase.expectedArrayRank > 0, p.IsArray);
+                Assert.Equal(testCase.expectedNullable, p.IsNullable);
+            }
         }
 
         private static void AssertParametersEqual(ClickHouseParameter expected, ClickHouseParameter actual, bool compareName = true)

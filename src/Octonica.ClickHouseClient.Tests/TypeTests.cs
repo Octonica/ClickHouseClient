@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -125,6 +126,32 @@ namespace Octonica.ClickHouseClient.Tests
 
             var strResult = await cmd.ExecuteScalarAsync(new ClickHouseColumnSettings(encoding));
             Assert.Equal(str, strResult);
+        }
+
+        [Fact]
+        public async Task ReadStringParameterScalar()
+        {
+            var strings = new[] {null, "", "abcde", "fghi", "jklm", "nopq", "rst", "uvwxy","z"};
+
+            var byteArray = Encoding.UTF8.GetBytes(strings[4]!);
+            var byteMemory = Encoding.UTF8.GetBytes(strings[5]!).AsMemory();
+            var byteRoMemory = (ReadOnlyMemory<byte>) Encoding.UTF8.GetBytes(strings[6]!).AsMemory();
+            var charMemory = strings[7]!.ToCharArray().AsMemory();
+            var charArray = strings[8]!.ToCharArray();
+            var values = new object?[] {strings[0], strings[1], strings[2], strings[3].AsMemory(), byteArray, byteMemory, byteRoMemory, charMemory, charArray};
+
+            await using var connection = await OpenConnectionAsync();
+            await using var cmd = connection.CreateCommand("SELECT {val}");
+            var param = cmd.Parameters.AddWithValue("val", "some_value", DbType.String);
+            for (var i = 0; i < values.Length; i++)
+            {
+                param.Value = values[i];
+                var result = await cmd.ExecuteScalarAsync(CancellationToken.None);
+                if (values[i] == null)
+                    Assert.Equal(result, DBNull.Value);
+                else
+                    Assert.Equal(strings[i], Assert.IsType<string>(result));
+            }
         }
 
         [Fact]
