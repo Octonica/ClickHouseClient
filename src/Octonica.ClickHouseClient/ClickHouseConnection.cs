@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ using System;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
@@ -41,13 +42,14 @@ namespace Octonica.ClickHouseClient
         private ClickHouseConnectionState _connectionState;
         private ClickHouseTcpClient? _tcpClient;
 
-        public override string? ConnectionString
+        [AllowNull]
+        public override string ConnectionString
         {
             get
             {
                 var state = _connectionState;
                 if (state.Settings == null)
-                    return null;
+                    return string.Empty;
 
                 return new ClickHouseConnectionStringBuilder(state.Settings).ConnectionString;
             }
@@ -78,21 +80,21 @@ namespace Octonica.ClickHouseClient
 
         public override int ConnectionTimeout => Timeout.Infinite;
 
-        public override string? Database => _connectionState.Settings?.Database;
+        public override string Database => _connectionState.Settings?.Database ?? string.Empty;
 
-        public override string? DataSource
+        public override string DataSource
         {
             get
             {
                 var state = _connectionState;
                 if (state.Settings == null)
-                    return null;
+                    return string.Empty;
 
                 return state.Settings.Host + (state.Settings.Port != ClickHouseConnectionStringBuilder.DefaultPort ? ":" + state.Settings.Port : string.Empty);
             }
         }
 
-        public override string? ServerVersion => _tcpClient?.ServerInfo.Version.ToString();
+        public override string ServerVersion => _tcpClient?.ServerInfo.Version.ToString() ?? string.Empty;
 
         public override ConnectionState State => _connectionState.State;
 
@@ -146,7 +148,7 @@ namespace Octonica.ClickHouseClient
             await Close(true);
         }
 
-        public override void EnlistTransaction(Transaction transaction)
+        public override void EnlistTransaction(Transaction? transaction)
         {
             throw new NotSupportedException();
         }
@@ -161,7 +163,7 @@ namespace Octonica.ClickHouseClient
             throw new NotSupportedException();
         }
 
-        public override DataTable GetSchema(string collectionName, string[] restrictionValues)
+        public override DataTable GetSchema(string collectionName, string?[] restrictionValues)
         {
             throw new NotSupportedException();
         }

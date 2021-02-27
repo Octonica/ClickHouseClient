@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
@@ -52,6 +53,8 @@ namespace Octonica.ClickHouseClient
         private int? _forcedArrayRank;
 
         private ValueTypeInfo? _valueTypeInfo;
+
+        private string? _sourceColumn;
 
         internal string Id { get; private set; }
 
@@ -92,12 +95,15 @@ namespace Octonica.ClickHouseClient
             set => _forcedNullable = value;
         }
 
+        [AllowNull]
         public sealed override string ParameterName
         {
             get => _parameterName;
             set
             {
                 var id = GetId(value);
+                Debug.Assert(value != null);
+
                 if (StringComparer.Ordinal.Equals(id, Id))
                 {
                     _parameterName = value;
@@ -129,7 +135,12 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        public override string? SourceColumn { get; set; }
+        [AllowNull]
+        public override string SourceColumn
+        {
+            get => _sourceColumn ?? string.Empty;
+            set => _sourceColumn = value;
+        }
 
         public override object? Value
         {
@@ -651,7 +662,7 @@ namespace Octonica.ClickHouseClient
             return ValidateParameterName(parameterName, out _);
         }
 
-        private static string GetId(string parameterName)
+        private static string GetId(string? parameterName)
         {
             if (!ValidateParameterName(parameterName, out var id))
                 throw new ArgumentException("The name of the parameter must be a valid ClickHouse identifier.", nameof(parameterName));

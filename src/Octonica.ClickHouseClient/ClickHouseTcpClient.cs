@@ -150,7 +150,7 @@ namespace Octonica.ClickHouseClient
                     messageBuilder.ClientName = settings.ClientName;
                     messageBuilder.ClientVersion = settings.ClientVersion;
                     messageBuilder.Host = settings.Host;
-                    messageBuilder.RemoteAddress = ((IPEndPoint) _client._client.Client.RemoteEndPoint).ToString();
+                    messageBuilder.RemoteAddress = ((IPEndPoint?) _client._client.Client.RemoteEndPoint)?.ToString();
                     messageBuilder.ProtocolRevision = Math.Min(Revisions.CurrentRevision, _client.ServerInfo.Revision);
                     messageBuilder.CompressionEnabled = _client._settings.Compress;
 

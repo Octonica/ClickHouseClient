@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -35,7 +36,14 @@ namespace Octonica.ClickHouseClient
 {
     public class ClickHouseCommand : DbCommand
     {
-        public override string? CommandText { get; set; }
+        private string? _commandText;
+
+        [AllowNull]
+        public override string CommandText
+        {
+            get => _commandText ?? string.Empty;
+            set => _commandText = value;
+        }
 
         public override int CommandTimeout
         {
@@ -228,7 +236,7 @@ namespace Octonica.ClickHouseClient
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(columnSettings, false, CancellationToken.None));
         }
 
-        public override async Task<object> ExecuteScalarAsync(CancellationToken cancellationToken)
+        public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
         {
             return await ExecuteScalar(null, true, cancellationToken);
         }

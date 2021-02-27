@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ namespace Octonica.ClickHouseClient
             return CommonUtils.GetColumnIndex(_blockHeader.Columns, name);
         }
 
-        public sealed override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)
+        public sealed override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length)
         {
             var value = GetFieldValue<byte[]>(ordinal, null);
             if (value == null)
@@ -161,7 +161,7 @@ namespace Octonica.ClickHouseClient
             return resultLength;
         }
 
-        public sealed override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length)
+        public sealed override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
         {
             var value = GetFieldValue<string>(ordinal, null);
             if (value == null)

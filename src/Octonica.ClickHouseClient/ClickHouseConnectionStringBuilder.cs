@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace Octonica.ClickHouseClient
@@ -162,7 +163,8 @@ namespace Octonica.ClickHouseClient
                 ClientVersion = settings.ClientVersion;
         }
 
-        public override object? this[string keyword]
+        [AllowNull]
+        public override object this[string keyword]
         {
             get => base[keyword];
             set

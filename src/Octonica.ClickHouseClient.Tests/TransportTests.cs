@@ -1,5 +1,5 @@
 #region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -310,13 +310,13 @@ namespace Octonica.ClickHouseClient.Tests
 
             await using var conn = new ClickHouseConnection(settings);
             await conn.OpenAsync();
-            Assert.Null(conn.Database);
+            Assert.Equal(string.Empty, conn.Database);
 
             var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync<string>();
             var currentDb = await conn.CreateCommand("select currentDatabase()").ExecuteScalarAsync<string>();
 
             Assert.Equal(settings.User, currentUser);
-            Assert.NotNull(currentDb);
+            Assert.False(string.IsNullOrEmpty(currentDb));
         }
 
         [Fact]

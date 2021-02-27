@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
@@ -10,7 +10,7 @@
     <Version Condition="'$(Version)' == ''">1.0.17</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Company>Octonica</Company>
-    <Copyright>© 2019 – 2020 Octonica</Copyright>
+    <Copyright>© 2019 – 2021 Octonica</Copyright>
     <Product>Octonica.ClickHouseClient</Product>
     <PackageProjectUrl>https://github.com/Octonica/ClickHouseClient</PackageProjectUrl>
     <Description>ClickHouse .NET Core driver</Description>
@@ -22,8 +22,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="K4os.Compression.LZ4" Version="1.1.11" />
-    <PackageReference Include="TimeZoneConverter" Version="3.2.0" />
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.2.6" />
+    <PackageReference Include="TimeZoneConverter" Version="3.4.0" />
   </ItemGroup>
 
 </Project>

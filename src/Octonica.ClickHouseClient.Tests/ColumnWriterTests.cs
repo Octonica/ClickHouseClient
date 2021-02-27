@@ -189,7 +189,7 @@ namespace Octonica.ClickHouseClient.Tests
                 {"ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять", "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать"};
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
-                writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.GetEncoding("UTF-7")));
+                writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.UTF7));
                 var columns = new object?[writer.FieldCount];
                 columns[writer.GetOrdinal("id")] = Enumerable.Range(40_000, int.MaxValue - 40_000);
                 columns[writer.GetOrdinal("str")] = values;
