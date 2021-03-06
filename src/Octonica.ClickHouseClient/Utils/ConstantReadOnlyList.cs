@@ -23,7 +23,6 @@ using System.Linq;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-
     internal class ConstantReadOnlyList<T> : IReadOnlyList<T>
     {
         [AllowNull]
@@ -33,11 +32,8 @@ namespace Octonica.ClickHouseClient.Utils
 
         public ConstantReadOnlyList([AllowNull] T value, int count)
         {
-
             if (count < 0)
-            {
                 throw new ArgumentOutOfRangeException(nameof(count));
-            }
 
             Count = count;
             _value = value;
@@ -57,9 +53,8 @@ namespace Octonica.ClickHouseClient.Utils
         {
             get
             {
-                if (index >= 0 && index < Count) {
+                if (index >= 0 && index < Count)
                     return _value;
-                }
 
                 throw new IndexOutOfRangeException();
             }
