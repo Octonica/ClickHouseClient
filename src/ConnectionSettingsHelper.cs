@@ -1,5 +1,5 @@
 #region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ namespace Octonica.ClickHouseClient
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"The connection string from the file '{configFileName}' is not valid. Connection string example: {ex.Message}", ex);
+                throw new InvalidOperationException($"The connection string from the file '{configFileName}' is not valid. Connection string example: '{conStrExample}'. {ex.Message}", ex);
             }
         }
     }

@@ -288,7 +288,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             var sb = new ClickHouseConnectionStringBuilder {Host = "none.example.com"};
             using var conn = new ClickHouseConnection(sb);
-            var exception = Assert.Throws<SocketException>(() => conn.Open());
+            var exception = Assert.ThrowsAny<SocketException>(() => conn.Open());
             Assert.Equal(SocketError.HostNotFound, exception.SocketErrorCode);
         }
 
