@@ -1,3 +1,24 @@
+### Octonica.ClickHouseClient release v1.1.6, 2021-03-08
+
+#### Backward Incompatible Change
+
+* ClickHouseParameter can't be added to several parameter collections. Use the method `ClickHouseParameter.Clone` to create a parameter's copy which doesn't belong to the collection.
+
+#### New Feature
+
+* Octonica.ClickHouseClient for .NET 5.0 was added to NuGet package.
+* Added ClickHouseDbProviderFactory which implements DbProviderFactory.
+* `ReadOnlyMemory<char>` or `Memory<char>` can be used instead of `string` when writing values to ClickHouse.
+* `ReadOnlyMemory<T>` or `Memory<T>` can be used instead of `T[]` (array of `T`) when writing values to ClickHouse.
+
+#### Bug Fix
+
+* Fixed possible race condition when disposing a connection from different threads ([#16](https://github.com/Octonica/ClickHouseClient/issues/16)).
+
+#### Improvement
+
+* Improved implementation of various classes from `System.Data.Common` namespace, such as `DbConnection`, `DbCommand` and `DbParameter`.
+
 ### Octonica.ClickHouseClient release v1.0.17, 2020-12-10
 
 #### Bug Fix
