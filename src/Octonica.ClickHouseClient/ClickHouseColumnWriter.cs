@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -559,7 +560,7 @@ namespace Octonica.ClickHouseClient
 
         private class SingleRowColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
         {
-            private readonly object? _value;
+            [AllowNull] private readonly object _value;
             private readonly ColumnInfo _columnInfo;
             private readonly ClickHouseColumnSettings? _columnSettings;
 

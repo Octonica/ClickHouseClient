@@ -700,7 +700,7 @@ namespace Octonica.ClickHouseClient
         private class ParameterColumnWriterBuilder : ITypeDispatcher<IClickHouseColumnWriter>
         {
             private readonly string _parameterId;
-            private readonly object? _value;
+            [AllowNull] private readonly object _value;
             private readonly ClickHouseColumnSettings? _columnSettings;
             private readonly IClickHouseColumnTypeInfo _typeInfo;
 
@@ -711,7 +711,6 @@ namespace Octonica.ClickHouseClient
                 _columnSettings = columnSettings;
                 _typeInfo = typeInfo ?? throw new ArgumentNullException(nameof(typeInfo));
             }
-
 
             public IClickHouseColumnWriter Dispatch<T>()
             {
