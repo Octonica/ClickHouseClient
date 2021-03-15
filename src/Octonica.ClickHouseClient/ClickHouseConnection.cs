@@ -348,7 +348,9 @@ namespace Octonica.ClickHouseClient
                 }
                 catch
                 {
+                    client?.Client?.Close(0);
                     client?.Dispose();
+                    client = null;
                     throw;
                 }
 
@@ -427,6 +429,7 @@ namespace Octonica.ClickHouseClient
             {
                 reader?.Dispose();
                 writer?.Dispose();
+                client?.Client?.Close(0);
                 client?.Dispose();
                 SetConnectionState(ConnectionState.Closed);
 
