@@ -1,3 +1,9 @@
+### Octonica.ClickHouseClient release v1.1.7, 2021-03-15
+
+#### Bug Fix
+
+* Fixed error handling for `ClickHouseConnection.Open`. The socket was not properly disposed when error occurred during opening a connection.
+
 ### Octonica.ClickHouseClient release v1.1.6, 2021-03-08
 
 #### Backward Incompatible Change
