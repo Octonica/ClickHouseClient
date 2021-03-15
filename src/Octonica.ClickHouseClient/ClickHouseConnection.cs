@@ -411,7 +411,7 @@ namespace Octonica.ClickHouseClient
                             else
                             {
                                 httpDetectedMessage =
-                                    $"Internal error. Unexpected message code (0x{message.MessageCode}) received from the server." +
+                                    $"Internal error. Unexpected message code (0x{message.MessageCode:X}) received from the server." +
                                     "This error may by caused by an attempt to connect with HTTP protocol. ";
                             }
 
@@ -422,7 +422,7 @@ namespace Octonica.ClickHouseClient
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, httpDetectedMessage);
                         }
 
-                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected message code (0x{message.MessageCode}) received from the server.");
+                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected message code (0x{message.MessageCode:X}) received from the server.");
                 }
             }
             catch (Exception ex)
