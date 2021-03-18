@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,8 +72,8 @@ namespace Octonica.ClickHouseClient
             if (item.Collection != null)
             {
                 var errorText = ReferenceEquals(item.Collection, this)
-                    ? $"The parameter \"{item.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
-                    : $"The parameter \"{item.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+                    ? $"The parameter \"{item.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
+                    : $"The parameter \"{item.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
                 throw new ArgumentException(errorText, nameof(item));
             }
@@ -207,8 +207,8 @@ namespace Octonica.ClickHouseClient
             if (item.Collection != null)
             {
                 var errorText = ReferenceEquals(item.Collection, this)
-                    ? $"The parameter \"{item.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
-                    : $"The parameter \"{item.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+                    ? $"The parameter \"{item.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
+                    : $"The parameter \"{item.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
                 throw new ArgumentException(errorText, nameof(item));
             }
@@ -252,8 +252,8 @@ namespace Octonica.ClickHouseClient
                     if (parameter.Collection != null)
                     {
                         var errorText = ReferenceEquals(parameter.Collection, this)
-                            ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
-                            : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+                            ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
+                            : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
                         throw new ArgumentException(errorText, nameof(value));
                     }
@@ -268,8 +268,8 @@ namespace Octonica.ClickHouseClient
                 if (parameter.Collection != null)
                 {
                     var errorText = ReferenceEquals(parameter.Collection, this)
-                        ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
-                        : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+                        ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
+                        : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
                     throw new ArgumentException(errorText, nameof(value));
                 }
@@ -304,8 +304,8 @@ namespace Octonica.ClickHouseClient
                     if (parameter.Collection != null)
                     {
                         var errorText = ReferenceEquals(parameter.Collection, this)
-                            ? $"The parameter \"{parameter.ParameterName}\" is already belong to the collection. It can't be added to the same connection twice."
-                            : $"The parameter \"{parameter.ParameterName}\" is already belong to a collection. It can't be added to different collections.";
+                            ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
+                            : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
                         throw new ArgumentException(errorText, nameof(value));
                     }
