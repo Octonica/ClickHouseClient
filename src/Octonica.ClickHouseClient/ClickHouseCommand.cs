@@ -393,10 +393,6 @@ namespace Octonica.ClickHouseClient
             if (behavior != CommandBehavior.Default)
                 throw new ArgumentException($"Command behavior \"{behavior}\" not supported.", nameof(behavior));
 
-            var connection = Connection;
-            if(connection==null)
-                throw new InvalidOperationException("The command does not ");
-
             ClickHouseTcpClient.Session? session = null;
             CancellationTokenSource? sessionTokenSource = null;
             bool cancelOnFailure = false;
