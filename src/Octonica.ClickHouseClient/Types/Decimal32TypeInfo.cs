@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
  */
 #endregion
 
-using System.Diagnostics;
+using Octonica.ClickHouseClient.Exceptions;
+using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -23,20 +24,35 @@ namespace Octonica.ClickHouseClient.Types
     {
         private const int Precision = 9;
 
+        public override int TypeArgumentsCount => Math.Min(1, base.TypeArgumentsCount);
+
         public Decimal32TypeInfo()
-            : base("Decimal32", Precision)
+            : base("Decimal32")
         {
         }
 
-        private Decimal32TypeInfo(string typeName, string complexTypeName, int precision, int scale)
-            : base(typeName, complexTypeName, precision, scale)
+        private Decimal32TypeInfo(string typeName, string complexTypeName, int scale)
+            : base(typeName, complexTypeName, Precision, scale)
         {
         }
 
         protected override DecimalTypeInfoBase CloneWithOptions(string complexTypeName, int? precision, int scale)
         {
-            Debug.Assert(precision == null);
-            return new Decimal32TypeInfo(TypeName, complexTypeName, Precision, scale);
+            if (precision != null)
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value of the precision can not be redefined for the type \"{TypeName}\".");
+
+            return new Decimal32TypeInfo(TypeName, complexTypeName, scale);
+        }
+
+        public override object GetTypeArgument(int index)
+        {
+            if (base.TypeArgumentsCount == 0)
+                return base.GetTypeArgument(index);
+
+            if (index != 0)
+                throw new IndexOutOfRangeException();
+
+            return base.GetTypeArgument(1);
         }
     }
 }

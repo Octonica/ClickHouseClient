@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class DateTimeTypeInfo : IClickHouseConfigurableTypeInfo
     {
+        private readonly string? _timeZoneCode;
         private readonly TimeZoneInfo _timeZone;
         
         public string ComplexTypeName { get; }
@@ -34,6 +35,8 @@ namespace Octonica.ClickHouseClient.Types
         public string TypeName => "DateTime";
 
         public int GenericArgumentsCount => 0;
+
+        public int TypeArgumentsCount => _timeZoneCode == null ? 0 : 1;
 
         public DateTimeTypeInfo()
             : this(TimeZoneInfo.Utc, null)
@@ -43,6 +46,7 @@ namespace Octonica.ClickHouseClient.Types
         private DateTimeTypeInfo(TimeZoneInfo timeZone, string? timeZoneCode)
         {
             _timeZone = timeZone;
+            _timeZoneCode = timeZoneCode;
             ComplexTypeName = timeZoneCode == null ? TypeName : $"{TypeName}('{timeZoneCode}')";
         }
 
@@ -85,6 +89,17 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
             throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        public object GetTypeArgument(int index)
+        {
+            if (_timeZoneCode == null)
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+
+            if (index != 0)
+                throw new IndexOutOfRangeException();
+
+            return _timeZoneCode;
         }
 
         public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,9 +39,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public int GenericArgumentsCount => 0;
 
-        protected DecimalTypeInfoBase(string typeName, int? precision)
-        {
-            _precision = precision;
+        public virtual int TypeArgumentsCount => (_precision == null ? 0 : 1) + (_scale == null ? 0 : 1);
+
+        protected DecimalTypeInfoBase(string typeName)
+        {   
             TypeName = typeName;
             ComplexTypeName = typeName;
         }
@@ -161,6 +162,35 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
             throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        public virtual object GetTypeArgument(int index)
+        {
+            if (_precision == null && _scale == null)
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+
+            switch (index)
+            {
+                case 0:
+                    if (_precision == null)
+                    {
+                        Debug.Assert(_scale != null);
+                        return _scale;
+                    }
+                    else
+                    {
+                        return _precision;
+                    }
+
+                case 1:
+                    if (_scale == null || _precision == null)
+                        goto default;
+
+                    return _scale;
+
+                default:
+                    throw new IndexOutOfRangeException();
+            }
         }
 
         protected abstract DecimalTypeInfoBase CloneWithOptions(string complexTypeName, int? precision, int scale);

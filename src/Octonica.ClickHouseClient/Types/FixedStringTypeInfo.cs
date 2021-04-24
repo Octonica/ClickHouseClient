@@ -36,6 +36,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public int GenericArgumentsCount => 0;
 
+        public int TypeArgumentsCount => _length == 0 ? 0 : 1;
+
         public FixedStringTypeInfo()
         {
             ComplexTypeName = TypeName;
@@ -112,6 +114,17 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
             throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        public object GetTypeArgument(int index)
+        {
+            if (_length == null)
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+
+            if (index == 0)
+                return _length;
+
+            throw new IndexOutOfRangeException();
         }
 
         private sealed class FixedStringReader : IClickHouseColumnReader

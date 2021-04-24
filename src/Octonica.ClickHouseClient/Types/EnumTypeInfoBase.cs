@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,12 +33,15 @@ namespace Octonica.ClickHouseClient.Types
 
         private readonly Dictionary<string, TValue>? _enumMap;
         private readonly Dictionary<TValue, string>? _reversedEnumMap;
+        private readonly List<string>? _mapOrder;
 
         public string ComplexTypeName { get; }
 
         public string TypeName { get; }
 
         public int GenericArgumentsCount => 0;
+
+        public int TypeArgumentsCount => _mapOrder?.Count ?? 0;
 
         protected EnumTypeInfoBase(string typeName)
         {
@@ -53,11 +56,13 @@ namespace Octonica.ClickHouseClient.Types
 
             _enumMap = new Dictionary<string, TValue>(StringComparer.Ordinal);
             _reversedEnumMap = new Dictionary<TValue, string>();
+            _mapOrder = new List<string>();
 
             foreach (var pair in values)
             {
                 _enumMap.Add(pair.Key, pair.Value);
                 _reversedEnumMap.Add(pair.Value, pair.Key);
+                _mapOrder.Add(pair.Key);
             }
         }
 
@@ -74,6 +79,17 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
             throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
+        }
+
+        public object GetTypeArgument(int index)
+        {
+            if (_mapOrder == null || _enumMap == null)
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+
+            var key = _mapOrder[index];
+            var value = _enumMap[key];
+
+            return new KeyValuePair<string, TValue>(key, value);
         }
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)

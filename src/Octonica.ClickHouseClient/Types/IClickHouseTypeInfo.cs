@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ namespace Octonica.ClickHouseClient.Types
 
         int GenericArgumentsCount { get; }
 
+        int TypeArgumentsCount => GenericArgumentsCount;
+
         /// <summary>
         /// Type for <see cref="ClickHouseDataReader.GetFieldType"/>
         /// </summary>
@@ -35,5 +37,13 @@ namespace Octonica.ClickHouseClient.Types
         ClickHouseDbType GetDbType();
 
         IClickHouseTypeInfo GetGenericArgument(int index);
+
+        object GetTypeArgument(int index)
+        {
+            if (TypeArgumentsCount == 0)
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+
+            return GetGenericArgument(index);
+        }
     }
 }

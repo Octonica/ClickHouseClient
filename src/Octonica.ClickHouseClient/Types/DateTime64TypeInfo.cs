@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ namespace Octonica.ClickHouseClient.Types
         public const int DefaultPrecision = 3;
 
         private readonly int? _precision;
+        private readonly string? _timeZoneCode;
         private readonly TimeZoneInfo _timeZone;
 
         public string ComplexTypeName { get; }
@@ -41,6 +42,8 @@ namespace Octonica.ClickHouseClient.Types
         public string TypeName => "DateTime64";
 
         public int GenericArgumentsCount => 0;
+
+        public int TypeArgumentsCount => (_precision == null ? 0 : 1) + (_timeZoneCode == null ? 0 : 1);
 
         static DateTime64TypeInfo()
         {
@@ -92,6 +95,7 @@ namespace Octonica.ClickHouseClient.Types
 
             _timeZone = timeZone;
             _precision = precision;
+            _timeZoneCode = timeZoneCode;
 
             if (timeZoneCode != null)
             {
@@ -125,6 +129,30 @@ namespace Octonica.ClickHouseClient.Types
             throw new NotSupportedException($"The type \"{TypeName}\" doesn't have generic arguments.");
         }
 
+        public object GetTypeArgument(int index)
+        {
+            if (_precision == null)
+            {
+                Debug.Assert(_timeZoneCode == null);
+                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+            }
+
+            switch (index)
+            {
+                case 0:
+                    return _precision;
+
+                case 1:
+                    if (_timeZoneCode != null)
+                        return _timeZoneCode;
+
+                    goto default;
+
+                default:
+                    throw new IndexOutOfRangeException();
+            }
+        }
+
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             return new DateTime64Reader(rowCount, _precision ?? DefaultPrecision, _timeZone);
@@ -149,7 +177,9 @@ namespace Octonica.ClickHouseClient.Types
             if (options.Count > 2)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
 
-            if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var precision) || precision < 0)
+            if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var precision))
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The first argument (precision) of the type \"{TypeName}\" must be an integer.");
+            else if (precision < 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The precision value for the type \"{TypeName}\" must be a non-negative number.");
 
             string? tzCode = null;
