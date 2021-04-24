@@ -37,6 +37,7 @@ namespace Octonica.ClickHouseClient
     public class ClickHouseCommand : DbCommand
     {
         private string? _commandText;
+        private TimeSpan? _commandTimeout;
 
         [AllowNull]
         public override string CommandText
@@ -47,11 +48,15 @@ namespace Octonica.ClickHouseClient
 
         public override int CommandTimeout
         {
-            get => (int) CommandTimeoutSpan.TotalSeconds;
+            get => (int)CommandTimeoutSpan.TotalSeconds;
             set => CommandTimeoutSpan = TimeSpan.FromSeconds(value);
         }
 
-        public TimeSpan CommandTimeoutSpan { get; set; }
+        public TimeSpan CommandTimeoutSpan
+        {
+            get => GetCommandTimeout(Connection);
+            set => _commandTimeout = value;
+        }
 
         public override CommandType CommandType { get; set; }
 
@@ -120,14 +125,10 @@ namespace Octonica.ClickHouseClient
         {
             ClickHouseTcpClient.Session? session = null;
 
-            bool cancelOnFailure = false;
-            CancellationTokenSource? tokenSource = null;
+            bool cancelOnFailure = false;            
             try
             {
-                if (CommandTimeoutSpan > TimeSpan.Zero)
-                    tokenSource = new CancellationTokenSource(CommandTimeoutSpan);
-
-                session = await OpenSession(async, tokenSource, cancellationToken);
+                session = await OpenSession(async, cancellationToken);
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
@@ -154,7 +155,7 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.EndOfStream:
                             result = (result.read + progress.read, result.written + progress.written);
-                            session.Dispose();
+                            await session.Dispose(async);
 
                             if (result.written > 0)
                             {
@@ -194,11 +195,6 @@ namespace Octonica.ClickHouseClient
 
                 throw;
             }
-            catch (ClickHouseServerException)
-            {
-                session?.Dispose();
-                throw;
-            }
             catch (Exception ex)
             {
                 if (session != null)
@@ -212,7 +208,8 @@ namespace Octonica.ClickHouseClient
             }
             finally
             {
-                tokenSource?.Dispose();
+                if (session != null)
+                    await session.Dispose(async);
             }
         }
 
@@ -394,14 +391,10 @@ namespace Octonica.ClickHouseClient
                 throw new ArgumentException($"Command behavior \"{behavior}\" not supported.", nameof(behavior));
 
             ClickHouseTcpClient.Session? session = null;
-            CancellationTokenSource? sessionTokenSource = null;
             bool cancelOnFailure = false;
             try
             {
-                if (CommandTimeoutSpan > TimeSpan.Zero)
-                    sessionTokenSource = new CancellationTokenSource(CommandTimeoutSpan);
-
-                session = await OpenSession(async, sessionTokenSource, cancellationToken);
+                session = await OpenSession(async, cancellationToken);
                 var query = await SendQuery(session, async, cancellationToken);
 
                 cancelOnFailure = true;
@@ -422,18 +415,20 @@ namespace Octonica.ClickHouseClient
                 }
 
                 var firstTable = await session.ReadTable((ServerDataMessage) message, null, async, cancellationToken);
-                return new ClickHouseDataReader(firstTable, session, sessionTokenSource);
+                return new ClickHouseDataReader(firstTable, session);
             }
             catch (ClickHouseHandledException)
             {
-                session?.Dispose();
-                sessionTokenSource?.Dispose();
+                if (session != null)
+                    await session.Dispose(async);
+
                 throw;
             }
             catch (ClickHouseServerException)
             {
-                session?.Dispose();
-                sessionTokenSource?.Dispose();
+                if (session != null)
+                    await session.Dispose(async);
+
                 throw;
             }
             catch (Exception ex)
@@ -441,8 +436,6 @@ namespace Octonica.ClickHouseClient
                 Exception? aggrEx = null;
                 if (session != null)
                     aggrEx = await session.SetFailed(ex, cancelOnFailure, async);
-
-                sessionTokenSource?.Dispose();
 
                 if (aggrEx != null)
                     throw aggrEx;
@@ -481,13 +474,37 @@ namespace Octonica.ClickHouseClient
             return commandText;
         }
 
-        private ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationTokenSource? sessionTokenSource, CancellationToken cancellationToken)
+        private async ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken cancellationToken)
         {
             var connection = Connection;
             if (connection == null)
                 throw new InvalidOperationException("The connection is not set. The command can't be executed without a connection.");
 
-            return connection.OpenSession(async, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
+            SessionResources? resources = null;
+            try
+            {
+                var timeout = GetCommandTimeout(connection);
+                CancellationTokenSource? sessionTokenSource = null;
+                if (timeout > TimeSpan.Zero)
+                {
+                    sessionTokenSource = new CancellationTokenSource(timeout);
+                    resources = new SessionResources(sessionTokenSource);
+                }
+                
+                return await connection.OpenSession(async, resources, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
+            }
+            catch
+            {
+                if (resources != null)
+                    await resources.Release(async);
+
+                throw;
+            }
+        }
+
+        private TimeSpan GetCommandTimeout(ClickHouseConnection? connection)
+        {
+            return _commandTimeout ?? connection?.CommandTimeSpan ?? TimeSpan.FromSeconds(ClickHouseConnectionStringBuilder.DefaultCommandTimeout);
         }
 
         private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
@@ -684,6 +701,22 @@ namespace Octonica.ClickHouseClient
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
+        }
+
+        internal sealed class SessionResources : IClickHouseSessionExternalResources
+        {
+            private readonly CancellationTokenSource? _tokenSource;
+
+            public SessionResources(CancellationTokenSource? tokenSource)
+            {
+                _tokenSource = tokenSource;
+            }
+
+            public ValueTask Release(bool async)
+            {
+                _tokenSource?.Dispose();
+                return default;                
+            }
         }
     }
 }

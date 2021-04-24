@@ -358,12 +358,12 @@ namespace Octonica.ClickHouseClient
                 switch (message.MessageCode)
                 {
                     case ServerMessageCode.EndOfStream:
-                        _session.Dispose();
+                        await _session.Dispose(async);
                         break;
 
                     case ServerMessageCode.Error:
                         // An error is also indicates the end of the stream.
-                        _session.Dispose();
+                        await _session.Dispose(async);
                         if (disposing)
                             break;
 

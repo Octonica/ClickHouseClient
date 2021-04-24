@@ -32,7 +32,6 @@ namespace Octonica.ClickHouseClient
     {
         private readonly BlockHeader _blockHeader;
         private readonly ClickHouseTcpClient.Session _session;
-        private readonly CancellationTokenSource? _sessionTokenSource;
 
         private ulong _recordsAffected;
 
@@ -67,11 +66,10 @@ namespace Octonica.ClickHouseClient
 
         public override int Depth => 0;
 
-        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, CancellationTokenSource? sessionTokenSource)
+        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session)
         {
             _currentTable = table ?? throw new ArgumentNullException(nameof(table));
             _session = session ?? throw new ArgumentNullException(nameof(session));
-            _sessionTokenSource = sessionTokenSource;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
             _blockHeader = _currentTable.Header;
@@ -464,7 +462,7 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.Error:
                             State = ClickHouseDataReaderState.Closed;
-                            _session.Dispose();
+                            await _session.Dispose(async);
                             throw ((ServerErrorMessage) message).Exception;
 
                         case ServerMessageCode.Progress:
@@ -474,7 +472,7 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.EndOfStream:
                             State = ClickHouseDataReaderState.Closed;
-                            _session.Dispose();
+                            await _session.Dispose(async);
                             return false;
 
                         case ServerMessageCode.ProfileInfo:
@@ -686,8 +684,7 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            _session.Dispose();
-            _sessionTokenSource?.Dispose();
+            await _session.Dispose(async);
         }
 
         protected override void Dispose(bool disposing)

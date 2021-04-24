@@ -98,6 +98,18 @@ namespace Octonica.ClickHouseClient
 
         public override ConnectionState State => _connectionState.State;
 
+        internal TimeSpan? CommandTimeSpan
+        {
+            get
+            {
+                var commandTimeout = _connectionState.Settings?.CommandTimeout;
+                if (commandTimeout == null)
+                    return null;
+
+                return TimeSpan.FromSeconds(commandTimeout.Value);
+            }
+        }
+
         public ClickHouseConnection()
         {
             _connectionState = new ClickHouseConnectionState();
@@ -190,13 +202,12 @@ namespace Octonica.ClickHouseClient
 
         public new ClickHouseCommand CreateCommand()
         {
-            return new ClickHouseCommand(this) {CommandTimeout = _connectionState.Settings?.CommandTimeout ?? ClickHouseConnectionStringBuilder.DefaultCommandTimeout};
+            return new ClickHouseCommand(this);
         }
 
         public ClickHouseCommand CreateCommand(string commandText)
         {
-            var settings = _connectionState.Settings;
-            return new ClickHouseCommand(this) {CommandText = commandText, CommandTimeout = settings?.CommandTimeout ?? ClickHouseConnectionStringBuilder.DefaultCommandTimeout};
+            return new ClickHouseCommand(this) {CommandText = commandText};
         }
 
         protected override DbCommand CreateDbCommand()
@@ -226,7 +237,7 @@ namespace Octonica.ClickHouseClient
             bool cancelOnFailure = false;
             try
             {
-                session = await _tcpClient.OpenSession(async, CancellationToken.None, cancellationToken);
+                session = await _tcpClient.OpenSession(async, null, CancellationToken.None, cancellationToken);
 
                 var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand};
                 await session.SendQuery(messageBuilder, null, async, cancellationToken);
@@ -240,7 +251,7 @@ namespace Octonica.ClickHouseClient
 
                     case ServerMessageCode.TableColumns:
                         break;
-
+                        
                     default:
                         throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
                 }
@@ -264,12 +275,16 @@ namespace Octonica.ClickHouseClient
             }
             catch (ClickHouseServerException)
             {
-                session?.Dispose();
+                if (session != null)
+                    await session.Dispose(async);
+                
                 throw;
             }
             catch(ClickHouseHandledException)
             {
-                session?.Dispose();
+                if (session != null)
+                    await session.Dispose(async);
+
                 throw;
             }
             catch(Exception ex)
@@ -449,7 +464,7 @@ namespace Octonica.ClickHouseClient
             SetConnectionState(ConnectionState.Open);
         }
 
-        internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+        internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
             if (_tcpClient == null)
             {
@@ -457,7 +472,7 @@ namespace Octonica.ClickHouseClient
                 throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
             }
 
-            return _tcpClient.OpenSession(async, sessionCancellationToken, cancellationToken);
+            return _tcpClient.OpenSession(async, externalResources, sessionCancellationToken, cancellationToken);
         }
 
         private void OnClientFailed(object? sender, Exception? e)
@@ -471,8 +486,7 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Close(bool async)
         {
-            var connectionState = _connectionState;
-            switch (connectionState.State)
+            switch (_connectionState.State)
             {
                 case ConnectionState.Closed:
                     break; // Re-entrance is allowed
@@ -483,11 +497,11 @@ namespace Octonica.ClickHouseClient
                         // Acquire session for preventing access to the communication object
                         try
                         {
-                            await _tcpClient.OpenSession(async, CancellationToken.None, CancellationToken.None);
+                            await _tcpClient.OpenSession(async, null, CancellationToken.None, CancellationToken.None);
                         }
                         catch (ObjectDisposedException)
                         {
-                            if (connectionState.State != ConnectionState.Open)
+                            if (_connectionState.State != ConnectionState.Open)
                             {
                                 await Close(async);
                             }

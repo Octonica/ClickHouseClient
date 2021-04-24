@@ -24,6 +24,7 @@ using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -60,7 +61,7 @@ namespace Octonica.ClickHouseClient
             _typeInfoProvider = typeInfoProvider;
         }
 
-        public async ValueTask<Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+        public async ValueTask<Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
             if (!_isFailed)
             {
@@ -88,7 +89,7 @@ namespace Octonica.ClickHouseClient
 
             try
             {
-                return new Session(this, sessionCancellationToken);
+                return new Session(this, externalResources, sessionCancellationToken);
             }
             catch
             {
@@ -117,9 +118,10 @@ namespace Octonica.ClickHouseClient
             _client.Dispose();
         }
 
-        public class Session : IDisposable
+        public class Session : IDisposable, IAsyncDisposable
         {
             private readonly ClickHouseTcpClient _client;
+            private readonly IClickHouseSessionExternalResources? _externalResources;
             private readonly CancellationToken _sessionCancellationToken;
 
             public IClickHouseTypeInfoProvider TypeInfoProvider => _client._typeInfoProvider;
@@ -128,9 +130,10 @@ namespace Octonica.ClickHouseClient
 
             public bool IsFailed => _client._isFailed;
 
-            public Session(ClickHouseTcpClient client, CancellationToken sessionCancellationToken)
+            public Session(ClickHouseTcpClient client, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken)
             {
                 _client = client;
+                _externalResources = externalResources;
                 _sessionCancellationToken = sessionCancellationToken;
             }
 
@@ -436,16 +439,32 @@ namespace Octonica.ClickHouseClient
                 }
 
                 _client.SetFailed(unhandledException);
+
+                if (_externalResources != null)
+                    await _externalResources.Release(async);
+
                 return processedException;
             }
 
             public void Dispose()
             {
+                TaskHelper.WaitNonAsyncTask(Dispose(false));
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return Dispose(true);
+            }
+
+            public ValueTask Dispose(bool async)
+            {
                 if (IsDisposed || IsFailed)
-                    return;
+                    return default;
 
                 _client._semaphore.Release();
                 IsDisposed = true;
+
+                return _externalResources?.Release(async) ?? default;
             }
         }
     }
