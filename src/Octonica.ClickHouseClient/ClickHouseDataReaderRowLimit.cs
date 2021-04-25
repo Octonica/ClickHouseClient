@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,11 @@
 
 namespace Octonica.ClickHouseClient
 {
-    public enum ClickHouseDataReaderState
+    internal enum ClickHouseDataReaderRowLimit
     {
-        Broken = 0,
-        Closed = 1,
-        Data = 2,
-        NextResultPending = 3,
-        Totals = 4,
-        Extremes = 5,
-        ClosePending = 6
+        Zero = 0,
+        OneRow = 1,
+        OneResult = 2,
+        Infinite = 3
     }
 }

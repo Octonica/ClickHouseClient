@@ -484,7 +484,7 @@ namespace Octonica.ClickHouseClient
             _tcpClient = null;
         }
 
-        private async ValueTask Close(bool async)
+        internal async ValueTask Close(bool async)
         {
             switch (_connectionState.State)
             {

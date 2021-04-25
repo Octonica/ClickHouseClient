@@ -32,6 +32,7 @@ namespace Octonica.ClickHouseClient
     {
         private readonly BlockHeader _blockHeader;
         private readonly ClickHouseTcpClient.Session _session;
+        private readonly ClickHouseDataReaderRowLimit _rowLimit;
 
         private ulong _recordsAffected;
 
@@ -66,14 +67,15 @@ namespace Octonica.ClickHouseClient
 
         public override int Depth => 0;
 
-        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session)
+        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseDataReaderRowLimit rowLimit)
         {
             _currentTable = table ?? throw new ArgumentNullException(nameof(table));
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _rowLimit = rowLimit;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
             _blockHeader = _currentTable.Header;
-            State = ClickHouseDataReaderState.Data;
+            State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
         }
 
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
@@ -386,35 +388,59 @@ namespace Octonica.ClickHouseClient
 
         public sealed override bool Read()
         {
-            return TaskHelper.WaitNonAsyncTask(Read(false, false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(Read(false, CancellationToken.None));
         }
 
         public new ValueTask<bool> ReadAsync()
         {
-            return Read(false, true, CancellationToken.None);
+            return Read(true, CancellationToken.None);
         }
 
         public new ValueTask<bool> ReadAsync(CancellationToken cancellationToken)
         {
-            return Read(false, true, cancellationToken);
+            return Read(true, cancellationToken);
         }
 
         protected sealed override async Task<bool> ReadAsyncInternal(CancellationToken cancellationToken)
         {
-            return await Read(false, true, cancellationToken);
+            return await Read(true, cancellationToken);
+        }
+
+        private async ValueTask<bool> Read(bool async, CancellationToken cancellationToken)
+        {
+            if (State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken || State == ClickHouseDataReaderState.ClosePending)
+                return false;
+
+            bool result;
+            if (++_rowIndex >= _currentTable.Header.RowCount)
+            {
+                _rowIndex = _currentTable.Header.RowCount;
+
+                if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes)
+                {
+                    result = await Read(false, async, cancellationToken);
+
+                    if (!result && _rowLimit == ClickHouseDataReaderRowLimit.OneResult && State == ClickHouseDataReaderState.NextResultPending)
+                        await Cancel(false, async);
+                }
+                else
+                {
+                    result = false;
+                }
+            }
+            else
+            {                
+                result = true;
+            }
+
+            if (_rowLimit == ClickHouseDataReaderRowLimit.OneRow && result)
+                await Cancel(false, async);
+
+            return result;
         }
 
         private async ValueTask<bool> Read(bool nextResult, bool async, CancellationToken cancellationToken)
         {
-            if (!nextResult)
-            {
-                if (_rowIndex == _currentTable.Header.RowCount)
-                    return false;
-
-                if (++_rowIndex < _currentTable.Header.RowCount)
-                    return true;
-            }
-
             while (true)
             {
                 ClickHouseTable nextTable;
@@ -594,6 +620,26 @@ namespace Octonica.ClickHouseClient
             return await Read(true, async, cancellationToken);
         }
 
+        private async ValueTask Cancel(bool disposing, bool async)
+        {
+            if (State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken || State == ClickHouseDataReaderState.ClosePending)
+                return;
+
+            try
+            {
+                await _session.SendCancel(async);
+                State = ClickHouseDataReaderState.ClosePending;
+            }
+            catch (Exception ex)
+            {
+                State = ClickHouseDataReaderState.Broken;
+                await _session.SetFailed(ex, false, async);
+
+                if (!disposing)
+                    throw;
+            }
+        }
+
         public override void Close()
         {
             TaskHelper.WaitNonAsyncTask(Close(false, false));
@@ -611,12 +657,13 @@ namespace Octonica.ClickHouseClient
 
             if (!(State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken))
             {
-                await _session.SendCancel(async);
+                await Cancel(disposing, async);
 
-                while (true)
+                try
                 {
-                    try
+                    while (true)
                     {
+
                         var message = _nextResultMessage ?? await _session.ReadMessage(async, CancellationToken.None);
                         _nextResultMessage = null;
 
@@ -656,31 +703,31 @@ namespace Octonica.ClickHouseClient
                             default:
                                 throw new NotSupportedException($"Internal error. Message code \"{message.MessageCode}\" not supported.");
                         }
+
+                        break;
                     }
-                    catch (ClickHouseHandledException ex)
-                    {
-                        if (!disposing)
-                            throw;
-
-                        State = ClickHouseDataReaderState.Broken;
-                        await _session.SetFailed(ex.InnerException, false, async);
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        State = ClickHouseDataReaderState.Broken;
-                        var aggrEx = await _session.SetFailed(ex, false, async);
-
-                        if (disposing)
-                            return;
-
-                        if (aggrEx != null)
-                            throw aggrEx;
-
+                }
+                catch (ClickHouseHandledException ex)
+                {
+                    if (!disposing)
                         throw;
-                    }
 
-                    break;
+                    State = ClickHouseDataReaderState.Broken;
+                    await _session.SetFailed(ex.InnerException, false, async);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    State = ClickHouseDataReaderState.Broken;
+                    var aggrEx = await _session.SetFailed(ex, false, async);
+
+                    if (disposing)
+                        return;
+
+                    if (aggrEx != null)
+                        throw aggrEx;
+
+                    throw;
                 }
             }
 

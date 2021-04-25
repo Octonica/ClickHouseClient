@@ -128,8 +128,8 @@ namespace Octonica.ClickHouseClient
             bool cancelOnFailure = false;            
             try
             {
-                session = await OpenSession(async, cancellationToken);
-                var query = await SendQuery(session, async, cancellationToken);
+                session = await OpenSession(false, async, cancellationToken);
+                var query = await SendQuery(session, CommandBehavior.Default, async, cancellationToken);
 
                 cancelOnFailure = true;
                 (ulong read, ulong written) result = (0, 0), progress = (0, 0);
@@ -387,15 +387,53 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<ClickHouseDataReader> ExecuteDbDataReader(CommandBehavior behavior, bool async, CancellationToken cancellationToken)
         {
-            if (behavior != CommandBehavior.Default)
-                throw new ArgumentException($"Command behavior \"{behavior}\" not supported.", nameof(behavior));
+            const CommandBehavior knownBehaviorFlags =
+                CommandBehavior.CloseConnection |
+                CommandBehavior.KeyInfo |
+                CommandBehavior.SchemaOnly |
+                CommandBehavior.SequentialAccess |
+                CommandBehavior.SingleResult |
+                CommandBehavior.SingleRow;
+
+            var unknownBehaviorFlags = behavior & ~knownBehaviorFlags;
+            if (unknownBehaviorFlags != 0)
+                throw new ArgumentException($"Command behavior has unknown flags ({unknownBehaviorFlags}).", nameof(behavior));
+
+            if (behavior.HasFlag(CommandBehavior.KeyInfo))
+            {
+                throw new ArgumentException(
+                    $"Command behavior has unsupported flag {nameof(CommandBehavior.KeyInfo)}." + Environment.NewLine +
+                    "Please, report an issue if you have any idea of how this flag should affect the result (https://github.com/Octonica/ClickHouseClient/issues).",
+                    nameof(behavior));
+            }
+
+            ClickHouseDataReaderRowLimit rowLimit;
+            if (behavior.HasFlag(CommandBehavior.SchemaOnly))
+            {
+                if (behavior.HasFlag(CommandBehavior.SingleRow))
+                    throw new ArgumentException($"Command behavior's flags {nameof(CommandBehavior.SchemaOnly)} and {nameof(CommandBehavior.SingleRow)} are mutualy exclusive.", nameof(behavior));
+
+                rowLimit = ClickHouseDataReaderRowLimit.Zero;
+            }
+            else if (behavior.HasFlag(CommandBehavior.SingleRow))
+            {
+                rowLimit = ClickHouseDataReaderRowLimit.OneRow;
+            }
+            else if (behavior.HasFlag(CommandBehavior.SingleResult))
+            {
+                rowLimit = ClickHouseDataReaderRowLimit.OneResult;
+            }
+            else
+            {
+                rowLimit = ClickHouseDataReaderRowLimit.Infinite;
+            }
 
             ClickHouseTcpClient.Session? session = null;
             bool cancelOnFailure = false;
             try
             {
-                session = await OpenSession(async, cancellationToken);
-                var query = await SendQuery(session, async, cancellationToken);
+                session = await OpenSession(behavior.HasFlag(CommandBehavior.CloseConnection), async, cancellationToken);
+                var query = await SendQuery(session, behavior, async, cancellationToken);
 
                 cancelOnFailure = true;
                 var message = await session.ReadMessage(async, cancellationToken);
@@ -415,7 +453,10 @@ namespace Octonica.ClickHouseClient
                 }
 
                 var firstTable = await session.ReadTable((ServerDataMessage) message, null, async, cancellationToken);
-                return new ClickHouseDataReader(firstTable, session);
+                if (rowLimit == ClickHouseDataReaderRowLimit.Zero)
+                    await session.SendCancel(async);
+
+                return new ClickHouseDataReader(firstTable, session, rowLimit);
             }
             catch (ClickHouseHandledException)
             {
@@ -444,7 +485,7 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        private async ValueTask<string> SendQuery(ClickHouseTcpClient.Session session, bool async, CancellationToken cancellationToken)
+        private async ValueTask<string> SendQuery(ClickHouseTcpClient.Session session, CommandBehavior behavior, bool async, CancellationToken cancellationToken)
         {
             string commandText;
             IClickHouseTableWriter[]? tableWriters = null;
@@ -468,13 +509,26 @@ namespace Octonica.ClickHouseClient
                 setting = new List<KeyValuePair<string, string>>(1) {new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")};
             }
 
+            if (session.ServerInfo.Revision >= Revisions.MinRevisionWithSettingsSerializedAsStrings)
+            {
+                if (behavior.HasFlag(CommandBehavior.SchemaOnly) || behavior.HasFlag(CommandBehavior.SingleRow))
+                {
+                    // https://github.com/ClickHouse/ClickHouse/blob/master/src/Core/Settings.h
+                    // This settings are hints for the server. The result may contain more than one row.
+
+                    setting ??= new List<KeyValuePair<string, string>>(2);
+                    setting.Add(new KeyValuePair<string, string>("max_result_rows", "1"));
+                    setting.Add(new KeyValuePair<string, string>("result_overflow_mode", "break"));
+                }
+            }
+
             var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting};
             await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
         }
 
-        private async ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken cancellationToken)
+        private async ValueTask<ClickHouseTcpClient.Session> OpenSession(bool closeConnection, bool async, CancellationToken cancellationToken)
         {
             var connection = Connection;
             if (connection == null)
@@ -486,10 +540,10 @@ namespace Octonica.ClickHouseClient
                 var timeout = GetCommandTimeout(connection);
                 CancellationTokenSource? sessionTokenSource = null;
                 if (timeout > TimeSpan.Zero)
-                {
                     sessionTokenSource = new CancellationTokenSource(timeout);
-                    resources = new SessionResources(sessionTokenSource);
-                }
+
+                if (closeConnection || sessionTokenSource != null)
+                    resources = new SessionResources(closeConnection ? connection : null, sessionTokenSource);
                 
                 return await connection.OpenSession(async, resources, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
             }
@@ -705,17 +759,19 @@ namespace Octonica.ClickHouseClient
 
         internal sealed class SessionResources : IClickHouseSessionExternalResources
         {
+            private readonly ClickHouseConnection? _connection;
             private readonly CancellationTokenSource? _tokenSource;
 
-            public SessionResources(CancellationTokenSource? tokenSource)
+            public SessionResources(ClickHouseConnection? connection, CancellationTokenSource? tokenSource)
             {
+                _connection = connection;
                 _tokenSource = tokenSource;
             }
 
             public ValueTask Release(bool async)
             {
                 _tokenSource?.Dispose();
-                return default;                
+                return _connection?.Close(async) ?? default;
             }
         }
     }

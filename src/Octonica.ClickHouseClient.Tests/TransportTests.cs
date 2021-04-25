@@ -510,12 +510,168 @@ namespace Octonica.ClickHouseClient.Tests
                 while (await reader.ReadAsync())
                     ++count;
 
+                Assert.False(await reader.ReadAsync());
                 Assert.Equal(expectedCount, count);
                 Assert.True(reader.State == ClickHouseDataReaderState.NextResultPending || reader.State == ClickHouseDataReaderState.Closed);
 
             } while (await reader.NextResultAsync());
 
             Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+        }
+
+        [Fact]
+        public async Task CommandBehaviorCloseConnection()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand("SELECT * FROM system.numbers LIMIT 100");
+            await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection))
+            {
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(ConnectionState.Open, cn.State);
+            }
+
+            Assert.Equal(ConnectionState.Closed, cn.State);
+
+            await cn.OpenAsync();
+            await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection))
+            {
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(ConnectionState.Open, cn.State);
+
+                await reader.CloseAsync();
+                Assert.Equal(ConnectionState.Closed, cn.State);
+            }
+
+            await cn.OpenAsync();
+            await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection))
+            {
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    Assert.Equal(ConnectionState.Open, cn.State);
+                    ++count;
+                }
+
+                Assert.Equal(100, count);
+                Assert.Equal(ConnectionState.Closed, cn.State);
+
+                Assert.False(await reader.ReadAsync());
+            }
+
+            cmd.CommandText = "select x, sum(y) as v from (SELECT number%3 + 1 as x, number as y FROM numbers(10)) group by x with totals;";
+            await cn.OpenAsync();
+
+            await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection))
+            {
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    Assert.Equal(ConnectionState.Open, cn.State);
+                    ++count;
+                }
+
+                Assert.Equal(3, count);
+                Assert.Equal(ConnectionState.Open, cn.State);
+
+                Assert.True(await reader.NextResultAsync());
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(ConnectionState.Open, cn.State);
+                Assert.False(await reader.ReadAsync());
+                Assert.Equal(ConnectionState.Closed, cn.State);
+
+                Assert.False(await reader.ReadAsync());
+                Assert.False(await reader.NextResultAsync());
+            }
+
+            await cn.OpenAsync();
+
+            cmd.CommandText = "It IS NOT a query...";
+            await Assert.ThrowsAsync<ClickHouseServerException>(() => cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection));
+            Assert.Equal(ConnectionState.Closed, cn.State);
+        }
+
+        [Fact]
+        public async Task CommandBehaviorSchemaOnly()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand("SELECT * FROM system.numbers");
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly);
+
+            Assert.False(await reader.ReadAsync());
+            Assert.False(await reader.ReadAsync());
+            Assert.False(await reader.NextResultAsync());
+            Assert.False(await reader.ReadAsync());
+
+            Assert.Equal(1, reader.FieldCount);
+        }
+
+        [Fact]
+        public async Task CommandBehaviorSingleRow()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand("SELECT * FROM system.numbers");
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+
+            Assert.Equal(1, reader.FieldCount);
+            Assert.True(await reader.ReadAsync());
+
+            Assert.False(await reader.ReadAsync());
+            Assert.False(await reader.ReadAsync());
+            Assert.False(await reader.NextResultAsync());
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task CommandBehaviorSingleResult()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand("select x, sum(y) as v from (SELECT number%7 + 1 as x, number as y FROM numbers(100)) group by x with totals;");
+            cmd.Extremes = true;
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
+
+            int count = 0;
+            while (await reader.ReadAsync())
+                ++count;
+
+            Assert.False(reader.Read());
+            Assert.NotEqual(ClickHouseDataReaderState.NextResultPending, reader.State);
+
+            Assert.False(reader.NextResult());
+            Assert.False(reader.Read());
+        }
+
+        [Fact]
+        public async Task CommandBehaviorSequentialAccess()
+        {
+            // SequentialAccess is ignored
+
+            await using var cn = await OpenConnectionAsync();
+            await using var cmd = cn.CreateCommand("SELECT 41,42,43");
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            Assert.True(await reader.ReadAsync());
+
+            Assert.Equal(41, reader.GetInt32(0));
+            Assert.Equal(42, reader.GetInt32(1));
+            Assert.Equal(43, reader.GetInt32(2));
+
+            Assert.False(await reader.ReadAsync());
+        }
+        
+        [Fact]
+        public async Task CommandBehaviorKeyInfo()
+        {
+            // KeyInfo is not supported
+
+            await using var cn = await OpenConnectionAsync();
+            await using var cmd = cn.CreateCommand("SELECT 42");
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() => cmd.ExecuteReaderAsync(CommandBehavior.KeyInfo));
+            Assert.Equal("behavior", ex.ParamName);
         }
     }
 }

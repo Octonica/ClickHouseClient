@@ -126,6 +126,8 @@ namespace Octonica.ClickHouseClient
 
             public IClickHouseTypeInfoProvider TypeInfoProvider => _client._typeInfoProvider;
 
+            public ClickHouseServerInfo ServerInfo => _client.ServerInfo;
+
             public bool IsDisposed { get; private set; }
 
             public bool IsFailed => _client._isFailed;
