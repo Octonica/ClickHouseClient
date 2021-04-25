@@ -638,6 +638,7 @@ namespace Octonica.ClickHouseClient.Tests
             while (await reader.ReadAsync())
                 ++count;
 
+            Assert.Equal(7, count);
             Assert.False(reader.Read());
             Assert.NotEqual(ClickHouseDataReaderState.NextResultPending, reader.State);
 
