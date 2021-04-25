@@ -1,3 +1,10 @@
+### Octonica.ClickHouseClient release v1.1.8, 2021-04-25
+
+#### New Feature
+
+* `ClickHouseCommand.ExecuteDbDataReader` supports non-default command behavior ([#18](https://github.com/Octonica/ClickHouseClient/issues/18)).
+* Added method `GetTypeArgument` to the interface `IClickHouseTypeInfo`. This method allows to get additional arguments of the type (scale, precision, timezone, size).
+
 ### Octonica.ClickHouseClient release v1.1.7, 2021-03-15
 
 #### Bug Fix
