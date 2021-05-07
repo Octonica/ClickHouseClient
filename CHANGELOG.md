@@ -1,3 +1,9 @@
+### Octonica.ClickHouseClient release v1.1.9, 2021-05-07
+
+#### New Feature
+
+* Parameters in the format `@paramName` are supported in the text of a query ([#19](https://github.com/Octonica/ClickHouseClient/issues/19)).
+
 ### Octonica.ClickHouseClient release v1.1.8, 2021-04-25
 
 #### New Feature
