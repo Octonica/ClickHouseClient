@@ -115,6 +115,45 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task MsSqlLikeParamsTest()
+        {
+            await using var cn = await OpenConnectionAsync();
+            await using var cmd = cn.CreateCommand();
+
+            cmd.CommandText =
+                "select cast(@a as UUID) a, @b b, @long_parameter_name /*+@_*/ c, @d d, {e123_456_789e} e, @_ f, {g} g, '@e123_456_789e' h, \"@a\" i--@g should not be replaced" +
+                Environment.NewLine +
+                "from (select 'some real value' as `@a`)";
+
+            var now = DateTime.Now;
+            now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Local);
+            var id = Guid.NewGuid();
+
+            cmd.Parameters.Add(new ClickHouseParameter("{a}") { DbType = DbType.String, Value = id.ToString("D") });
+            cmd.Parameters.Add(new ClickHouseParameter("@B") { DbType = DbType.Guid, Value = DBNull.Value });
+            cmd.Parameters.Add(new ClickHouseParameter("@LONG_parameter_NAME") { DbType = DbType.Int32 });
+            cmd.Parameters.Add(new ClickHouseParameter("@D") { Value = 42m });
+            cmd.Parameters.Add(new ClickHouseParameter("e123_456_789E") { Value = "e123_456_789e" });
+            cmd.Parameters.Add(new ClickHouseParameter("@_"));
+            cmd.Parameters.Add(new ClickHouseParameter("g") { Value = now });
+
+            await using var reader = cmd.ExecuteReader();
+            Assert.True(await reader.ReadAsync());
+
+            Assert.Equal(id, reader.GetGuid(reader.GetOrdinal("a")));
+            Assert.True(reader.IsDBNull(reader.GetOrdinal("b")));
+            Assert.True(reader.IsDBNull(reader.GetOrdinal("c")));
+            Assert.Equal(42m, reader.GetDecimal(reader.GetOrdinal("d")));
+            Assert.Equal("e123_456_789e", reader.GetString(reader.GetOrdinal("e")));
+            Assert.True(reader.IsDBNull(reader.GetOrdinal("f")));
+            Assert.Equal(now, reader.GetDateTime(reader.GetOrdinal("g")));
+            Assert.Equal("@e123_456_789e", reader.GetString(reader.GetOrdinal("h")));
+            Assert.Equal("some real value", reader.GetString(reader.GetOrdinal("i")));
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
         public async Task EmptyStringParamTest()
         {
             const string query = @"select {url}, {data}";

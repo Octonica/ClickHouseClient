@@ -588,7 +588,7 @@ namespace Octonica.ClickHouseClient
                 var start = i > 0 ? parameterPositions[i - 1].offset + parameterPositions[i - 1].length : 0;
                 queryStringBuilder.Append(query, start, parameterPositions[i].offset - start);
 
-                var parameterName = query.Substring(offset + 1, typeSeparatorIdx < 0 ? length - 2 : typeSeparatorIdx - 1);
+                var parameterName = typeSeparatorIdx < 0 ? query.Substring(offset, length) : query.Substring(offset + 1, typeSeparatorIdx - 1);
                 if (!Parameters.TryGetValue(parameterName, out var parameter))
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
 
@@ -616,7 +616,8 @@ namespace Octonica.ClickHouseClient
             // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
 
             var identifierRegex = new Regex(@"^[a-zA-Z_][0-9a-zA-Z_]*(\:.+)?$");
-            ReadOnlySpan<char> significantChars = stackalloc char[6] { '-', '\'', '"', '`', '/', '{' };
+            var simpleIdentifierRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*");
+            ReadOnlySpan<char> significantChars = stackalloc char[7] { '-', '\'', '"', '`', '/', '{' , '@' };
             ReadOnlySpan<char> querySlice = query;
 
             var parameterPositions = new List<(int offset, int length, int typeSeparatorIdx)>();
@@ -739,8 +740,21 @@ namespace Octonica.ClickHouseClient
                         querySlice = querySlice.Slice(closeIdx + 1);
                         break;
 
+                    case '@':
+                        var simpleMatch = simpleIdentifierRegex.Match(query, position, querySlice.Length);
+                        if (simpleMatch.Success)
+                        {
+                            var len = simpleMatch.Groups[0].Length;
+                            parameterPositions.Add((position - 1, len + 1, -1));
+                            
+                            position += len;
+                            querySlice = querySlice.Slice(len);
+                        }
+
+                        break;                        
+
                     default:
-                        throw new NotSupportedException($"Internal error. Unexpected character \"{querySlice[idx]}\".");
+                        throw new NotSupportedException($"Internal error. Unexpected character \"{ch}\".");
                 }
             }
 
