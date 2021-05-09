@@ -67,4 +67,4 @@ await using (var writer = await conn.CreateColumnWriterAsync("insert into table_
 ```
 
 ### Build requirements
-In order to build the driver you need to have .NET Core SDK 3.1 or higher.
+In order to build the driver you need to have .NET SDK 5.0 or higher.
