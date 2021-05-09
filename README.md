@@ -26,13 +26,13 @@ ConnectionString syntax:
 Entry point for API is ADO .NET DbConnection Class: `Octonica.ClickHouse.ClickHouseConnection`.
 
 ### Extended API
-In order to provide non-ADO.NET complaint data manipulation functionality, proprietary ClickHouseColumnWriter API exists.
-Entry point for API is `ClickHouseConnection#CreateColumnWriter()` method.
+In order to provide non-ADO.NET complaint data manipulation functionality, proprietary [ClickHouseColumnWriter](docs/ClickHouseColumnWriter.md) API exists.
+Entry point for API is `ClickHouseConnection.CreateColumnWriter()` method.
 
 #### Simple SELECT async verison
 ```csharp
 var sb = new ClickHouseConnectionStringBuilder();
-sb.Host = "192.168.121.143";
+sb.Host = "127.0.0.1";
 using var conn = new ClickHouseConnection(sb);
 await conn.OpenAsync();
 var currentUser = await conn.CreateCommand("select currentUser()").ExecuteScalarAsync();
@@ -47,6 +47,23 @@ using var cmd = conn.CreateCommand("INSERT INTO table_you_just_created SELECT {i
 cmd.Parameters.AddWithValue("id", Guid.NewGuid());
 cmd.Parameters.AddWithValue("dt", DateTime.Now, System.Data.DbType.DateTime);
 var _ = cmd.ExecuteNonQuery();
+```
+#### Bulk insert
+```csharp
+using var conn = new ClickHouseConnection("Host=127.0.0.1");
+conn.Open();
+using var cmd = conn.CreateCommand("CREATE TABLE IF NOT EXISTS table_with_two_fields(id Int32, name String) engine Memory");
+await cmd.ExecuteNonQueryAsync();
+
+//generate values
+List<int> ids = Enumerable.Range(1, 10_000).ToList();
+List<string> names = ids.Select(i => $"Name #{i}").ToList();
+
+//insert data
+await using (var writer = await conn.CreateColumnWriterAsync("insert into table_with_two_fields(id, name) values", default))
+{
+	await writer.WriteTableAsync(new object[] { ids, names }, ids.Count, default);
+}
 ```
 
 ### Build requirements
