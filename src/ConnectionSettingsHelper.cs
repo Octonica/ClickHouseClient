@@ -34,12 +34,32 @@ namespace Octonica.ClickHouseClient
 
         private static (ClickHouseConnectionSettings settings, string connectionString) GetConnectionSettingsInternal()
         {
+            const string envVariableName = "CLICKHOUSE_TEST_CONNECTION";
             const string configFileName = "clickHouse.dbconfig";
-            const string conStrExample = "host=domain.com; port=9000; user=default;";
+            const string conStrExample = "host=clickhouse.example.com; port=9000; user=default;";
+
+            var configTextFromEnvVar = Environment.GetEnvironmentVariable(envVariableName);
+            if (configTextFromEnvVar != null)
+            {
+                try
+                {
+                    var builder = new ClickHouseConnectionStringBuilder(configTextFromEnvVar);
+                    return (builder.BuildSettings(), configTextFromEnvVar);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"The connection string from the environment variable '{envVariableName}' is not valid. Connection string example: '{conStrExample}'. {ex.Message}", ex);
+                }
+            }
 
             string configPath = Path.Combine(AppContext.BaseDirectory, configFileName);
             if (!File.Exists(configPath))
-                throw new FileNotFoundException($"File '{configFileName}' not found. This file is required. It should contain the connection string. Connection string example: '{conStrExample}'.");
+            {
+                throw new InvalidOperationException(
+                    "The connection string is required. " +
+                    $"Please, set the environment variable '{envVariableName}' or write the connection string to the file '{configFileName}'. " +
+                    $"Connection string example: '{conStrExample}'.");
+            }
             
             string configText = File.ReadAllText(configPath);
             try
