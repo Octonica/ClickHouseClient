@@ -221,5 +221,34 @@ namespace Octonica.ClickHouseClient.Tests
 
             Assert.Equal(42, typeInfo.GetTypeArgument(0));
         }
+
+        [Fact]
+        public void NamedTupleArguments()
+        {
+            var typeNames = new[] { "UInt32", "Int64", "Nullable(String)", "Enum16('ok'=0, 'notOk'=8096)", "UInt16", "String", "Float64", "DateTime64(2, 'America/Los_Angeles')", "Nullable(Decimal(28, 4))" };
+            var itemNames = new[] { "A", "second_item", "B", "_4", "C", "   SomeOtherName", "   _O_O_     ", "_8 ", "\t OMEGA \t" };
+
+            Assert.Equal(typeNames.Length, itemNames.Length);
+
+            for (int i = 1; i <= typeNames.Length; i++)
+            {
+                var tupleItems = Enumerable.Range(0, i).Select(j => (char.IsWhiteSpace(itemNames[j][^1]) ? itemNames[j] : (itemNames[j] + ' ')) + typeNames[j]);
+                var typeName = "Tuple(" + string.Join(',',  tupleItems) + ')';
+                var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+
+                Assert.Equal(i, typeInfo.GenericArgumentsCount);
+                Assert.Equal(i, typeInfo.TypeArgumentsCount);
+                for (int j = 0; j < i; j++)
+                {
+                    IClickHouseTypeInfo baseType = typeInfo.GetGenericArgument(j);
+                    Assert.Equal(typeNames[j], baseType.ComplexTypeName);
+
+                    var typeArgument = typeInfo.GetTypeArgument(j);
+                    var namedType = Assert.IsAssignableFrom<KeyValuePair<string, IClickHouseTypeInfo>>(typeArgument);
+                    Assert.Equal(itemNames[j].Trim(), namedType.Key);
+                    Assert.Equal(typeNames[j], namedType.Value.ComplexTypeName);
+                }
+            }
+        }
     }
 }

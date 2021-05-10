@@ -1080,6 +1080,15 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadNamedTupleScalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+            var cmd = connection.CreateCommand("SELECT CAST(('hello', 1) AS Tuple(name String, id UInt32))");
+            var result = await cmd.ExecuteScalarAsync<(string firstItem, uint secondItem)>();
+            Assert.Equal(("hello", 1u), result);
+        }
+
+        [Fact]
         public async Task SkipTupleColumn()
         {
             const string query = @"SELECT T.tval

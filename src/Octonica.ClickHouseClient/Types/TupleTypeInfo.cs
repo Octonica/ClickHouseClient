@@ -20,6 +20,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -29,6 +30,7 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class TupleTypeInfo : IClickHouseColumnTypeInfo
     {
         private readonly List<IClickHouseColumnTypeInfo>? _elementTypes;
+        private readonly List<string>? _elementNames;
 
         public string ComplexTypeName { get; }
 
@@ -42,10 +44,26 @@ namespace Octonica.ClickHouseClient.Types
             _elementTypes = null;
         }
 
-        private TupleTypeInfo(List<IClickHouseColumnTypeInfo> elementTypes)
+        private TupleTypeInfo(List<IClickHouseColumnTypeInfo> elementTypes, List<string>? elementNames)
         {
-            ComplexTypeName = TypeName + "(" + string.Join(", ", elementTypes.Select(t => t.ComplexTypeName)) + ")";
+            if (elementNames != null && elementTypes.Count != elementNames.Count)
+                throw new ArgumentException("The number of elements must be equal to the number of element's types.", nameof(elementNames));
+
+            var sb = new StringBuilder(TypeName).Append('(');
+            for (int i = 0; i < elementTypes.Count; i++)
+            {
+                if (i > 0)
+                    sb.Append(", ");
+
+                if (elementNames != null)
+                    sb.Append(elementNames[i]).Append(' ');
+
+                sb.Append(elementTypes[i].ComplexTypeName);
+            }
+
+            ComplexTypeName = sb.Append(')').ToString();
             _elementTypes = elementTypes;
+            _elementNames = elementNames;
         }
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
@@ -70,9 +88,52 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
 
             var elementTypes = new List<IClickHouseColumnTypeInfo>(options.Count);
-            elementTypes.AddRange(options.Select(typeInfoProvider.GetTypeInfo));
+            List<string>? elementNames = null;
+            foreach(var option in options)
+            {
+                var trimmedValue = option.Trim();
+                int spaceIdx = -1;
+                for (int i = 0; i < trimmedValue.Length; i++)
+                {
+                    if (char.IsWhiteSpace(trimmedValue.Span[i]))
+                    {
+                        spaceIdx = i;
+                        break;
+                    }
 
-            return new TupleTypeInfo(elementTypes);
+                    if (!char.IsLetterOrDigit(trimmedValue.Span[i]) && trimmedValue.Span[i] != '_')
+                        break;
+                }
+                
+                if (spaceIdx < 0)
+                {
+                    if (elementNames != null)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
+
+                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue);
+                    elementTypes.Add(typeInfo);
+                }
+                else
+                {
+                    Debug.Assert(spaceIdx > 0);
+
+                    if (elementNames == null)
+                    {
+                        if (elementTypes.Count > 0)
+                            throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
+
+                        elementNames = new List<string>(options.Count);
+                    }
+
+                    var name = trimmedValue.Slice(0, spaceIdx).ToString();
+                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue.Slice(spaceIdx));
+
+                    elementTypes.Add(typeInfo);
+                    elementNames.Add(name);
+                }
+            }
+
+            return new TupleTypeInfo(elementTypes, elementNames);
         }
 
         public Type GetFieldType()
@@ -94,6 +155,17 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return _elementTypes[index];
+        }
+
+        public object GetTypeArgument(int index)
+        {
+            if (_elementTypes == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            if (_elementNames == null)
+                return _elementTypes[index];
+
+            return new KeyValuePair<string, IClickHouseTypeInfo>(_elementNames[index], _elementTypes[index]);
         }
 
         public static Type MakeTupleType(IReadOnlyList<Type> genericArgs)
