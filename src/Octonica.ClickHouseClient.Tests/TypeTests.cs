@@ -1083,9 +1083,9 @@ namespace Octonica.ClickHouseClient.Tests
         public async Task ReadNamedTupleScalar()
         {
             await using var connection = await OpenConnectionAsync();
-            var cmd = connection.CreateCommand("SELECT CAST(('hello', 1) AS Tuple(name String, id UInt32))");
-            var result = await cmd.ExecuteScalarAsync<(string firstItem, uint secondItem)>();
-            Assert.Equal(("hello", 1u), result);
+            var cmd = connection.CreateCommand("SELECT CAST(('hello', 1, -1) AS Tuple(name String, id UInt32, `e \\`e\\` e` Int32))");
+            var result = await cmd.ExecuteScalarAsync<(string firstItem, uint secondItem, int thirdItem)>();
+            Assert.Equal(("hello", 1u, -1), result);
         }
 
         [Fact]

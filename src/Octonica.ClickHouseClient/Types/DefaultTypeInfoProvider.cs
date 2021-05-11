@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,8 +91,8 @@ namespace Octonica.ClickHouseClient.Types
                 int count = 1;
                 int currentIdx = pOpenIdx;
                 int optionStartIdx = pOpenIdx + 1;
-                bool escaped = false;
-                ReadOnlySpan<char> significantChars = "(,)'";
+                char? escaped = null;
+                ReadOnlySpan<char> significantChars = "(,)'`";
                 do
                 {
                     if (typeNameSpan.Length - 1 == currentIdx)
@@ -104,11 +104,19 @@ namespace Octonica.ClickHouseClient.Types
 
                     pNextIdx += currentIdx + 1;
                     currentIdx = pNextIdx;
-                    if (typeNameSpan[currentIdx] == '\'')
+                    if ("'`".Contains(typeNameSpan[currentIdx]))
                     {
-                        escaped = !escaped;
+                        if (escaped == null)
+                        {
+                            escaped = typeNameSpan[currentIdx];
+                        }
+                        else if (escaped.Value == typeNameSpan[currentIdx])
+                        {
+                            if (currentIdx > 0 && typeNameSpan[currentIdx - 1] != '\\')
+                                escaped = null;
+                        }
                     }
-                    else if (!escaped)
+                    else if (escaped == null)
                     {
                         if (typeNameSpan[currentIdx] == '(')
                         {

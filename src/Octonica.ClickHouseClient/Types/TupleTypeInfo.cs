@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ namespace Octonica.ClickHouseClient.Types
                     sb.Append(", ");
 
                 if (elementNames != null)
-                    sb.Append(elementNames[i]).Append(' ');
+                    ClickHouseSyntaxHelper.AppendIdentifierLiteral(sb, elementNames[i]).Append(' ');
 
                 sb.Append(elementTypes[i].ComplexTypeName);
             }
@@ -92,20 +92,11 @@ namespace Octonica.ClickHouseClient.Types
             foreach(var option in options)
             {
                 var trimmedValue = option.Trim();
-                int spaceIdx = -1;
-                for (int i = 0; i < trimmedValue.Length; i++)
-                {
-                    if (char.IsWhiteSpace(trimmedValue.Span[i]))
-                    {
-                        spaceIdx = i;
-                        break;
-                    }
-
-                    if (!char.IsLetterOrDigit(trimmedValue.Span[i]) && trimmedValue.Span[i] != '_')
-                        break;
-                }
+                var identifierLen = ClickHouseSyntaxHelper.GetIdentifierLiteralLength(trimmedValue.Span);
+                if (identifierLen == trimmedValue.Span.Length)
+                    identifierLen = -1;
                 
-                if (spaceIdx < 0)
+                if (identifierLen < 0)
                 {
                     if (elementNames != null)
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
@@ -115,8 +106,6 @@ namespace Octonica.ClickHouseClient.Types
                 }
                 else
                 {
-                    Debug.Assert(spaceIdx > 0);
-
                     if (elementNames == null)
                     {
                         if (elementTypes.Count > 0)
@@ -125,8 +114,8 @@ namespace Octonica.ClickHouseClient.Types
                         elementNames = new List<string>(options.Count);
                     }
 
-                    var name = trimmedValue.Slice(0, spaceIdx).ToString();
-                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue.Slice(spaceIdx));
+                    var name = ClickHouseSyntaxHelper.GetIdentifier(trimmedValue.Span.Slice(0, identifierLen));
+                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue.Slice(identifierLen + 1));
 
                     elementTypes.Add(typeInfo);
                     elementNames.Add(name);
