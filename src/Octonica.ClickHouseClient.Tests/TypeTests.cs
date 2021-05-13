@@ -680,6 +680,64 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadEnumColumn()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand(@"SELECT CAST(T.col AS Enum(''=0, '\\e\s\c\\a\p\\e'=1, '\'val\''=2, '\r\n\t\d\\\r\n'=3,'\a\b\c\d\e\f\g\h\i\j\k\l\m\n\o\p\q\r\s\t\u\v\w\x20\y\z'=4)) AS enumVal, toString(enumVal) AS strVal
+    FROM (SELECT 0 AS col UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) AS T");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            var columnType = reader.GetFieldTypeInfo(0);
+            var typeNames = new Dictionary<int, string>();
+            for(int i=0; i<columnType.TypeArgumentsCount; i++)
+            {
+                var obj = columnType.GetTypeArgument(i);
+                var pair = Assert.IsType<KeyValuePair<string, sbyte>>(obj);
+                typeNames.Add(pair.Value, pair.Key);
+            }
+
+            int bitmap = 0;
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetFieldValue<int>(0);
+                var defaultValue = reader.GetValue(0);
+                var strValue = Assert.IsType<string>(defaultValue);
+                var expectedStrValue = reader.GetFieldValue<string>(1);
+                
+                Assert.Equal(expectedStrValue, strValue);
+
+                switch (value)
+                {
+                    case 0:
+                        Assert.Equal(string.Empty, strValue);
+                        break;
+                    case 1:
+                        Assert.Equal(@"\e\s\c\a\p\e", strValue);
+                        break;
+                    case 2:
+                        Assert.Equal("'val'", strValue);
+                        break;
+                    case 3:
+                        Assert.Equal("\r\n\t\\d\\\r\n", strValue);
+                        break;
+                    case 4:
+                        Assert.Equal("\a\b\\c\\d\u001b\f\\g\\h\\i\\j\\k\\l\\m\n\\o\\p\\q\r\\s\t\\u\v\\w\x20\\y\\z", strValue);
+                        break;
+                    default:
+                        Assert.True(false, $"Unexpected value: {value}.");
+                        break;
+                }
+
+                Assert.Equal(strValue, typeNames[value]);
+
+                bitmap ^= 1 << value;
+            }
+
+            Assert.Equal(31, bitmap);
+        }
+
+        [Fact]
         public async Task ReadEnumScalar()
         {
             await using var connection = await OpenConnectionAsync();

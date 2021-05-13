@@ -19,7 +19,6 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
-using System.Text.RegularExpressions;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -29,8 +28,6 @@ namespace Octonica.ClickHouseClient.Types
     internal abstract class EnumTypeInfoBase<TValue> : IClickHouseColumnTypeInfo
         where TValue : struct
     {
-        private readonly Regex _enumItemRegex = new Regex(@"^\s*\'([^']*)\'\s*=\s*(-?\d+)\s*$");
-
         private readonly Dictionary<string, TValue>? _enumMap;
         private readonly Dictionary<TValue, string>? _reversedEnumMap;
         private readonly List<string>? _mapOrder;
@@ -131,18 +128,21 @@ namespace Octonica.ClickHouseClient.Types
                 else
                     complexNameBuilder.Append(", ");
 
-                var optionStr = option.ToString();
-                var match = _enumItemRegex.Match(optionStr);
-                if (!match.Success)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The fragment \"{optionStr}\" is not recognized as an item of the enum.");
+                var keyStrLen = ClickHouseSyntaxHelper.GetSingleQuoteStringLength(option.Span);
+                if (keyStrLen < 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The fragment \"{option}\" is not recognized as an item of the enum.");
 
-                var key = match.Groups[1].Value;
-                var valueStr = match.Groups[2].Value;
+                var key = ClickHouseSyntaxHelper.GetSingleQuoteString(option.Slice(0, keyStrLen).Span);
+                var valuePart = option.Slice(keyStrLen);
+                var eqSignIdx = valuePart.Span.IndexOf('=');
+                if (eqSignIdx < 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The fragment \"{option}\" is not recognized as an item of the enum.");
 
-                if (!TryParse(valueStr, out var value))
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value {valueStr} is not a valid value of {TypeName}.");
+                valuePart = valuePart.Slice(eqSignIdx + 1).Trim();                      
+                if (!TryParse(valuePart.Span, out var value))
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value {valuePart} is not a valid value of {TypeName}.");
 
-                complexNameBuilder.Append(optionStr);
+                complexNameBuilder.Append(option);
                 parsedOptions.Add(new KeyValuePair<string, TValue>(key, value));
             }
 

@@ -169,6 +169,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Theory]
         [InlineData("Enum8('a' = 42)", new[] { "a" }, new sbyte[] { 42 })]
         [InlineData("Enum8('a' = 2, 'C' = -3,'b'=1)", new[] { "a", "C", "b" }, new sbyte[] { 2, -3, 1 })]
+        [InlineData("Enum8('\\'a\\'' = -5, ' \\tescaped \\'value\\' ({[ ' = -9,'\\r\\n\\t\\d\\\\'= 18)", new[] { "'a'", " \tescaped 'value' ({[ ", "\r\n\t\\d\\" }, new sbyte[] { -5, -9, 18 })]
         public void Enum8TypeArguments(string typeName, string[] expectedKeys, sbyte[] expectedValues)
         {
             Assert.Equal(expectedKeys.Length, expectedValues.Length);
@@ -191,6 +192,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Theory]
         [InlineData("Enum16('a' = 1024)", new[] { "a" }, new short[] { 1024 })]
         [InlineData("Enum16('a' = 8965, 'C' = 5,'b'=-3256)", new[] { "a", "C", "b" }, new short[] { 8965, 5, -3256 })]
+        [InlineData("Enum16('\"a\"' = 31000 , '\\'\\\\e\\s\\c\\\\a\\p\\e\\d\\'' = -31000, '}])' = 42)", new[] { "\"a\"", @"'\e\s\c\a\p" + "\x1b" + @"\d'", "}])" }, new short[] { 31000, -31000, 42 })]
         public void Enum16TypeArguments(string typeName, string[] expectedKeys, short[] expectedValues)
         {
             Assert.Equal(expectedKeys.Length, expectedValues.Length);
@@ -207,7 +209,7 @@ namespace Octonica.ClickHouseClient.Tests
                 var typeArgument = Assert.IsType<KeyValuePair<string, short>>(typeArgumentObj);
                 Assert.Equal(typeArgument.Key, expectedKeys[i]);
                 Assert.Equal(typeArgument.Value, expectedValues[i]);
-            }            
+            }
         }
 
         [Fact]
