@@ -30,21 +30,29 @@ namespace Octonica.ClickHouseClient.Tests
     {
         private const string TestTableName = "stream_insert_test";
 
+        private readonly TableFixture _tableFixture;
+
+        public ColumnWriterTests(TableFixture tableFixture)
+        {
+            _tableFixture = tableFixture;
+        }
+
         [Fact]
         public async Task InsertValues()
         {
             await using var con = await OpenConnectionAsync();
 
+            var rangeStart = _tableFixture.ReserveRange(100);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
                 var columns = new object?[writer.FieldCount];
-                columns[writer.GetOrdinal("id")] = new[] {10000, 10001};
+                columns[writer.GetOrdinal("id")] = new[] { rangeStart, rangeStart + 1 };
                 columns[writer.GetOrdinal("num")] = new List<decimal?> {49999.99m, -999999.99999m};
 
                 await writer.WriteTableAsync(columns, 2, CancellationToken.None);
             }
 
-            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>=10000 AND id<20000");
+            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>={rangeStart} AND id<{rangeStart + 2}");
             int count = 0;
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
@@ -55,7 +63,7 @@ namespace Octonica.ClickHouseClient.Tests
                     var num = reader.GetDecimal(2);
 
                     Assert.Equal("NULL", str);
-                    switch (id - 10000)
+                    switch (id - rangeStart)
                     {
                         case 0:
                             Assert.Equal(49999.99m, num);
@@ -80,18 +88,19 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var con = await OpenConnectionAsync();
 
+            var rangeStart = _tableFixture.ReserveRange(10_000);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
                 var columns = new Dictionary<string, object>
                 {
-                    ["id"] = Enumerable.Range(20_000, int.MaxValue - 20_000),
+                    ["id"] = Enumerable.Range(rangeStart, int.MaxValue - rangeStart),
                     ["str"] = Enumerable.Range(0, int.MaxValue).Select(i => i % 3 == 0 ? i % 5 == 0 ? "FizzBuzz" : "Fizz" : i % 5 == 0 ? "Buzz" : i.ToString())
                 };
 
                 await writer.WriteTableAsync(columns, 100, CancellationToken.None);
             }
 
-            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>=20000 AND id<30000");
+            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>={rangeStart} AND id<{rangeStart + 10_000}");
             int count = 0;
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
@@ -102,7 +111,7 @@ namespace Octonica.ClickHouseClient.Tests
                     var num = reader.GetFieldValue<decimal>(2, null);
                     Assert.Null(num);
 
-                    var i = id - 20_000;
+                    var i = id - rangeStart;
                     switch (str)
                     {
                         case "Fizz":
@@ -137,16 +146,17 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var con = await OpenConnectionAsync();
 
+            var rangeStart = _tableFixture.ReserveRange(10_000);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
                 var columns = new object?[writer.FieldCount];
-                columns[writer.GetOrdinal("id")] = Enumerable.Range(30_000, int.MaxValue - 30_000);
+                columns[writer.GetOrdinal("id")] = Enumerable.Range(rangeStart, int.MaxValue - rangeStart);
                 columns[writer.GetOrdinal("num")] = new AsyncTestFibSequence();
 
                 await writer.WriteTableAsync(columns, 63, CancellationToken.None);
             }
 
-            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>=30000 AND id<40000 ORDER BY id");
+            var cmd = con.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id>={rangeStart} AND id<{rangeStart + 10_000} ORDER BY id");
             int count = 0;
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
@@ -158,7 +168,7 @@ namespace Octonica.ClickHouseClient.Tests
                     var num = reader.GetFieldValue<decimal>(2, null);
                     Assert.Null(str);
 
-                    var i = id - 30_000;
+                    var i = id - rangeStart;
                     Assert.Equal(count, i);
 
                     if (current == null)
@@ -187,17 +197,19 @@ namespace Octonica.ClickHouseClient.Tests
 
             var values = new List<string>
                 {"ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять", "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать"};
+
+            var rangeStart = _tableFixture.ReserveRange(10_000);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
                 writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.UTF7));
                 var columns = new object?[writer.FieldCount];
-                columns[writer.GetOrdinal("id")] = Enumerable.Range(40_000, int.MaxValue - 40_000);
+                columns[writer.GetOrdinal("id")] = Enumerable.Range(rangeStart, int.MaxValue - rangeStart);
                 columns[writer.GetOrdinal("str")] = values;
 
                 await writer.WriteTableAsync(columns, values.Count, CancellationToken.None);
             }
 
-            var cmd = con.CreateCommand($"SELECT CAST(id - 40000 AS Int32), convertCharset(str, 'UTF-7', 'cp1251'), num FROM {TestTableName} WHERE id>=40000 AND id<50000 ORDER BY id");
+            var cmd = con.CreateCommand($"SELECT CAST(id - {rangeStart} AS Int32), convertCharset(str, 'UTF-7', 'cp1251'), num FROM {TestTableName} WHERE id>={rangeStart} AND id<{rangeStart + 10_000} ORDER BY id");
             int count = 0;
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
@@ -225,16 +237,17 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var con = await OpenConnectionAsync();
 
+            var rangeStart = _tableFixture.ReserveRange(100);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName}(num, id, str) VALUES", CancellationToken.None))
             {
-                await writer.WriteRowAsync(new List<object?> {42m, 50_000, "Hello"}, CancellationToken.None);
-                writer.WriteRow(null, 50_001, "world!");
-                writer.WriteRow(new List<object?> {42.5m, 50_002, DBNull.Value});
+                await writer.WriteRowAsync(new List<object?> {42m, rangeStart, "Hello"}, CancellationToken.None);
+                writer.WriteRow(null, rangeStart + 1, "world!");
+                writer.WriteRow(new List<object?> { 42.5m, rangeStart + 2, DBNull.Value });
 
                 await writer.EndWriteAsync(CancellationToken.None);
             }
 
-            var cmd = con.CreateCommand($"SELECT cast(T.id - 50000 AS Int32) id, T.str, T.num FROM {TestTableName} AS T WHERE T.id>=50000 AND T.id<60000");
+            var cmd = con.CreateCommand($"SELECT cast(T.id - {rangeStart} AS Int32) id, T.str, T.num FROM {TestTableName} AS T WHERE T.id>={rangeStart} AND T.id<{rangeStart + 100}");
             int count = 0;
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
@@ -586,7 +599,8 @@ namespace Octonica.ClickHouseClient.Tests
         public async Task InsertLargeTable()
         {
             // "Large" means that the size of the table is greater than the size of the buffer
-            const int startId = 100_000, rowCount = 100_000;
+            const int rowCount = 100_000;
+            var startId = _tableFixture.ReserveRange(rowCount);
 
             var settings = new ClickHouseConnectionStringBuilder(GetDefaultConnectionSettings()) {BufferSize = 4096};
 
@@ -623,7 +637,8 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public async Task InsertFromSecondaryInterfaces()
         {
-            const int startId = 200_000, rowCount = 100;
+            const int rowCount = 100;
+            var startId = _tableFixture.ReserveRange(rowCount);
 
             // Each wrapper implements only one interface
             var ids = new EnumerableListWrapper<int>(Enumerable.Range(startId, rowCount).ToList());
@@ -666,7 +681,8 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public async Task InsertValuesWithLowRowCount()
         {
-            const int startId = 200_100, rowCount = 100, rowCap = 71;
+            const int rowCount = 100, rowCap = 71;
+            var startId = _tableFixture.ReserveRange(rowCount);
 
             await using var con = await OpenConnectionAsync();
 
@@ -770,7 +786,8 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public async Task InsertStringFromMemory()
         {
-            const int startId = 200_200, rowCount = 400;
+            const int rowCount = 400;
+            var startId = _tableFixture.ReserveRange(rowCount);
 
             const string someText =
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " +
@@ -962,6 +979,8 @@ namespace Octonica.ClickHouseClient.Tests
 
         public class TableFixture : ClickHouseTestsBase, IDisposable
         {
+            private int _identity;
+
             public TableFixture()
             {
                 using var cn = OpenConnection();
@@ -971,6 +990,27 @@ namespace Octonica.ClickHouseClient.Tests
 
                 cmd = cn.CreateCommand($"CREATE TABLE {TestTableName}(id Int32, str Nullable(String), num Nullable(Decimal64(6))) ENGINE=Memory");
                 cmd.ExecuteNonQuery();
+            }
+
+            /// <summary>
+            /// Reserves a range of unique sequential identifiers
+            /// </summary>
+            /// <param name="length">The length of a range</param>
+            /// <returns>The first identifier of the reserved range</returns>
+            public int ReserveRange(int length)
+            {
+                Assert.True(length > 0);
+
+                var identity = _identity;
+                while (true)
+                {
+                    var nextIdentity = identity + length;
+                    var originalValue = Interlocked.CompareExchange(ref _identity, nextIdentity, identity);
+                    if (originalValue == identity)
+                        return identity;
+
+                    identity = originalValue;
+                }
             }
 
             public void Dispose()
