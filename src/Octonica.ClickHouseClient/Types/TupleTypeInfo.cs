@@ -44,24 +44,12 @@ namespace Octonica.ClickHouseClient.Types
             _elementTypes = null;
         }
 
-        private TupleTypeInfo(List<IClickHouseColumnTypeInfo> elementTypes, List<string>? elementNames)
+        private TupleTypeInfo(string complexTypeName, List<IClickHouseColumnTypeInfo> elementTypes, List<string>? elementNames)
         {
             if (elementNames != null && elementTypes.Count != elementNames.Count)
                 throw new ArgumentException("The number of elements must be equal to the number of element's types.", nameof(elementNames));
 
-            var sb = new StringBuilder(TypeName).Append('(');
-            for (int i = 0; i < elementTypes.Count; i++)
-            {
-                if (i > 0)
-                    sb.Append(", ");
-
-                if (elementNames != null)
-                    ClickHouseSyntaxHelper.AppendIdentifierLiteral(sb, elementNames[i]).Append(' ');
-
-                sb.Append(elementTypes[i].ComplexTypeName);
-            }
-
-            ComplexTypeName = sb.Append(')').ToString();
+            ComplexTypeName = complexTypeName;
             _elementTypes = elementTypes;
             _elementNames = elementNames;
         }
@@ -87,13 +75,16 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypes != null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
 
+            var complexTypeNameBuilder = new StringBuilder(TypeName).Append('(');
             var elementTypes = new List<IClickHouseColumnTypeInfo>(options.Count);
             List<string>? elementNames = null;
             foreach(var option in options)
             {
-                var trimmedValue = option.Trim();
-                var identifierLen = ClickHouseSyntaxHelper.GetIdentifierLiteralLength(trimmedValue.Span);
-                if (identifierLen == trimmedValue.Span.Length)
+                if (elementTypes.Count > 0)
+                    complexTypeNameBuilder.Append(", ");
+
+                var identifierLen = ClickHouseSyntaxHelper.GetIdentifierLiteralLength(option.Span);
+                if (identifierLen == option.Span.Length)
                     identifierLen = -1;
                 
                 if (identifierLen < 0)
@@ -101,7 +92,7 @@ namespace Octonica.ClickHouseClient.Types
                     if (elementNames != null)
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
 
-                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue);
+                    var typeInfo = typeInfoProvider.GetTypeInfo(option);
                     elementTypes.Add(typeInfo);
                 }
                 else
@@ -114,15 +105,20 @@ namespace Octonica.ClickHouseClient.Types
                         elementNames = new List<string>(options.Count);
                     }
 
-                    var name = ClickHouseSyntaxHelper.GetIdentifier(trimmedValue.Span.Slice(0, identifierLen));
-                    var typeInfo = typeInfoProvider.GetTypeInfo(trimmedValue.Slice(identifierLen + 1));
+                    var name = ClickHouseSyntaxHelper.GetIdentifier(option.Span.Slice(0, identifierLen));
+                    var typeInfo = typeInfoProvider.GetTypeInfo(option.Slice(identifierLen + 1));
 
                     elementTypes.Add(typeInfo);
                     elementNames.Add(name);
+
+                    complexTypeNameBuilder.Append(option.Slice(0, identifierLen)).Append(' ');
                 }
+
+                complexTypeNameBuilder.Append(elementTypes[^1].ComplexTypeName);
             }
 
-            return new TupleTypeInfo(elementTypes, elementNames);
+            var complexTypeName = complexTypeNameBuilder.Append(')').ToString();
+            return new TupleTypeInfo(complexTypeName, elementTypes, elementNames);
         }
 
         public Type GetFieldType()

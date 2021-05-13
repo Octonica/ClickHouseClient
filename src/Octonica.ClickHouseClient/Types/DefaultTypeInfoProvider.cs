@@ -92,7 +92,7 @@ namespace Octonica.ClickHouseClient.Types
                 int currentIdx = pOpenIdx;
                 int optionStartIdx = pOpenIdx + 1;
                 char? escaped = null;
-                ReadOnlySpan<char> significantChars = "(,)'`";
+                ReadOnlySpan<char> significantChars = "(,)'`\\";                
                 do
                 {
                     if (typeNameSpan.Length - 1 == currentIdx)
@@ -104,16 +104,21 @@ namespace Octonica.ClickHouseClient.Types
 
                     pNextIdx += currentIdx + 1;
                     currentIdx = pNextIdx;
-                    if ("'`".Contains(typeNameSpan[currentIdx]))
+                    if ("'`\\".Contains(typeNameSpan[currentIdx]))
                     {
                         if (escaped == null)
                         {
-                            escaped = typeNameSpan[currentIdx];
+                            if (typeNameSpan[currentIdx] != '\\')
+                                escaped = typeNameSpan[currentIdx];
+                        }
+                        else if (typeNameSpan[currentIdx] == '\\')
+                        {
+                            if (++currentIdx >= typeNameSpan.Length)
+                                break;
                         }
                         else if (escaped.Value == typeNameSpan[currentIdx])
                         {
-                            if (currentIdx > 0 && typeNameSpan[currentIdx - 1] != '\\')
-                                escaped = null;
+                            escaped = null;
                         }
                     }
                     else if (escaped == null)
