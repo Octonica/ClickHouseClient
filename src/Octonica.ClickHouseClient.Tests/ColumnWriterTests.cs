@@ -954,6 +954,61 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public async Task InsertFromCollectionOfObjects()
+        {
+            const int rowCount = 200;
+            var startId = _tableFixture.ReserveRange(rowCount);
+
+            // Each wrapper implements only one interface
+            var ids = new EnumerableListWrapper<object>(Enumerable.Range(startId, rowCount / 2).Cast<object>().ToList());
+            var strings = new GenericEnumerableListWrapper<object>(Enumerable.Range(1, rowCount / 2).Select(num => $"Str #1_{num}").ToList<object>());
+            var numbers = new ListWrapper<object?>(
+                Enumerable.Range(0, rowCount / 2).Select(num => num % 19 == 0 ? (object?)null : Math.Round(num / (decimal)19, 6)).ToList());
+
+            var ids2 = new AsyncEnumerableListWrapper<object>(Enumerable.Range(startId + rowCount/2, rowCount / 2).Cast<object>().ToList());
+            var strings2 = Enumerable.Range(1, rowCount / 2).Select(num => $"Str #2_{num}").ToArray<object>();
+            var numbers2 = Enumerable.Range(rowCount / 2, rowCount / 2).Select(num => num % 19 == 0 ? (object?)null : Math.Round(num / (decimal)19, 6)).ToList();
+
+            await using var connection = await OpenConnectionAsync();
+
+            await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {TestTableName}(id, str, num) VALUES", CancellationToken.None))
+            {
+                await writer.WriteTableAsync(new object[] { ids, strings, numbers }, rowCount / 2, CancellationToken.None);
+                await writer.WriteTableAsync(new object[] { ids2, strings2, numbers2 }, rowCount / 2, CancellationToken.None);                
+            }
+
+            await using var cmd = connection.CreateCommand($"SELECT id, str, num FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            await using var reader = cmd.ExecuteReader();
+            int count = 0;
+            while (await reader.ReadAsync())
+            {
+                var id = reader.GetInt32(0);
+                var str = reader.GetString(1);
+                var num = reader.GetFieldValue<decimal>(2, null);
+
+                Assert.Equal(count + startId, id);
+
+                if (id - startId < rowCount / 2)
+                {
+                    Assert.Equal(strings.List[count], str);
+                    Assert.Equal(numbers.List[count], num);
+                }
+                else
+                {
+                    Assert.Equal((string)strings2[count - rowCount / 2], str);
+                    Assert.Equal((decimal?)numbers2[count - rowCount / 2], num);
+                }
+
+                ++count;
+            }
+
+            Assert.Equal(rowCount, count);
+        }
+
         private async Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, Task> runTest)
         {
             var tableName = $"{TestTableName}_{tableNameSuffix}";

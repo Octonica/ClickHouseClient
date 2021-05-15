@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
@@ -226,90 +227,150 @@ namespace Octonica.ClickHouseClient
             {
                 var column = columns[i];
                 var columnInfo = _columns[i];
+                var settings = _columnSettings?[i];
 
                 if (column == null)
                 {
                     if (!columnInfo.TypeInfo.TypeName.StartsWith("Nullable"))
                         throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
 
-                    var constColumn = TypeDispatcher.Dispatch(columnInfo.TypeInfo.GetFieldType(), new NullColumnWriterDispatcher(columnInfo, _columnSettings?[i], rowCount));
+                    var constColumn = TypeDispatcher.Dispatch(columnInfo.TypeInfo.GetFieldType(), new NullColumnWriterDispatcher(columnInfo, settings, rowCount));
                     writers.Add(constColumn);
                     continue;
                 }
-
-                var columnType = column.GetType();
-
-                bool isEnumerable = false;
-                Type? enumerable = null, asyncEnumerable = null, readOnlyList = null, list = null;
+                
+                var columnType = column.GetType();                
+                Type? enumerable = null;
+                Type? altEnumerable = null;
+                Type? asyncEnumerable = null;
+                Type? altAsyncEnumerable = null;
+                Type? readOnlyList = null;
+                Type? altReadOnlyList = null;
+                Type? list = null;
+                Type? altList = null;
                 foreach (var ifs in columnType.GetInterfaces())
                 {
-                    if (ifs == typeof(IEnumerable))
-                        isEnumerable = true;
-                    else if (ifs.IsGenericType)
+                    if (!ifs.IsGenericType)
+                        continue;
+
+                    var ifsDefinition = ifs.GetGenericTypeDefinition();
+                    if (ifsDefinition == typeof(IEnumerable<>) && ifs.GetGenericArguments()[0] != typeof(object))
                     {
-                        var ifsDefinition = ifs.GetGenericTypeDefinition();
-                        if (ifsDefinition == typeof(IEnumerable<>))
-                            enumerable ??= ifs;
-                        else if (ifsDefinition == typeof(IAsyncEnumerable<>))
-                            asyncEnumerable ??= ifs;
-                        else if (ifsDefinition == typeof(IReadOnlyList<>))
-                            readOnlyList ??= ifs;
-                        else if (ifsDefinition == typeof(IList<>))
-                            list ??= ifs;
+                        altEnumerable ??= enumerable;
+                        enumerable = ifs;
+                    }
+                    else if (ifsDefinition == typeof(IAsyncEnumerable<>) && ifs.GetGenericArguments()[0] != typeof(object))
+                    {
+                        altAsyncEnumerable = asyncEnumerable;
+                        asyncEnumerable = ifs;
+                    }
+                    else if (ifsDefinition == typeof(IReadOnlyList<>) && ifs.GetGenericArguments()[0] != typeof(object))
+                    {
+                        altReadOnlyList = readOnlyList;
+                        readOnlyList = ifs;
+                    }
+                    else if (ifsDefinition == typeof(IList<>) && ifs.GetGenericArguments()[0] != typeof(object))
+                    {
+                        altList = list;
+                        list = ifs;
                     }
                 }
+
+                /*
+                 * All supported interfaces (sorted by priority):
+                 * 1. IReadOnlyList<T>
+                 * 2. IList<T>
+                 * 3. IAsyncEnumerable<T> (supported only in ascynronous mode, i.e. async == true)
+                 * 4. IEnumerable<T>
+                 * 5. IEnumerable
+                 */
 
                 Type dispatchedElementType;
                 if (readOnlyList != null)
                 {
+                    if (altReadOnlyList != null)
+                        throw CreateInterfaceAmbiguousException(readOnlyList, altReadOnlyList, columnInfo.Name, i);
+
                     dispatchedElementType = readOnlyList.GetGenericArguments()[0];
                 }
                 else if (list != null)
                 {
+                    if (altList != null)
+                        throw CreateInterfaceAmbiguousException(list, altList, columnInfo.Name, i);
+
                     dispatchedElementType = list.GetGenericArguments()[0];
                 }
                 else
                 {
-                    if (asyncEnumerable != null)
+                    if (async && asyncEnumerable != null)
                     {
-                        if (async)
-                        {
-                            var genericArg = asyncEnumerable.GetGenericArguments()[0];
-                            var asyncDispatcher = new AsyncColumnWriterDispatcher(column, columnInfo, _columnSettings?[i], rowCount, i, cancellationToken);
-                            var asyncColumn = await TypeDispatcher.Dispatch(genericArg, asyncDispatcher);
-                            writers.Add(asyncColumn);
-                            continue;
-                        }
+                        if (altAsyncEnumerable != null)
+                            throw CreateInterfaceAmbiguousException(asyncEnumerable, altAsyncEnumerable, columnInfo.Name, i);
 
-                        if (!isEnumerable && enumerable == null)
-                        {
-                            throw new ClickHouseException(
-                                ClickHouseErrorCodes.ColumnMismatch,
-                                $"The column \"{columnInfo.Name}\" at the position {i} implements interface \"{asyncEnumerable}\". Call async method \"{nameof(WriteTableAsync)}\".");
-                        }
+                        var genericArg = asyncEnumerable.GetGenericArguments()[0];
+                        var asyncDispatcher = new AsyncColumnWriterDispatcher(column, columnInfo, settings, rowCount, i, cancellationToken);
+                        var asyncColumn = await TypeDispatcher.Dispatch(genericArg, asyncDispatcher);
+                        writers.Add(asyncColumn);
+                        continue;
                     }
 
                     if (enumerable != null)
                     {
+                        if (altEnumerable != null)
+                            throw CreateInterfaceAmbiguousException(enumerable, altEnumerable, columnInfo.Name, i);
+
                         dispatchedElementType = enumerable.GetGenericArguments()[0];
-                    }
-                    else if (isEnumerable)
-                    {
-                        dispatchedElementType = columnInfo.TypeInfo.GetFieldType();
                     }
                     else
                     {
-                        throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
+                        // There is still hope that the column implements one of suported interfaces with typeof(T) == typeof(object).
+                        // In this case assume that the type of the table's field is equal to the type of the column.
+
+                        dispatchedElementType = columnInfo.TypeInfo.GetFieldType();
+                        var typeDispatcher = TypeDispatcher.Create(dispatchedElementType);
+                        var objDispatcher = new ColumnWriterObjectCollectionDispatcher(column, columnInfo, settings, rowCount, i, async);
+                        var objColumnWriter = typeDispatcher.Dispatch(objDispatcher);
+                        if (async && objColumnWriter == null && column is IAsyncEnumerable<object?> aeCol)
+                        {
+                            var asyncDispatcher = new AsyncObjectColumnWriterDispatcher(aeCol, columnInfo, settings, rowCount, i, cancellationToken);
+                            objColumnWriter = await typeDispatcher.Dispatch(asyncDispatcher);
+                        }
+
+                        if (objColumnWriter == null)
+                        {
+                            if (!async && (asyncEnumerable != null || column is IAsyncEnumerable<object?>))
+                            {
+                                var aeInterface = asyncEnumerable ?? typeof(IAsyncEnumerable<object?>);
+                                throw new ClickHouseException(
+                                    ClickHouseErrorCodes.ColumnMismatch,
+                                    $"The column \"{columnInfo.Name}\" at the position {i} implements interface \"{aeInterface}\". Call async method \"{nameof(WriteTableAsync)}\".");
+                            }
+
+                            throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
+                        }
+
+                        writers.Add(objColumnWriter);
+                        continue;
                     }
                 }
 
-                var dispatcher = new ColumnWriterDispatcher(column, columnInfo, _columnSettings?[i], rowCount, i);
+                var dispatcher = new ColumnWriterDispatcher(column, columnInfo, settings, rowCount, i, false);
                 var columnWriter = TypeDispatcher.Dispatch(dispatchedElementType, dispatcher);
+
+                if (columnWriter == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
+
                 writers.Add(columnWriter);
             }
 
             var table = new ClickHouseTableWriter(string.Empty, rowCount, writers);
             await SendTable(table, async, cancellationToken);
+
+            static ClickHouseException CreateInterfaceAmbiguousException(Type itf, Type altItf, string columnName, int columnIndex)
+            {
+                return new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch,
+                    $"A type of the column \"{columnName}\" at the position {columnIndex} is ambiguous. The column implements interfaces \"{itf}\" and \"{altItf}\".");
+            }
         }
 
         private async ValueTask SendTable(ClickHouseTableWriter table, bool async, CancellationToken cancellationToken)
@@ -440,7 +501,13 @@ namespace Octonica.ClickHouseClient
             private readonly int _columnIndex;
             private readonly CancellationToken _cancellationToken;
 
-            public AsyncColumnWriterDispatcher(object asyncEnumerable, ColumnInfo columnInfo, ClickHouseColumnSettings? columnSettings, int rowCount, int columnIndex, CancellationToken cancellationToken)
+            public AsyncColumnWriterDispatcher(
+                object asyncEnumerable,
+                ColumnInfo columnInfo,
+                ClickHouseColumnSettings? columnSettings,
+                int rowCount,
+                int columnIndex,
+                CancellationToken cancellationToken)
             {
                 _asyncEnumerable = asyncEnumerable;
                 _columnInfo = columnInfo;
@@ -475,24 +542,83 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        private class ColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
+        private class AsyncObjectColumnWriterDispatcher : ITypeDispatcher<Task<IClickHouseColumnWriter>>
+        {
+            private readonly IAsyncEnumerable<object?> _asyncEnumerable;
+            private readonly ColumnInfo _columnInfo;
+            private readonly ClickHouseColumnSettings? _columnSettings;
+            private readonly int _rowCount;
+            private readonly int _columnIndex;
+            private readonly CancellationToken _cancellationToken;
+
+            public AsyncObjectColumnWriterDispatcher(
+                IAsyncEnumerable<object?> asyncEnumerable,
+                ColumnInfo columnInfo,
+                ClickHouseColumnSettings? columnSettings,
+                int rowCount,
+                int columnIndex,
+                CancellationToken cancellationToken)
+            {
+                _asyncEnumerable = asyncEnumerable;
+                _columnInfo = columnInfo;
+                _columnSettings = columnSettings;
+                _rowCount = rowCount;
+                _columnIndex = columnIndex;
+                _cancellationToken = cancellationToken;
+            }
+
+            public async Task<IClickHouseColumnWriter> Dispatch<T>()
+            {
+                var rows = new List<T>(_rowCount);
+                if (_rowCount == 0)
+                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+
+                await foreach (var rowValue in _asyncEnumerable.WithCancellation(_cancellationToken))
+                {
+                    var val = ColumnWriterObjectCollectionDispatcher.CastTo<T>(rowValue);
+                    rows.Add(val);
+
+                    if (rows.Count == _rowCount)
+                        break;
+                }
+
+                if (rows.Count < _rowCount)
+                {
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.ColumnMismatch,
+                        $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                }
+
+                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+            }
+        }
+
+        private class ColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter?>
         {
             private readonly object _collection;
             private readonly ColumnInfo _columnInfo;
             private readonly ClickHouseColumnSettings? _columnSettings;
             private readonly int _rowCount;
             private readonly int _columnIndex;
+            private readonly bool _checkAsyncEnumerable;
 
-            public ColumnWriterDispatcher(object collection, ColumnInfo columnInfo, ClickHouseColumnSettings? columnSettings, int rowCount, int columnIndex)
+            public ColumnWriterDispatcher(
+                object collection,
+                ColumnInfo columnInfo,
+                ClickHouseColumnSettings? columnSettings,
+                int rowCount,
+                int columnIndex,
+                bool checkAsyncEnumerable)
             {
                 _collection = collection;
                 _columnInfo = columnInfo;
                 _columnSettings = columnSettings;
                 _rowCount = rowCount;
                 _columnIndex = columnIndex;
+                _checkAsyncEnumerable = checkAsyncEnumerable;
             }
 
-            public IClickHouseColumnWriter Dispatch<T>()
+            public IClickHouseColumnWriter? Dispatch<T>()
             {
                 if (_collection is IReadOnlyList<T> readOnlyList)
                 {
@@ -522,39 +648,124 @@ namespace Octonica.ClickHouseClient
                     return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, listSpan, _columnSettings);
                 }
 
-                List<T> rows = new List<T>(_rowCount);
+                if (_checkAsyncEnumerable && _collection is IAsyncEnumerable<T>)
+                {
+                    // Should be handled in async mode
+                    return null;
+                }
+
                 if (_collection is IEnumerable<T> genericEnumerable)
                 {
+                    List<T> rows = new List<T>(_rowCount);
                     rows.AddRange(genericEnumerable.Take(_rowCount));
+                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
                 }
-                else
+
+                return null;
+            }
+        }
+
+        private class ColumnWriterObjectCollectionDispatcher : ITypeDispatcher<IClickHouseColumnWriter?>
+        {
+            private readonly object _collection;
+            private readonly ColumnInfo _columnInfo;
+            private readonly ClickHouseColumnSettings? _columnSettings;
+            private readonly int _rowCount;
+            private readonly int _columnIndex;
+            private readonly bool _checkAsyncEnumerable;
+
+            public ColumnWriterObjectCollectionDispatcher(
+                object collection,
+                ColumnInfo columnInfo,
+                ClickHouseColumnSettings? columnSettings,
+                int rowCount,
+                int columnIndex,
+                bool checkAsyncEnumerable)
+            {
+                _collection = collection;
+                _columnInfo = columnInfo;
+                _columnSettings = columnSettings;
+                _rowCount = rowCount;
+                _columnIndex = columnIndex;
+                _checkAsyncEnumerable = checkAsyncEnumerable;
+            }
+
+            public IClickHouseColumnWriter? Dispatch<T>()
+            {
+                if (_collection is IReadOnlyList<object?> readOnlyList)
                 {
-                    int count = 0;
-                    foreach (object? item in (IEnumerable) _collection)
+                    if (readOnlyList.Count < _rowCount)
                     {
-                        // T may be nullable but there is no way to declare T?
-                        if (item == DBNull.Value)
-                        {
-                            rows.Add((T) (default(T) is null ? null! : item));
-                        }
-                        else
-                        {
-                            rows.Add((T) item!);
-                        }
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ColumnMismatch,
+                            $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {readOnlyList.Count} row(s), but the required number of rows is {_rowCount}.");
+                    }
+
+                    if (readOnlyList.Count > _rowCount)
+                        readOnlyList = new ReadOnlyListSpan<object?>(readOnlyList, 0, _rowCount);
+                }
+                else if (_collection is IList<object?> list)
+                {
+                    if (list.Count < _rowCount)
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ColumnMismatch,
+                            $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
+                    }
+
+                    readOnlyList = new ListSpan<object?>(list, 0, _rowCount);
+                }
+                else if (_checkAsyncEnumerable && _collection is IAsyncEnumerable<object?>)
+                {
+                    // Should be handled in async mode
+                    return null;
+                }
+                else if (_collection is IEnumerable<object?> genericEnumerable)
+                {
+                    List<object?> rows = new List<object?>(_rowCount);
+                    rows.AddRange(genericEnumerable.Take(_rowCount));
+                    readOnlyList = rows;
+                }
+                else if (_collection is IEnumerable enumerable)
+                {
+                    List<T> rows = new List<T>(_rowCount);
+
+                    int count = 0;
+                    foreach (object? item in enumerable)
+                    {
+                        rows.Add(CastTo<T>(item));
 
                         if (++count == _rowCount)
                             break;
                     }
-                }
 
-                if (rows.Count < _rowCount)
+                    if (rows.Count < _rowCount)
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ColumnMismatch,
+                            $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                    }
+
+                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                }
+                else
                 {
-                    throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnMismatch,
-                        $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                    // An object is not a collection
+                    return null;
                 }
 
-                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                var mappedList = new MappedReadOnlyList<object?, T>(readOnlyList, CastTo<T>);
+                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, mappedList, _columnSettings);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static T CastTo<T>(object? value)
+            {
+                // T may be nullable but there is no way to declare T?
+                if (value == DBNull.Value)
+                    return (T)(default(T) is null ? null! : value);
+
+                return (T)value!;
             }
         }
 

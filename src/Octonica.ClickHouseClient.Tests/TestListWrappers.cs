@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Octonica.ClickHouseClient.Tests
 {
@@ -123,6 +125,48 @@ namespace Octonica.ClickHouseClient.Tests
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+    }
+
+    internal sealed class AsyncEnumerableListWrapper<T> : IAsyncEnumerable<T>
+    {
+        private readonly IReadOnlyList<T> _list;
+
+        public AsyncEnumerableListWrapper(IReadOnlyList<T> list)
+        {
+            _list = list;
+        }
+
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            return new Enumerator(_list);
+        }
+
+        private class Enumerator : IAsyncEnumerator<T>
+        {
+            private readonly IReadOnlyList<T> _list;
+
+            private int _index = -1;
+
+            public T Current => _list[_index];
+
+            public Enumerator(IReadOnlyList<T> list)
+            {
+                _list = list;
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return default;
+            }
+
+            public ValueTask<bool> MoveNextAsync()
+            {
+                if (_index == _list.Count || ++_index == _list.Count)
+                    return new ValueTask<bool>(false);
+
+                return new ValueTask<bool>(true);
+            }
         }
     }
 }

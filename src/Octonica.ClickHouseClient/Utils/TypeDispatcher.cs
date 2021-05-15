@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,13 @@ namespace Octonica.ClickHouseClient.Utils
             var dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
             var dsp = (ITypeDispatcher) Activator.CreateInstance(dispatcherType)!;
             return dsp.Dispatch(dispatcher);
+        }
+
+        public static ITypeDispatcher Create(Type type)
+        {
+            var dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
+            var dsp = (ITypeDispatcher)Activator.CreateInstance(dispatcherType)!;
+            return dsp;
         }
 
         private class Dispatcher<TValue> : ITypeDispatcher
