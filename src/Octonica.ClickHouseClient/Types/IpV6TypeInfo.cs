@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,18 +41,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
+            var type = typeof(T);
             IReadOnlyList<IPAddress?> preparedRows;
-            switch (rows)
-            {
-                case IReadOnlyList<IPAddress?> ipAddressRows:
-                    preparedRows = ipAddressRows;
-                    break;
-                case IReadOnlyList<string?> stringRows:
-                    preparedRows = new MappedReadOnlyList<string?, IPAddress?>(stringRows, ParseIpAddress);
-                    break;
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+            if(typeof(IPAddress).IsAssignableFrom(type))
+                preparedRows = (IReadOnlyList<IPAddress?>)rows;
+            else if(type == typeof(string))
+                preparedRows = new MappedReadOnlyList<string?, IPAddress?>((IReadOnlyList<string?>)rows, ParseIpAddress);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new IpV6Writer(columnName, TypeName, preparedRows);
         }

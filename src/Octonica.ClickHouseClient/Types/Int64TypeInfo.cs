@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,24 +38,25 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (!(rows is IReadOnlyList<long> longRows))
-            {
-                if (rows is IReadOnlyList<int> intRows)
-                    longRows = new MappedReadOnlyList<int, long>(intRows, v => v);
-                else if (rows is IReadOnlyList<uint> uintRows)
-                    longRows = new MappedReadOnlyList<uint, long>(uintRows, v => v);
-                else if (rows is IReadOnlyList<short> shortRows)
-                    longRows = new MappedReadOnlyList<short, long>(shortRows, v => v);
-                else if (rows is IReadOnlyList<ushort> ushortRows)
-                    longRows = new MappedReadOnlyList<ushort, long>(ushortRows, v => v);
-                else if (rows is IReadOnlyList<sbyte> sbyteRows)
-                    longRows = new MappedReadOnlyList<sbyte, long>(sbyteRows, v => v);
-                else if (rows is IReadOnlyList<byte> byteRows)
-                    longRows = new MappedReadOnlyList<byte, long>(byteRows, v => v);
-                else
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
-
+            var type = typeof(T);
+            IReadOnlyList<long> longRows;
+            if (type == typeof(long))
+                longRows = (IReadOnlyList<long>)rows;
+            else if (type == typeof(int))
+                longRows = new MappedReadOnlyList<int, long>((IReadOnlyList<int>)rows, v => v);
+            else if (type == typeof(uint))
+                longRows = new MappedReadOnlyList<uint, long>((IReadOnlyList<uint>)rows, v => v);
+            else if (type == typeof(short))
+                longRows = new MappedReadOnlyList<short, long>((IReadOnlyList<short>)rows, v => v);
+            else if (type == typeof(ushort))
+                longRows = new MappedReadOnlyList<ushort, long>((IReadOnlyList<ushort>)rows, v => v);
+            else if (type == typeof(sbyte))
+                longRows = new MappedReadOnlyList<sbyte, long>((IReadOnlyList<sbyte>)rows, v => v);
+            else if (type == typeof(byte))
+                longRows = new MappedReadOnlyList<byte, long>((IReadOnlyList<byte>)rows, v => v);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            
             return new Int64Writer(columnName, ComplexTypeName, longRows);
         }
 

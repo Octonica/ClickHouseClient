@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,10 +51,10 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override IClickHouseColumnWriter CreateInternalColumnWriter<T>(string columnName, IReadOnlyList<T> rows)
         {
-            if (!(rows is IReadOnlyList<sbyte> sbyteRows))
+            if (typeof(T) != typeof(sbyte))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{TypeName}\".");
 
-            return new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, sbyteRows);
+            return new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
         protected override bool TryParse(ReadOnlySpan<char> text, out sbyte value)

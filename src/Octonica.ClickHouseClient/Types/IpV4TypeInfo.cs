@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,24 +41,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
+            var type = typeof(T);
             IReadOnlyList<uint> preparedRows;
-            switch (rows)
-            {
-                case IReadOnlyList<IPAddress> ipAddressRows:
-                    preparedRows = new MappedReadOnlyList<IPAddress, uint>(ipAddressRows, IpAddressToUInt32);
-                    break;
-                case IReadOnlyList<string> stringRows:
-                    preparedRows = new MappedReadOnlyList<string, uint>(stringRows, IpAddressStringToUInt32);
-                    break;
-                case IReadOnlyList<uint> uint32Rows:
-                    preparedRows = uint32Rows;
-                    break;
-                case IReadOnlyList<int> int32Rows:
-                    preparedRows = new MappedReadOnlyList<int, uint>(int32Rows, v => unchecked((uint) v));
-                    break;
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+
+            if (typeof(IPAddress).IsAssignableFrom(type))
+                preparedRows = new MappedReadOnlyList<IPAddress, uint>((IReadOnlyList<IPAddress>)rows, IpAddressToUInt32);
+            else if (type == typeof(string))
+                preparedRows = new MappedReadOnlyList<string, uint>((IReadOnlyList<string>)rows, IpAddressStringToUInt32);
+            else if (type == typeof(uint))
+                preparedRows = (IReadOnlyList<uint>)rows;
+            else if (type == typeof(int))
+                preparedRows = new MappedReadOnlyList<int, uint>((IReadOnlyList<int>)rows, v => unchecked((uint)v));
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new IpV4Writer(columnName, TypeName, preparedRows);
         }

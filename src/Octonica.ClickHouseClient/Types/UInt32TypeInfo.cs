@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,16 +38,18 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (!(rows is IReadOnlyList<uint> uintRows))
-            {
-                if (rows is IReadOnlyList<ushort> ushortRows)
-                    uintRows = new MappedReadOnlyList<ushort, uint>(ushortRows, v => v);
-                else if (rows is IReadOnlyList<byte> byteRows)
-                    uintRows = new MappedReadOnlyList<byte, uint>(byteRows, v => v);
-                else
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+            var type = typeof(T);
+            IReadOnlyList<uint> uintRows;
 
+            if (type == typeof(uint))
+                uintRows = (IReadOnlyList<uint>)rows;
+            else if (type == typeof(ushort))
+                uintRows = new MappedReadOnlyList<ushort, uint>((IReadOnlyList<ushort>)rows, v => v);
+            else if (type == typeof(byte))
+                uintRows = new MappedReadOnlyList<byte, uint>((IReadOnlyList<byte>)rows, v => v);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            
             return new UInt32Writer(columnName, ComplexTypeName, uintRows);
         }
 

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,17 +38,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (!(rows is IReadOnlyList<ulong> ulongRows))
-            {
-                if (rows is IReadOnlyList<uint> uintRows)
-                    ulongRows = new MappedReadOnlyList<uint, ulong>(uintRows, v => v);
-                else if (rows is IReadOnlyList<ushort> ushortRows)
-                    ulongRows = new MappedReadOnlyList<ushort, ulong>(ushortRows, v => v);
-                else if (rows is IReadOnlyList<byte> byteRows)
-                    ulongRows = new MappedReadOnlyList<byte, ulong>(byteRows, v => v);
-                else
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+            var type = typeof(T);
+            IReadOnlyList<ulong> ulongRows;
+
+            if (type == typeof(ulong))
+                ulongRows = (IReadOnlyList<ulong>)rows;
+            else if (type == typeof(uint))
+                ulongRows = new MappedReadOnlyList<uint, ulong>((IReadOnlyList<uint>)rows, v => v);
+            else if (type == typeof(ushort))
+                ulongRows = new MappedReadOnlyList<ushort, ulong>((IReadOnlyList<ushort>)rows, v => v);
+            else if (type == typeof(byte))
+                ulongRows = new MappedReadOnlyList<byte, ulong>((IReadOnlyList<byte>)rows, v => v);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new UInt64Writer(columnName, ComplexTypeName, ulongRows);
         }

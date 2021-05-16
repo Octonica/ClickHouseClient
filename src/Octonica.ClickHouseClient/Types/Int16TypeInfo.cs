@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,16 +38,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (!(rows is IReadOnlyList<short> shortRows))
-            {
-                if (rows is IReadOnlyList<sbyte> sbyteRows)
-                    shortRows = new MappedReadOnlyList<sbyte, short>(sbyteRows, v => v);
-                else if (rows is IReadOnlyList<byte> byteRows)
-                    shortRows = new MappedReadOnlyList<byte, short>(byteRows, v => v);
-                else
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
-
+            var type = typeof(T);
+            IReadOnlyList<short> shortRows;
+            if (type == typeof(short))
+                shortRows = (IReadOnlyList<short>)rows;
+            else if (type == typeof(sbyte))
+                shortRows = new MappedReadOnlyList<sbyte, short>((IReadOnlyList<sbyte>)rows, v => v);
+            else if (type == typeof(byte))
+                shortRows = new MappedReadOnlyList<byte, short>((IReadOnlyList<byte>)rows, v => v);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            
             return new Int16Writer(columnName, ComplexTypeName, shortRows);
         }
 

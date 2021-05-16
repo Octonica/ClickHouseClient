@@ -62,29 +62,21 @@ namespace Octonica.ClickHouseClient.Types
             if (_length == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
 
-            switch (rows)
-            {
-                case IReadOnlyList<byte[]?> byteRows:
-                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, byteRows, _length.Value);
+            var type = typeof(T);
+            if (type == typeof(byte[]))
+                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<byte[]?>)rows, _length.Value);
+            if (type == typeof(string))
+                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string?>)rows, _length.Value, columnSettings?.StringEncoding);
+            if (type == typeof(ReadOnlyMemory<byte>))
+                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>)rows, _length.Value);
+            if (type == typeof(Memory<byte>))
+                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<byte>>)rows, _length.Value);
+            if (type == typeof(ReadOnlyMemory<char>))
+                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>)rows, _length.Value, columnSettings?.StringEncoding);
+            if (type == typeof(Memory<char>))
+                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<char>>)rows, _length.Value, columnSettings?.StringEncoding);
 
-                case IReadOnlyList<string?> stringRows:
-                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, stringRows, _length.Value, columnSettings?.StringEncoding);
-
-                case IReadOnlyList<ReadOnlyMemory<byte>> roMemByteRows:
-                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, roMemByteRows, _length.Value);
-
-                case IReadOnlyList<Memory<byte>> memByteRows:
-                    return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, memByteRows, _length.Value);
-
-                case IReadOnlyList<ReadOnlyMemory<char>> roCharRows:
-                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, roCharRows, _length.Value, columnSettings?.StringEncoding);
-
-                case IReadOnlyList<Memory<char>> charRows:
-                    return new FixedStringStringColumnWriter(columnName, ComplexTypeName, charRows, _length.Value, columnSettings?.StringEncoding);
-
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

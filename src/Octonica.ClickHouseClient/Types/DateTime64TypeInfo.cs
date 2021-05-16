@@ -160,14 +160,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (rows is IReadOnlyList<DateTime> dateTimeRows)
-                return new DateTimeWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, dateTimeRows);
+            if (typeof(T) == typeof(DateTime))
+                return new DateTimeWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, (IReadOnlyList<DateTime>)rows);
 
-            if (rows is IReadOnlyList<DateTimeOffset> dateTimeOffsetRows)
-                return new DateTimeOffsetWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, dateTimeOffsetRows);
+            if (typeof(T) == typeof(DateTimeOffset))
+                return new DateTimeOffsetWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, (IReadOnlyList<DateTimeOffset>)rows);
 
-            if (rows is IReadOnlyList<ulong> uint64Rows)
-                return new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, uint64Rows);
+            if (typeof(T) == typeof(ulong))
+                return new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, (IReadOnlyList<ulong>)rows);
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }

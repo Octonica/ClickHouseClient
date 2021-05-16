@@ -105,10 +105,10 @@ namespace Octonica.ClickHouseClient.Types
             if (_enumMap == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
 
-            if (rows is IReadOnlyList<string> stringRows)
+            if (typeof(T) == typeof(string))
             {
                 var list = new MappedReadOnlyList<string, TValue>(
-                    stringRows,
+                    (IReadOnlyList<string>)rows,
                     key => _enumMap.TryGetValue(key, out var value) ? value : throw new InvalidCastException($"The value \"{key}\" can't be converted to {ComplexTypeName}."));
                 return CreateInternalColumnWriter(columnName, list);
             }
