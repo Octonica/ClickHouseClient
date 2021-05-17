@@ -7,8 +7,11 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <Version Condition="'$(ClickHouseClientVersion)' != ''">$(ClickHouseClientVersion)</Version>
     <Version Condition="'$(Version)' == ''">1.1.9</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
+    <Version Condition="'$(ClickHouseClientVersionSuffix)' != ''">$(Version)$(ClickHouseClientVersionSuffix)</Version>
+
     <Company>Octonica</Company>
     <Copyright>© 2019 – 2021 Octonica</Copyright>
     <Product>Octonica.ClickHouseClient</Product>
