@@ -1886,6 +1886,68 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadValueWithOverridenType()
+        {
+            await WithTemporaryTable("col_settings_type", "id UInt16, ip Nullable(IPv4), enum Nullable(Enum16('min'=-512, 'avg'=0, 'max'=512)), num Nullable(Int32)", RunTest);
+
+            static async Task RunTest(ClickHouseConnection connection, string tableName)
+            {
+                var cmd = connection.CreateCommand($"INSERT INTO {tableName}(id, ip, enum, num) VALUES" +
+                    "(124, null, 'min', 1234)" +
+                    "(125, '10.0.0.1', 'avg', null)" +
+                    "(126, null, null, null)" +
+                    "(127, '127.0.0.1', 'max', -8990)" +
+                    "(128, '4.8.15.16', null, 12789)");
+
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = $"SELECT * FROM {tableName} ORDER BY id";
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var idIdx = reader.GetOrdinal("id");
+                var numIdx = reader.GetOrdinal("num");
+                var enumIdx = reader.GetOrdinal("enum");
+                var ipIdx = reader.GetOrdinal("ip");                
+
+                Assert.Equal(typeof(ushort), reader.GetFieldType(idIdx));
+                Assert.Equal(typeof(int), reader.GetFieldType(numIdx));
+                Assert.Equal(typeof(string), reader.GetFieldType(enumIdx));
+                Assert.Equal(typeof(IPAddress), reader.GetFieldType(ipIdx));
+
+                reader.ConfigureColumn("id", new ClickHouseColumnSettings(typeof(int)));
+                reader.ConfigureColumn("num", new ClickHouseColumnSettings(typeof(long)));
+                reader.ConfigureColumn("enum", new ClickHouseColumnSettings(typeof(short?)));
+                reader.ConfigureColumn("ip", new ClickHouseColumnSettings(typeof(string)));
+
+                Assert.Equal(typeof(int), reader.GetFieldType(idIdx));
+                Assert.Equal(typeof(long), reader.GetFieldType(numIdx));
+                Assert.Equal(typeof(short), reader.GetFieldType(enumIdx));
+                Assert.Equal(typeof(string), reader.GetFieldType(ipIdx));
+
+                var expectedData = new object[][]
+                {
+                    new object[] {124, DBNull.Value, (short)-512, 1234L},
+                    new object[] {125, "10.0.0.1", (short)0, DBNull.Value},
+                    new object[] {126, DBNull.Value, DBNull.Value, DBNull.Value},
+                    new object[] {127, "127.0.0.1", (short)512, -8990L},
+                    new object[] {128, "4.8.15.16", DBNull.Value, 12789L}
+                };
+
+                int count = 0;
+                while(await reader.ReadAsync())
+                {
+                    Assert.Equal(expectedData[count][0], reader.GetValue(idIdx));
+                    Assert.Equal(expectedData[count][1], reader.GetValue(ipIdx));
+                    Assert.Equal(expectedData[count][2], reader.GetValue(enumIdx));
+                    Assert.Equal(expectedData[count][3], reader.GetValue(numIdx));
+
+                    ++count;
+                }
+
+                Assert.Equal(expectedData.Length, count);                
+            }
+        }
+
+        [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
             const string ddl = @"

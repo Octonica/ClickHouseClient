@@ -19,6 +19,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -92,7 +93,7 @@ namespace Octonica.ClickHouseClient
 
         public Type GetFieldType(int ordinal)
         {
-            return _columns[ordinal].TypeInfo.GetFieldType();
+            return _columnSettings?[ordinal]?.ColumnType ?? _columns[ordinal].TypeInfo.GetFieldType();
         }
 
         public int GetOrdinal(string name)
@@ -137,12 +138,38 @@ namespace Octonica.ClickHouseClient
                 int i = columnWriters.Count;
 
                 var columnInfo = _columns[i];
+                var settings = _columnSettings?[i];
+
+                if (settings?.ColumnType == typeof(object))
+                {
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.InvalidColumnSettings,
+                        $"Type \"{settings.ColumnType}\" should not be used as a type of a column. This type is defined in column settings of the column \"{columnInfo.Name}\" (position {i}).");
+                }
+
+                ITypeDispatcher? typeDispatcher;
                 SingleRowColumnWriterDispatcher dispatcher;
-                Type valueType;
                 if (value != null && !(value is DBNull))
                 {
                     dispatcher = new SingleRowColumnWriterDispatcher(value, columnInfo, _columnSettings?[i]);
-                    valueType = value.GetType();
+                    var valueType = value.GetType();
+
+                    if (settings?.ColumnType != null)
+                    {
+                        if (!settings.ColumnType.IsAssignableFrom(valueType))
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ColumnMismatch,
+                                $"The value of the row at the position {i} (column \"{columnInfo.Name}\") can't be converted to the type \"{settings.ColumnType}\". This type is defined in column settings.");
+                        }
+
+                        typeDispatcher = settings.GetColumnTypeDispatcher();
+                        Debug.Assert(typeDispatcher != null);
+                    }
+                    else
+                    {
+                        typeDispatcher = TypeDispatcher.Create(valueType);
+                    }
                 }
                 else if (columnInfo.TypeInfo.TypeName != "Nullable")
                 {
@@ -151,13 +178,29 @@ namespace Octonica.ClickHouseClient
                 else
                 {
                     dispatcher = new SingleRowColumnWriterDispatcher(null, columnInfo, _columnSettings?[i]);
-                    valueType = columnInfo.TypeInfo.GetFieldType();
+                    if (settings?.ColumnType != null)
+                    {
+                        if (settings.ColumnType.IsValueType && Nullable.GetUnderlyingType(settings.ColumnType) == null)
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ColumnMismatch,
+                                $"The value of the row at the position {i} (column \"{columnInfo.Name}\") is null. But the type of this column defined in the settings (\"{settings.ColumnType}\") doesn't allow nulls.");
+                        }
+
+                        typeDispatcher = settings.GetColumnTypeDispatcher();
+                        Debug.Assert(typeDispatcher != null);
+                    }
+                    else
+                    {
+                        var fieldType = columnInfo.TypeInfo.GetFieldType();
+                        typeDispatcher = TypeDispatcher.Create(fieldType);
+                    }
                 }
 
                 IClickHouseColumnWriter columnWriter;
                 try
                 {
-                    columnWriter = TypeDispatcher.Dispatch(valueType, dispatcher);
+                    columnWriter = typeDispatcher.Dispatch(dispatcher);
                 }
                 catch (ClickHouseException ex)
                 {
@@ -229,17 +272,42 @@ namespace Octonica.ClickHouseClient
                 var columnInfo = _columns[i];
                 var settings = _columnSettings?[i];
 
+                if (settings?.ColumnType == typeof(object))
+                {
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.InvalidColumnSettings,
+                        $"Type \"{settings.ColumnType}\" should not be used as a type of a column. This type is defined in column settings of the column \"{columnInfo.Name}\" (position {i}).");
+                }
+
                 if (column == null)
                 {
                     if (!columnInfo.TypeInfo.TypeName.StartsWith("Nullable"))
                         throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
 
-                    var constColumn = TypeDispatcher.Dispatch(columnInfo.TypeInfo.GetFieldType(), new NullColumnWriterDispatcher(columnInfo, settings, rowCount));
+                    ITypeDispatcher? typeDispatcher;
+                    if (settings?.ColumnType != null)
+                    {
+                        if (settings.ColumnType.IsValueType && Nullable.GetUnderlyingType(settings.ColumnType) == null)
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ColumnMismatch,
+                                $"The column \"{columnInfo.Name}\" (position {i}) contains null value. But the type of this column defined in the settings (\"{settings.ColumnType}\") doesn't allow nulls.");
+                        }
+
+                        typeDispatcher = settings.GetColumnTypeDispatcher();
+                        Debug.Assert(typeDispatcher != null);
+                    }
+                    else
+                    {
+                        typeDispatcher = TypeDispatcher.Create(columnInfo.TypeInfo.GetFieldType());
+                    }
+
+                    var constColumn = typeDispatcher.Dispatch(new NullColumnWriterDispatcher(columnInfo, settings, rowCount));
                     writers.Add(constColumn);
                     continue;
                 }
-                
-                var columnType = column.GetType();                
+
+                var columnType = column.GetType();
                 Type? enumerable = null;
                 Type? altEnumerable = null;
                 Type? asyncEnumerable = null;
@@ -280,11 +348,71 @@ namespace Octonica.ClickHouseClient
                  * All supported interfaces (sorted by priority):
                  * 1. IReadOnlyList<T>
                  * 2. IList<T>
-                 * 3. IAsyncEnumerable<T> (supported only in ascynronous mode, i.e. async == true)
+                 * 3. IAsyncEnumerable<T> (supported only in ascynronuous mode, i.e. async == true)
                  * 4. IEnumerable<T>
                  * 5. IEnumerable
                  */
 
+                var explicitTypeDispatcher = settings?.GetColumnTypeDispatcher();
+                IClickHouseColumnWriter? columnWriter;
+                if (explicitTypeDispatcher != null)
+                {
+                    Debug.Assert(settings?.ColumnType != null);
+                    
+                    // The type is explicitly specified in the column settings. Either cast the column to a collection
+                    // of this type or throw an exception.
+                    columnWriter = explicitTypeDispatcher.Dispatch(new ColumnWriterDispatcher(column, columnInfo, settings, rowCount, i, async));
+                    if (columnWriter != null)
+                    {
+                        writers.Add(columnWriter);
+                        continue;
+                    }
+
+                    if (async && typeof(IAsyncEnumerable<>).MakeGenericType(settings.ColumnType).IsAssignableFrom(columnType))
+                    {
+                        columnWriter = await explicitTypeDispatcher.Dispatch(new AsyncColumnWriterDispatcher(column, columnInfo, settings, rowCount, i, cancellationToken));
+                        writers.Add(columnWriter);
+                        continue;
+                    }
+
+                    // There is almost no chance that IEnumerable's IEnumerator returns the value of expected type if at least one of interfaces is implemented by the column's type.
+                    bool ignoreNonGenericEnumerable = readOnlyList != null || list != null || asyncEnumerable != null || enumerable != null;
+                    columnWriter = explicitTypeDispatcher.Dispatch(new ColumnWriterObjectCollectionDispatcher(column, columnInfo, settings, rowCount, i, async, ignoreNonGenericEnumerable));
+                    if (columnWriter != null)
+                    {
+                        writers.Add(columnWriter);
+                        continue;
+                    }
+
+                    if (async && column is IAsyncEnumerable<object?> aeCol)
+                    {
+                        columnWriter = await explicitTypeDispatcher.Dispatch(new AsyncObjectColumnWriterDispatcher(aeCol, columnInfo, settings, rowCount, i, cancellationToken));
+                        writers.Add(columnWriter);
+                        continue;
+                    }
+
+                    if (!async)
+                    {
+                        Type? aeInterface = typeof(IAsyncEnumerable<>).MakeGenericType(settings.ColumnType);
+                        if (!aeInterface.IsAssignableFrom(settings.ColumnType))
+                        {
+                            aeInterface = column is IAsyncEnumerable<object?> ? typeof(IAsyncEnumerable<object?>) : null;
+                        }
+
+                        if (aeInterface != null)
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ColumnMismatch,
+                                $"The column \"{columnInfo.Name}\" at the position {i} implements interface \"{aeInterface}\". Call async method \"{nameof(WriteTableAsync)}\".");
+                        }
+                    }
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.ColumnMismatch,
+                        $"The column \"{columnInfo.Name}\" at the position {i} is not a collection of type \"{settings.ColumnType}\". This type is defined in the column's settings.");
+                }
+
+                // Trying to extract an actual type of column's items from an interface implemented by this column.
                 Type dispatchedElementType;
                 if (readOnlyList != null)
                 {
@@ -355,7 +483,7 @@ namespace Octonica.ClickHouseClient
                 }
 
                 var dispatcher = new ColumnWriterDispatcher(column, columnInfo, settings, rowCount, i, false);
-                var columnWriter = TypeDispatcher.Dispatch(dispatchedElementType, dispatcher);
+                columnWriter = TypeDispatcher.Dispatch(dispatchedElementType, dispatcher);
 
                 if (columnWriter == null)
                     throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
@@ -673,6 +801,7 @@ namespace Octonica.ClickHouseClient
             private readonly int _rowCount;
             private readonly int _columnIndex;
             private readonly bool _checkAsyncEnumerable;
+            private readonly bool _ignoreNonGenericEnumerable;
 
             public ColumnWriterObjectCollectionDispatcher(
                 object collection,
@@ -680,7 +809,8 @@ namespace Octonica.ClickHouseClient
                 ClickHouseColumnSettings? columnSettings,
                 int rowCount,
                 int columnIndex,
-                bool checkAsyncEnumerable)
+                bool checkAsyncEnumerable,
+                bool ignoreNonGenericEnumerable = false)
             {
                 _collection = collection;
                 _columnInfo = columnInfo;
@@ -688,6 +818,7 @@ namespace Octonica.ClickHouseClient
                 _rowCount = rowCount;
                 _columnIndex = columnIndex;
                 _checkAsyncEnumerable = checkAsyncEnumerable;
+                _ignoreNonGenericEnumerable = ignoreNonGenericEnumerable;
             }
 
             public IClickHouseColumnWriter? Dispatch<T>()
@@ -726,7 +857,7 @@ namespace Octonica.ClickHouseClient
                     rows.AddRange(genericEnumerable.Take(_rowCount));
                     readOnlyList = rows;
                 }
-                else if (_collection is IEnumerable enumerable)
+                else if (!_ignoreNonGenericEnumerable && _collection is IEnumerable enumerable)
                 {
                     List<T> rows = new List<T>(_rowCount);
 

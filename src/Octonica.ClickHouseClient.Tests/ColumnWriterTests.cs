@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1009,27 +1010,119 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(rowCount, count);
         }
 
-        private async Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, Task> runTest)
+        [Fact]
+        public async Task InsertValuesOfSpecifiedType()
         {
-            var tableName = $"{TestTableName}_{tableNameSuffix}";
-            try
+            const int rowCount = 200;
+            var startId = _tableFixture.ReserveRange(rowCount);
+
+            var ids = Enumerable.Range(startId, 123).ToList();
+            var list = new Int32ToUInt32MappedListWrapper(ids, v => (uint)v * 7);
+            var table = new object?[] { list, list, null };
+
+            await using var connection = await OpenConnectionAsync();
+
+            await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {TestTableName}(id, num, str) VALUES", CancellationToken.None))
             {
-                await using var connection = await OpenConnectionAsync();
+                Assert.Equal(typeof(int), writer.GetFieldType(0));
+                Assert.Equal(typeof(decimal?), writer.GetFieldType(1));
+                Assert.Equal(typeof(string), writer.GetFieldType(2));
 
-                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
-                await cmd.ExecuteNonQueryAsync();
+                writer.ConfigureColumn("id", new ClickHouseColumnSettings(typeof(int)));
+                writer.ConfigureColumn("num", new ClickHouseColumnSettings(typeof(uint)));
 
-                cmd = connection.CreateCommand($"CREATE TABLE {tableName}({columns}) ENGINE=Memory");
-                await cmd.ExecuteNonQueryAsync();
+                Assert.Equal(typeof(int), writer.GetFieldType(0));
+                Assert.Equal(typeof(uint), writer.GetFieldType(1));
+                Assert.Equal(typeof(string), writer.GetFieldType(2));
 
-                await runTest(connection, tableName);
+                await writer.WriteTableAsync(table, ids.Count, CancellationToken.None);
             }
-            finally
+
+            await using var cmd = connection.CreateCommand($"SELECT id, num FROM {TestTableName} WHERE id >= {{startId}} AND id < {{endId}} ORDER BY id");
+            cmd.Parameters.AddWithValue("startId", startId);
+            cmd.Parameters.AddWithValue("endId", startId + rowCount);
+
+            await using var reader = cmd.ExecuteReader();
+            int count = 0;
+            while (await reader.ReadAsync())
             {
-                await using var connection = await OpenConnectionAsync();
-                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
-                await cmd.ExecuteNonQueryAsync();
+                var id = reader.GetInt32(0);
+                var num = reader.GetFieldValue<decimal>(1);
+
+                Assert.Equal(count + startId, id);
+                Assert.Equal(id * 7, num);
+
+                ++count;
             }
+
+            Assert.Equal(ids.Count, count);
+        }
+
+        [Fact]
+        public async Task InsertValuesFromObjectArrays()
+        {
+            var tableData = new object?[][]
+            {
+                new object[]{1, 2, 3, 4, 5, 6, 7},
+                new object?[]{"one", null, null, null, "five", "six", "seven"},
+                new object?[]{"192.168.121.0", DBNull.Value, "127.0.0.1", DBNull.Value, DBNull.Value, "10.0.0.1", "8.8.8.8"},
+                new object?[]{null, DBNull.Value, 12.34m, 12324.57m, 2195.99m, DBNull.Value, null},
+                new object[]{(sbyte)-1, (sbyte)0, (sbyte)0, (sbyte)1, (sbyte)1, (sbyte)-1, (sbyte)0}
+
+            };
+
+            var expectedData = new object?[][]
+            {
+                tableData[0].Cast<int>().Select(v=>(object)(long)v).ToArray(),
+                tableData[1],
+                new object?[]{IPAddress.Parse("192.168.121.0"), null, IPAddress.Parse("127.0.0.1"), null, null, IPAddress.Parse("10.0.0.1"), IPAddress.Parse("8.8.8.8")},
+                tableData[3],
+                new object[]{"minus", "zero", "zero", "plus", "plus", "minus", "zero"}
+            };
+
+            await WithTemporaryTable("obj_arr", "id Int64, str Nullable(String), ip Nullable(IPv4), num Nullable(Decimal32(2)), sign Enum8('minus'=-1, 'zero'=0, 'plus'=1)", RunTest);
+
+            async Task RunTest(ClickHouseConnection connection, string tableName)
+            {
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, str, ip, num, sign) VALUES", CancellationToken.None))
+                {
+                    writer.ConfigureColumn(0, new ClickHouseColumnSettings(tableData[0][0]!.GetType()));
+                    writer.ConfigureColumn(1, new ClickHouseColumnSettings(tableData[1][0]!.GetType()));
+                    writer.ConfigureColumn(2, new ClickHouseColumnSettings(tableData[2][0]!.GetType()));
+                    writer.ConfigureColumn(4, new ClickHouseColumnSettings(tableData[4][0]!.GetType()));
+
+                    await writer.WriteTableAsync(tableData, tableData[0].Length, CancellationToken.None);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT id, str, ip, num, sign FROM {tableName}");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    for (int i = 0; i < tableData.Length; i++)
+                    {
+                        var expectedValue = expectedData[i][count];
+                        bool isNull = expectedValue == null || expectedValue == DBNull.Value;
+                        Assert.Equal(isNull, reader.IsDBNull(i));
+
+                        if (isNull)
+                            continue;
+
+                        var value = reader.GetValue(i);
+                        Assert.Equal(expectedValue, value);
+                    }
+
+                    ++count;
+                }
+
+                Assert.Equal(tableData[0].Length, count);
+            }
+        }
+
+        protected override string GetTempTableName(string tableNameSuffix)
+        {
+            return $"{TestTableName}_{tableNameSuffix}";
         }
 
         public class TableFixture : ClickHouseTestsBase, IDisposable

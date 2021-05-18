@@ -131,7 +131,8 @@ namespace Octonica.ClickHouseClient
             // GetValue should always return DBNull.Value instead of null.
             // So an actual field type should be unboxed from Nullable<T>.
 
-            var type = _blockHeader.Columns[ordinal].TypeInfo.GetFieldType();
+            var type = _columnSettings?[ordinal]?.ColumnType;
+            type ??= _blockHeader.Columns[ordinal].TypeInfo.GetFieldType();
             return Nullable.GetUnderlyingType(type) ?? type;
         }
 

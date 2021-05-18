@@ -15,8 +15,10 @@
  */
 #endregion
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -168,5 +170,28 @@ namespace Octonica.ClickHouseClient.Tests
                 return new ValueTask<bool>(true);
             }
         }
+    }
+
+    internal sealed class Int32ToUInt32MappedListWrapper : ListWrapperBase<int>, IReadOnlyList<int>, IReadOnlyList<uint>
+    {
+        private readonly Func<int, uint> _map;
+
+        public Int32ToUInt32MappedListWrapper(List<int> list, Func<int, uint> map)
+            : base(list)
+        {
+            _map = map;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        IEnumerator<uint> IEnumerable<uint>.GetEnumerator()
+        {
+            return this.Select(_map).GetEnumerator();
+        }
+
+        uint IReadOnlyList<uint>.this[int index] => _map(this[index]);
     }
 }

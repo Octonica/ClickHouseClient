@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Utils;
 using System;
 
 namespace Octonica.ClickHouseClient.Types
@@ -98,6 +99,67 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             return _reinterpretationRoot.TryReinterpret<T>();
+        }
+    }
+
+    internal sealed class ReinterpretedTableColumn : IClickHouseTableColumn
+    {
+        private readonly IClickHouseTableColumn _column;
+        private readonly Func<object, object> _convertValue;
+
+        public int RowCount => throw new NotImplementedException();
+
+        public ReinterpretedTableColumn(IClickHouseTableColumn column, Func<object, object> convertValue)
+        {
+            _column = column ?? throw new ArgumentNullException(nameof(column));
+            _convertValue = convertValue ?? throw new ArgumentNullException(nameof(convertValue));
+        }
+
+        public bool IsNull(int index)
+        {
+            return _column.IsNull(index);
+        }
+
+        public object GetValue(int index)
+        {
+            var value = _column.GetValue(index);
+            return _convertValue(value);
+        }
+
+        public IClickHouseTableColumn<T>? TryReinterpret<T>()
+        {
+            return _column.TryReinterpret<T>();
+        }
+
+        public static IClickHouseTableColumn GetReinterpetedTableColumn(IClickHouseTableColumn column, Type targetType, Func<object, object> fallbackConvertValue)
+        {
+            return GetReinterpetedTableColumn(column, TypeDispatcher.Create(targetType), fallbackConvertValue);
+        }
+
+        internal static IClickHouseTableColumn GetReinterpetedTableColumn(IClickHouseTableColumn column, ITypeDispatcher typeDispatcher, Func<object, object> fallbackConvertValue)
+        {
+            return typeDispatcher.Dispatch(new ReinterpretedTableColumnDispatcher(column, fallbackConvertValue));
+        }
+
+        private sealed class ReinterpretedTableColumnDispatcher : ITypeDispatcher<IClickHouseTableColumn>
+        {
+            private readonly IClickHouseTableColumn _column;
+            private readonly Func<object, object> _fallbackConvertValue;
+
+            public ReinterpretedTableColumnDispatcher(IClickHouseTableColumn column, Func<object, object> fallbackConvertValue)
+            {
+                _column = column;
+                _fallbackConvertValue = fallbackConvertValue;
+            }
+
+            public IClickHouseTableColumn Dispatch<T>()
+            {
+                var reinterpretedColumn = (_column as IClickHouseTableColumn<T>) ?? _column.TryReinterpret<T>();
+                if (reinterpretedColumn != null)
+                    return reinterpretedColumn;
+
+                return new ReinterpretedTableColumn(_column, _fallbackConvertValue);
+            }
         }
     }
 }

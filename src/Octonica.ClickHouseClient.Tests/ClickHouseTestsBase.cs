@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 #endregion
 
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,6 +55,34 @@ namespace Octonica.ClickHouseClient.Tests
             connection.Open();
 
             return connection;
+        }
+
+        protected async Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, Task> runTest)
+        {
+            var tableName = GetTempTableName(tableNameSuffix);
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand($"CREATE TABLE {tableName}({columns}) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                await runTest(connection, tableName);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        protected virtual string GetTempTableName(string tableNameSuffix)
+        {
+            return $"clickhouse_client_test_{tableNameSuffix}";
         }
     }
 }

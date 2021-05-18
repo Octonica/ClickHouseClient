@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,5 +36,6 @@ namespace Octonica.ClickHouseClient.Exceptions
         public const int InternalError = 14;
         public const int CompressionDecoderError = 15;
         public const int NetworkError = 16;
+        public const int InvalidColumnSettings = 17;
     }
 }

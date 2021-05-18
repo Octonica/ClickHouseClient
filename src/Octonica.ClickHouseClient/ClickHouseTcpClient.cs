@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -310,7 +311,8 @@ namespace Octonica.ClickHouseClient
                     var columnName = await reader.ReadString(async, cancellationToken);
                     var columnTypeName = await reader.ReadString(async, cancellationToken);
                     var columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
-                    columnInfos.Add(new ColumnInfo(columnName, columnType));
+                    var columnInfo = new ColumnInfo(columnName, columnType);
+                    columnInfos.Add(columnInfo);
 
                     var columnRowCount = rowCount;
                     var columnReader = columnType.CreateColumnReader(skip ? 0 : columnRowCount);
@@ -335,12 +337,38 @@ namespace Octonica.ClickHouseClient
 
                     var settings = columnSettings == null || columnSettings.Count <= i ? null : columnSettings[i];
                     var column = columnReader.EndRead(settings);
+
+                    var typeDispatcher = settings?.GetColumnTypeDispatcher();
+                    if (typeDispatcher != null)
+                    {
+                        Debug.Assert(settings != null && settings.ColumnType != null);
+                        column = ReinterpretedTableColumn.GetReinterpetedTableColumn(column, typeDispatcher, CreateCastFunc(columnInfo, settings.ColumnType));
+                    }
+
                     columns.Add(column);
                 }
 
                 reader.EndDecompress();
                 var blockHeader = new BlockHeader(dataMessage.TempTableName, columnInfos.AsReadOnly(), rowCount);
                 return new ClickHouseTable(blockHeader, columns.AsReadOnly());
+            }
+
+            private static Func<object, object> CreateCastFunc(ColumnInfo columnInfo, Type targetType)
+            {
+                if (targetType == typeof(object))
+                    return value => value; // This is fine, everything is object
+
+                return CastFailed;
+
+                object CastFailed(object value)
+                {
+                    if (value == DBNull.Value)
+                        return value;
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.ColumnMismatch,
+                        $"A value from the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\" can't be converted to type \"{targetType}\". This type is defined in column settings.");
+                }
             }
 
             private async ValueTask<T> WithCancellationToken<T>(CancellationToken token, Func<CancellationToken, ValueTask<T>> execute)
