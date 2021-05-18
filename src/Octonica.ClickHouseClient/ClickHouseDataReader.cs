@@ -127,7 +127,12 @@ namespace Octonica.ClickHouseClient
 
         public override Type GetFieldType(int ordinal)
         {
-            return _blockHeader.Columns[ordinal].TypeInfo.GetFieldType();
+            // This method must return the type of a value returned by GetValue.
+            // GetValue should always return DBNull.Value instead of null.
+            // So an actual field type should be unboxed from Nullable<T>.
+
+            var type = _blockHeader.Columns[ordinal].TypeInfo.GetFieldType();
+            return Nullable.GetUnderlyingType(type) ?? type;
         }
 
         public sealed override int GetOrdinal(string name)

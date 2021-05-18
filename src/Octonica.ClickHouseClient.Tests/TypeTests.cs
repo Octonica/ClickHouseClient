@@ -1985,24 +1985,62 @@ FROM clickhouse_test_nullable";
                 var r = await queryCmd.ExecuteReaderAsync();
                 while (r.Read())
                 {
+                    Assert.Equal(typeof(sbyte), r.GetFieldType(0));
                     Assert.Equal((sbyte) 8, r.GetFieldValue<sbyte>(0)); //int8
+                    Assert.Equal((sbyte) 8, r.GetValue(0));
+
+                    Assert.Equal(typeof(short), r.GetFieldType(1));
                     Assert.Equal((short) 16, r.GetInt16(1));
+                    Assert.Equal((short) 16, r.GetValue(1));
+
+                    Assert.Equal(typeof(int), r.GetFieldType(2));
                     Assert.Equal((int) 32, r.GetInt32(2));
+                    Assert.Equal((int) 32, r.GetValue(2));
+
+                    Assert.Equal(typeof(long), r.GetFieldType(3));
                     Assert.Equal((long) 64, r.GetInt64(3));
-                    Assert.Equal((ushort) 18, r.GetFieldValue<ushort>(4)); //uint8
+                    Assert.Equal((long) 64, r.GetValue(3));
+
+                    Assert.Equal(typeof(byte), r.GetFieldType(4));
+                    Assert.Equal((byte) 18, r.GetFieldValue<byte>(4)); //uint8
+                    Assert.Equal((byte) 18, r.GetValue(4));
+
+                    Assert.Equal(typeof(ushort), r.GetFieldType(5));
                     Assert.Equal((ushort) 116, r.GetFieldValue<ushort>(5));
+                    Assert.Equal((ushort) 116, r.GetValue(5));
+
+                    Assert.Equal(typeof(uint), r.GetFieldType(6));
                     Assert.Equal((uint) 132, r.GetFieldValue<uint>(6));
+                    Assert.Equal((uint) 132, r.GetValue(6));
+
+                    Assert.Equal(typeof(ulong), r.GetFieldType(7));
                     Assert.Equal((UInt64) 165, r.GetFieldValue<UInt64>(7));
+                    Assert.Equal((UInt64) 165, r.GetValue(7));
+
+                    Assert.Equal(typeof(float), r.GetFieldType(8));
                     Assert.Equal((float) 1.1, r.GetFloat(8));
+                    Assert.Equal((float) 1.1, r.GetValue(8));
+
+                    Assert.Equal(typeof(double), r.GetFieldType(9));
                     Assert.Equal((double) 1.2, r.GetDouble(9));
+                    Assert.Equal((double) 1.2, r.GetValue(9));
+
+                    Assert.Equal(typeof(string), r.GetFieldType(10));
                     Assert.Equal("RU", r.GetString(10));
+                    Assert.Equal("RU", r.GetValue(10));
+
+                    Assert.Equal(typeof(byte[]), r.GetFieldType(11));
                     var fixedStringBytes = r.GetFieldValue<byte[]>(11);
                     var fixedStringBytesAsValue = r.GetValue(11) as byte[];
                     Assert.Equal(fixedStringBytes, fixedStringBytesAsValue);
                     Assert.NotNull(fixedStringBytes as byte[]);
                     Assert.Equal("UA", Encoding.Default.GetString(fixedStringBytes as byte[]));
+
+                    Assert.Equal(typeof(string), r.GetFieldType(14));
                     Assert.Equal("a", r.GetValue(14));
                     Assert.Equal(127, r.GetFieldValue<sbyte>(14));
+
+                    Assert.Equal(typeof(string), r.GetFieldType(15));
                     Assert.Equal("c", r.GetValue(15));
                     Assert.Equal(-32768, r.GetInt16(15));
                 }
