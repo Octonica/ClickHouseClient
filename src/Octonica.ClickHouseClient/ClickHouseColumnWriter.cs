@@ -159,7 +159,7 @@ namespace Octonica.ClickHouseClient
                         if (!settings.ColumnType.IsAssignableFrom(valueType))
                         {
                             throw new ClickHouseException(
-                                ClickHouseErrorCodes.ColumnMismatch,
+                                ClickHouseErrorCodes.ColumnTypeMismatch,
                                 $"The value of the row at the position {i} (column \"{columnInfo.Name}\") can't be converted to the type \"{settings.ColumnType}\". This type is defined in column settings.");
                         }
 
@@ -173,7 +173,7 @@ namespace Octonica.ClickHouseClient
                 }
                 else if (columnInfo.TypeInfo.TypeName != "Nullable")
                 {
-                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
+                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
                 }
                 else
                 {
@@ -183,7 +183,7 @@ namespace Octonica.ClickHouseClient
                         if (settings.ColumnType.IsValueType && Nullable.GetUnderlyingType(settings.ColumnType) == null)
                         {
                             throw new ClickHouseException(
-                                ClickHouseErrorCodes.ColumnMismatch,
+                                ClickHouseErrorCodes.ColumnTypeMismatch,
                                 $"The value of the row at the position {i} (column \"{columnInfo.Name}\") is null. But the type of this column defined in the settings (\"{settings.ColumnType}\") doesn't allow nulls.");
                         }
 
@@ -282,7 +282,7 @@ namespace Octonica.ClickHouseClient
                 if (column == null)
                 {
                     if (!columnInfo.TypeInfo.TypeName.StartsWith("Nullable"))
-                        throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
+                        throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {i} doesn't support nulls.");
 
                     ITypeDispatcher? typeDispatcher;
                     if (settings?.ColumnType != null)
@@ -290,7 +290,7 @@ namespace Octonica.ClickHouseClient
                         if (settings.ColumnType.IsValueType && Nullable.GetUnderlyingType(settings.ColumnType) == null)
                         {
                             throw new ClickHouseException(
-                                ClickHouseErrorCodes.ColumnMismatch,
+                                ClickHouseErrorCodes.ColumnTypeMismatch,
                                 $"The column \"{columnInfo.Name}\" (position {i}) contains null value. But the type of this column defined in the settings (\"{settings.ColumnType}\") doesn't allow nulls.");
                         }
 
@@ -402,13 +402,13 @@ namespace Octonica.ClickHouseClient
                         if (aeInterface != null)
                         {
                             throw new ClickHouseException(
-                                ClickHouseErrorCodes.ColumnMismatch,
+                                ClickHouseErrorCodes.NotSupportedInSyncronousMode,
                                 $"The column \"{columnInfo.Name}\" at the position {i} implements interface \"{aeInterface}\". Call async method \"{nameof(WriteTableAsync)}\".");
                         }
                     }
 
                     throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnMismatch,
+                        ClickHouseErrorCodes.ColumnTypeMismatch,
                         $"The column \"{columnInfo.Name}\" at the position {i} is not a collection of type \"{settings.ColumnType}\". This type is defined in the column's settings.");
                 }
 
@@ -470,11 +470,11 @@ namespace Octonica.ClickHouseClient
                             {
                                 var aeInterface = asyncEnumerable ?? typeof(IAsyncEnumerable<object?>);
                                 throw new ClickHouseException(
-                                    ClickHouseErrorCodes.ColumnMismatch,
+                                    ClickHouseErrorCodes.NotSupportedInSyncronousMode,
                                     $"The column \"{columnInfo.Name}\" at the position {i} implements interface \"{aeInterface}\". Call async method \"{nameof(WriteTableAsync)}\".");
                             }
 
-                            throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
+                            throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
                         }
 
                         writers.Add(objColumnWriter);
@@ -486,7 +486,7 @@ namespace Octonica.ClickHouseClient
                 columnWriter = TypeDispatcher.Dispatch(dispatchedElementType, dispatcher);
 
                 if (columnWriter == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
+                    throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {i} is not a collection.");
 
                 writers.Add(columnWriter);
             }
@@ -496,7 +496,7 @@ namespace Octonica.ClickHouseClient
 
             static ClickHouseException CreateInterfaceAmbiguousException(Type itf, Type altItf, string columnName, int columnIndex)
             {
-                return new ClickHouseException(ClickHouseErrorCodes.ColumnMismatch,
+                return new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch,
                     $"A type of the column \"{columnName}\" at the position {columnIndex} is ambiguous. The column implements interfaces \"{itf}\" and \"{altItf}\".");
             }
         }
@@ -662,7 +662,7 @@ namespace Octonica.ClickHouseClient
                 if (rows.Count < _rowCount)
                 {
                     throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnMismatch,
+                        ClickHouseErrorCodes.InvalidRowCount,
                         $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
                 }
 
@@ -713,7 +713,7 @@ namespace Octonica.ClickHouseClient
                 if (rows.Count < _rowCount)
                 {
                     throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnMismatch,
+                        ClickHouseErrorCodes.InvalidRowCount,
                         $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
                 }
 
@@ -753,7 +753,7 @@ namespace Octonica.ClickHouseClient
                     if (readOnlyList.Count < _rowCount)
                     {
                         throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnMismatch,
+                            ClickHouseErrorCodes.InvalidRowCount,
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {readOnlyList.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
@@ -768,7 +768,7 @@ namespace Octonica.ClickHouseClient
                     if (list.Count < _rowCount)
                     {
                         throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnMismatch,
+                            ClickHouseErrorCodes.InvalidRowCount,
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
@@ -828,7 +828,7 @@ namespace Octonica.ClickHouseClient
                     if (readOnlyList.Count < _rowCount)
                     {
                         throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnMismatch,
+                            ClickHouseErrorCodes.InvalidRowCount,
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {readOnlyList.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
@@ -840,7 +840,7 @@ namespace Octonica.ClickHouseClient
                     if (list.Count < _rowCount)
                     {
                         throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnMismatch,
+                            ClickHouseErrorCodes.InvalidRowCount,
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
@@ -873,7 +873,7 @@ namespace Octonica.ClickHouseClient
                     if (rows.Count < _rowCount)
                     {
                         throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnMismatch,
+                            ClickHouseErrorCodes.ColumnTypeMismatch,
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 

@@ -15,6 +15,8 @@
  */
 #endregion
 
+using System;
+
 namespace Octonica.ClickHouseClient.Exceptions
 {
     public static class ClickHouseErrorCodes
@@ -32,10 +34,14 @@ namespace Octonica.ClickHouseClient.Exceptions
         public const int DataReaderError = 10;
         public const int QueryParameterNotFound = 11;
         public const int InvalidQueryParameterConfiguration = 12;
+        [Obsolete("ColumnMismatch was replaced with " + nameof(ColumnTypeMismatch) + ", " + nameof(NotSupportedInSyncronousMode) + " and " + nameof(InvalidRowCount))]
         public const int ColumnMismatch = 13;
         public const int InternalError = 14;
         public const int CompressionDecoderError = 15;
         public const int NetworkError = 16;
         public const int InvalidColumnSettings = 17;
+        public const int ColumnTypeMismatch = 18;
+        public const int InvalidRowCount = 19;
+        public const int NotSupportedInSyncronousMode = 20;
     }
 }

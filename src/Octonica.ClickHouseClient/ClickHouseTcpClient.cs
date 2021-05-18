@@ -366,7 +366,7 @@ namespace Octonica.ClickHouseClient
                         return value;
 
                     throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnMismatch,
+                        ClickHouseErrorCodes.ColumnTypeMismatch,
                         $"A value from the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\" can't be converted to type \"{targetType}\". This type is defined in column settings.");
                 }
             }
