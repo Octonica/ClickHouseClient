@@ -93,7 +93,11 @@ namespace Octonica.ClickHouseClient
 
         public Type GetFieldType(int ordinal)
         {
-            return _columnSettings?[ordinal]?.ColumnType ?? _columns[ordinal].TypeInfo.GetFieldType();
+            // This method should implement the same logic as ClickHouseDataReader.GetFieldType
+
+            var type = _columnSettings?[ordinal]?.ColumnType;
+            type ??= _columns[ordinal].TypeInfo.GetFieldType();
+            return Nullable.GetUnderlyingType(type) ?? type;
         }
 
         public int GetOrdinal(string name)

@@ -1025,7 +1025,7 @@ namespace Octonica.ClickHouseClient.Tests
             await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {TestTableName}(id, num, str) VALUES", CancellationToken.None))
             {
                 Assert.Equal(typeof(int), writer.GetFieldType(0));
-                Assert.Equal(typeof(decimal?), writer.GetFieldType(1));
+                Assert.Equal(typeof(decimal), writer.GetFieldType(1));
                 Assert.Equal(typeof(string), writer.GetFieldType(2));
 
                 writer.ConfigureColumn("id", new ClickHouseColumnSettings(typeof(int)));
