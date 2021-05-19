@@ -1,3 +1,23 @@
+### Octonica.ClickHouseClient release v1.1.12, 2021-05-19
+
+#### Backward Incompatible Change
+
+* `ClickHouseDataReader.GetField` and `ClickHouseColumnWriter.GetField` now return `typeof(T)` instead of `typeof(Nullable<T>)` for nullable fields.
+  It is possible to get original type of a column from field's type info: `ClickClickHouseDataReader.GetFieldTypeInfo(int ordinal).GetFieldType()`.
+* Stricter column type check. `ClickHouseColumnWriter` throws an exception when a type of a column is ambiguous
+  (for example, a column's type implements both `IReadOnlyList<int>` and `IReadOnlyList<int?>`).
+
+#### New Feature
+
+* Add support for named tuples.
+* Add a way to explicitly set a type of a column. The type could be defined in `ClickHouseColumnSettings`. `ClickHouseDataReader` will try to convert
+  a column's value to this type. `ClickHouseColumnWriter` will expect a column to be a collection of items of this type.
+* Add support for `IReadOnlyList<object>`, `IList<object>`, `IEnumerable<object>` and `IAsyncEnumerable<object>` to `ClickHouseColumnWriter` ([#21](https://github.com/Octonica/ClickHouseClient/issues/21)).
+
+#### Bug Fix
+
+* Add recognition of escape sequences in enum's item names.
+
 ### Octonica.ClickHouseClient release v1.1.9, 2021-05-07
 
 #### New Feature
