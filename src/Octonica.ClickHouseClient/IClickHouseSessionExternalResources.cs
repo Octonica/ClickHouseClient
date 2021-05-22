@@ -15,6 +15,7 @@
  */
 #endregion
 
+using System;
 using System.Threading.Tasks;
 
 namespace Octonica.ClickHouseClient
@@ -22,5 +23,7 @@ namespace Octonica.ClickHouseClient
     internal interface IClickHouseSessionExternalResources
     {
         ValueTask Release(bool async);
+
+        ValueTask ReleaseOnFailure(Exception? exception, bool async);
     }
 }

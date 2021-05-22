@@ -787,6 +787,11 @@ namespace Octonica.ClickHouseClient
                 _tokenSource?.Dispose();
                 return _connection?.Close(async) ?? default;
             }
+
+            public ValueTask ReleaseOnFailure(Exception? exception, bool async)
+            {
+                return Release(async);
+            }
         }
     }
 }

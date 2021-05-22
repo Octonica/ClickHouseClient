@@ -42,8 +42,6 @@ namespace Octonica.ClickHouseClient
         private Exception? _unhandledException;
         private volatile bool _isFailed;
 
-        public event EventHandler<Exception?>? OnFailed;
-
         public ClickHouseServerInfo ServerInfo { get; }
 
         public ClickHouseTcpClient(
@@ -104,8 +102,6 @@ namespace Octonica.ClickHouseClient
             Dispose();
             _unhandledException = unhandledException;
             _isFailed = true;
-
-            OnFailed?.Invoke(this, _unhandledException);
         }
 
         public void Dispose()
@@ -119,7 +115,7 @@ namespace Octonica.ClickHouseClient
             _client.Dispose();
         }
 
-        public class Session : IDisposable, IAsyncDisposable
+        public sealed class Session : IDisposable, IAsyncDisposable
         {
             private readonly ClickHouseTcpClient _client;
             private readonly IClickHouseSessionExternalResources? _externalResources;
@@ -471,7 +467,7 @@ namespace Octonica.ClickHouseClient
                 _client.SetFailed(unhandledException);
 
                 if (_externalResources != null)
-                    await _externalResources.Release(async);
+                    await _externalResources.ReleaseOnFailure(unhandledException, async);
 
                 return processedException;
             }

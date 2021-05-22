@@ -460,28 +460,14 @@ namespace Octonica.ClickHouseClient
 
                 throw;
             }
-            _tcpClient.OnFailed += OnClientFailed;
+
             SetConnectionState(ConnectionState.Open);
         }
 
         internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
-            if (_tcpClient == null)
-            {
-                Debug.Assert(_connectionState.State != ConnectionState.Open);
-                throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
-            }
-
-            return _tcpClient.OpenSession(async, externalResources, sessionCancellationToken, cancellationToken);
-        }
-
-        private void OnClientFailed(object? sender, Exception? e)
-        {
-            SetConnectionState(ConnectionState.Broken);
-            Debug.Assert(_tcpClient != null);
-
-            ((ClickHouseTcpClient) sender!).OnFailed -= OnClientFailed;
-            _tcpClient = null;
+            var connectionSession = new ConnectionSession(this, externalResources);
+            return connectionSession.OpenSession(async, sessionCancellationToken, cancellationToken);
         }
 
         internal async ValueTask Close(bool async)
@@ -555,6 +541,48 @@ namespace Octonica.ClickHouseClient
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The state of the connection was modified.");
 
                 originalState = previousState;
+            }
+        }
+
+        private class ConnectionSession : IClickHouseSessionExternalResources
+        {
+            private readonly ClickHouseConnection _connection;
+            private readonly ClickHouseTcpClient _tcpClient;
+            private readonly IClickHouseSessionExternalResources? _externalResources;
+
+            public ConnectionSession(ClickHouseConnection connection, IClickHouseSessionExternalResources? externalResources)
+            {
+                _connection = connection;
+                var tcpClient = _connection._tcpClient;
+                if (tcpClient == null)
+                {
+                    Debug.Assert(_connection._connectionState.State != ConnectionState.Open);
+                    throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
+                }
+                _tcpClient = tcpClient;
+                _externalResources = externalResources;
+            }
+
+            public ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+            {
+                return _tcpClient.OpenSession(async, this, sessionCancellationToken, cancellationToken);
+            }
+
+            public ValueTask Release(bool async)
+            {
+                return _externalResources?.Release(async) ?? default;
+            }
+
+            public async ValueTask ReleaseOnFailure(Exception? exception, bool async)
+            {
+                if (ReferenceEquals(_connection._tcpClient, _tcpClient))
+                {
+                    _connection.SetConnectionState(ConnectionState.Broken);
+                    _connection._tcpClient = null;                    
+                }
+
+                if (_externalResources != null)
+                    await _externalResources.ReleaseOnFailure(exception, async);
             }
         }
     }
