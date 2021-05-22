@@ -464,6 +464,100 @@ namespace Octonica.ClickHouseClient
             SetConnectionState(ConnectionState.Open);
         }
 
+        /// <summary>
+        /// Send ping to the server and wait for response.
+        /// </summary>
+        /// <returns>
+        /// Returns <b>true</b> if ping was successful.
+        /// Returns <b>false</b> if the connection is busy with a command execution.
+        /// </returns>
+        public bool TryPing()
+        {
+            return TaskHelper.WaitNonAsyncTask(TryPing(false, CancellationToken.None));
+        }
+
+        /// <inheritdoc cref="TryPing()"/>
+        public Task<bool> TryPingAsync()
+        {
+            return TryPingAsync(CancellationToken.None);
+        }
+
+        /// <inheritdoc cref="TryPing()"/>
+        public async Task<bool> TryPingAsync(CancellationToken cancellationToken)
+        {
+            return await TryPing(true, cancellationToken);
+        }
+
+        private async ValueTask<bool> TryPing(bool async, CancellationToken cancellationToken)
+        {
+            if (_tcpClient?.State == ClickHouseTcpClientState.Active)
+                return false;
+
+            ClickHouseTcpClient.Session? session = null;
+            try
+            {
+                using (var ts = new CancellationTokenSource(TimeSpan.FromMilliseconds(5)))
+                {
+                    try
+                    {
+                        session = await OpenSession(async, null, CancellationToken.None, ts.Token);
+                    }
+                    catch (OperationCanceledException ex)
+                    {
+                        if (ex.CancellationToken == ts.Token)
+                            return false;
+
+                        throw;
+                    }
+                }
+
+                await session.SendPing(async, cancellationToken);
+                var responseMsg = await session.ReadMessage(async, cancellationToken);
+
+                switch (responseMsg.MessageCode)
+                {
+                    case ServerMessageCode.Pong:
+                        return true;
+
+                    case ServerMessageCode.Error:
+                        // Something else caused this error. Keep it in InnerException for debug.
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ProtocolUnexpectedResponse,
+                            $"Internal error. Unexpected message code (0x{responseMsg.MessageCode:X}) received from the server as a response to ping.",
+                            ((ServerErrorMessage)responseMsg).Exception);
+
+                    default:
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ProtocolUnexpectedResponse,
+                            $"Internal error. Unexpected message code (0x{responseMsg.MessageCode:X}) received from the server as a response to ping.");
+                }
+            }
+            catch (ClickHouseHandledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (session != null)
+                {
+                    await session.SetFailed(ex, false, async);
+                    session = null;
+                }
+
+                throw;
+            }
+            finally
+            {
+                if (session != null)
+                {
+                    if (async)
+                        await session.DisposeAsync();
+                    else
+                        session.Dispose();
+                }
+            }
+        }
+
         internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
             var connectionSession = new ConnectionSession(this, externalResources);

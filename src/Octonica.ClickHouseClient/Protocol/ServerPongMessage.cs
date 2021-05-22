@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,14 @@
 
 namespace Octonica.ClickHouseClient.Protocol
 {
-    internal enum ClientMessageCode
+    internal sealed class ServerPongMessage : IServerMessage
     {
-        Hello = 0,
-        Query = 1,
-        Data = 2,
-        Cancel = 3,
-        Ping = 4,
+        public static readonly ServerPongMessage Instance = new ServerPongMessage();
+
+        public ServerMessageCode MessageCode => ServerMessageCode.Pong;
+
+        private ServerPongMessage()
+        {
+        }
     }
 }

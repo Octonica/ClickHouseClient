@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,23 @@
  */
 #endregion
 
-namespace Octonica.ClickHouseClient.Protocol
+namespace Octonica.ClickHouseClient
 {
-    internal enum ClientMessageCode
+    internal enum ClickHouseTcpClientState
     {
-        Hello = 0,
-        Query = 1,
-        Data = 2,
-        Cancel = 3,
-        Ping = 4,
+        /// <summary>
+        /// TCP client is ready to open a session
+        /// </summary>
+        Ready = 0,
+
+        /// <summary>
+        /// There is an active session associated with the client
+        /// </summary>
+        Active = 1,
+
+        /// <summary>
+        /// A session was failed. TCP client was forced to close
+        /// </summary>
+        Failed = 2
     }
 }

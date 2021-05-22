@@ -713,5 +713,56 @@ namespace Octonica.ClickHouseClient.Tests
             var ex = await Assert.ThrowsAsync<ArgumentException>(() => cmd.ExecuteReaderAsync(CommandBehavior.KeyInfo));
             Assert.Equal("behavior", ex.ParamName);
         }
+
+        [Fact]
+        public async Task TryPing()
+        {
+            await using var cn = new ClickHouseConnection(GetDefaultConnectionSettings());
+            
+            var ex = await Assert.ThrowsAnyAsync<ClickHouseException>(() => cn.TryPingAsync());
+            Assert.Equal(ClickHouseErrorCodes.ConnectionClosed, ex.ErrorCode);
+            
+            await cn.OpenAsync();
+            Assert.True(await cn.TryPingAsync());
+
+            var cmd = cn.CreateCommand("SELECT * FROM system.one");
+            Assert.True(await cn.TryPingAsync());
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                Assert.False(await cn.TryPingAsync());
+                Assert.True(await reader.ReadAsync());
+                Assert.False(await cn.TryPingAsync());
+                Assert.False(await reader.ReadAsync());
+                Assert.True(await cn.TryPingAsync());
+            }
+
+            await using (await cmd.ExecuteReaderAsync())
+            {
+                Assert.False(await cn.TryPingAsync());
+            }
+
+            Assert.True(await cn.TryPingAsync());
+
+            await WithTemporaryTable(
+                "ping",
+                "id Int32",
+                async (_, tableName) =>
+                {
+                    await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName} VALUES", CancellationToken.None))
+                    {
+                        Assert.False(await cn.TryPingAsync());
+                        await writer.EndWriteAsync(CancellationToken.None);
+                        Assert.True(await cn.TryPingAsync());
+                    }
+
+                    Assert.True(await cn.TryPingAsync());
+                    await using (await cn.CreateColumnWriterAsync($"INSERT INTO {tableName} VALUES", CancellationToken.None))
+                    {
+                        Assert.False(await cn.TryPingAsync());
+                    }
+
+                    Assert.True(await cn.TryPingAsync());
+                });
+        }
     }
 }

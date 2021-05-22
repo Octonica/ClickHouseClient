@@ -40,7 +40,9 @@ namespace Octonica.ClickHouseClient
         private readonly ClickHouseBinaryProtocolWriter _writer;
 
         private Exception? _unhandledException;
-        private volatile bool _isFailed;
+        private int _state;
+
+        public ClickHouseTcpClientState State => (ClickHouseTcpClientState)_state;
 
         public ClickHouseServerInfo ServerInfo { get; }
 
@@ -62,7 +64,8 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
-            if (!_isFailed)
+            var state = (ClickHouseTcpClientState)_state;
+            if (state != ClickHouseTcpClientState.Failed)
             {
                 try
                 {
@@ -70,15 +73,21 @@ namespace Octonica.ClickHouseClient
                         await _semaphore.WaitAsync(cancellationToken);
                     else
                         _semaphore.Wait(cancellationToken);
+
+                    var previousState = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)ClickHouseTcpClientState.Active, (int)ClickHouseTcpClientState.Ready);
+                    Debug.Assert(previousState != ClickHouseTcpClientState.Active);
+                    state = previousState == ClickHouseTcpClientState.Ready ? ClickHouseTcpClientState.Active : previousState;
                 }
                 catch (ObjectDisposedException)
                 {
-                    if (!_isFailed)
+                    // Reading an actual state without modification of field _state
+                    state = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)state, (int)state);
+                    if (state != ClickHouseTcpClientState.Failed)
                         throw;
                 }
             }
 
-            if (_isFailed)
+            if (state == ClickHouseTcpClientState.Failed)
             {
                 if (_unhandledException != null)
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.", _unhandledException);
@@ -101,7 +110,8 @@ namespace Octonica.ClickHouseClient
         {
             Dispose();
             _unhandledException = unhandledException;
-            _isFailed = true;
+            // 'Failed' is the terminal state. Plain assignment should work just as well as interlocked operations.
+            _state = (int)ClickHouseTcpClientState.Failed;
         }
 
         public void Dispose()
@@ -127,7 +137,7 @@ namespace Octonica.ClickHouseClient
 
             public bool IsDisposed { get; private set; }
 
-            public bool IsFailed => _client._isFailed;
+            public bool IsFailed => _client.State == ClickHouseTcpClientState.Failed;
 
             public Session(ClickHouseTcpClient client, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken)
             {
@@ -194,6 +204,16 @@ namespace Octonica.ClickHouseClient
                 writer.Write7BitInt32((int) ClientMessageCode.Cancel);
 
                 await writer.Flush(async, CancellationToken.None);
+            }
+
+            public async ValueTask SendPing(bool async, CancellationToken cancellationToken)
+            {
+                CheckDisposed();
+
+                var writer = _client._writer;
+                writer.Write7BitInt32((int) ClientMessageCode.Ping);
+
+                await WithCancellationToken(cancellationToken, ct => writer.Flush(async, ct));
             }
 
             public async ValueTask SendTable(IClickHouseTableWriter table, bool async, CancellationToken cancellationToken)
@@ -436,13 +456,13 @@ namespace Octonica.ClickHouseClient
                 if (IsDisposed)
                     throw new ObjectDisposedException("Internal error. This object was disposed and no more has an exclusive access to the network stream.");
 
-                if (_client._isFailed)
+                if (_client.State == ClickHouseTcpClientState.Failed)
                 {
                     if (_client._unhandledException != null)
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.", _client._unhandledException);
 
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.");
-                }
+                }                
             }
 
             public async ValueTask<Exception?> SetFailed(Exception? unhandledException, bool sendCancel, bool async)
@@ -487,6 +507,7 @@ namespace Octonica.ClickHouseClient
                 if (IsDisposed || IsFailed)
                     return default;
 
+                Interlocked.CompareExchange(ref _client._state, (int)ClickHouseTcpClientState.Ready, (int)ClickHouseTcpClientState.Active);
                 _client._semaphore.Release();
                 IsDisposed = true;
 
