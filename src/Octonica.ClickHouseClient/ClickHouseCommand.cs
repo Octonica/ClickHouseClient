@@ -659,33 +659,17 @@ namespace Octonica.ClickHouseClient
                     case '\'':
                     case '"':
                     case '`':
-                        do
+                        var tokenLen = ClickHouseSyntaxHelper.GetQuotedTokenLength(((ReadOnlySpan<char>) query).Slice(position - 1), ch);
+                        if (tokenLen < 0)
                         {
-                            var nextCharacterIdx = querySlice.IndexOfAny('\\', ch);
-                            if (nextCharacterIdx < 0)
-                            {
-                                position += querySlice.Length;
-                                querySlice = ReadOnlySpan<char>.Empty;
-                            }
-                            else if (querySlice[nextCharacterIdx] == '\\')
-                            {
-                                position += nextCharacterIdx + 1;
-                                querySlice = querySlice.Slice(nextCharacterIdx + 1);
-                                if (querySlice.Length > 0)
-                                {
-                                    ++position;
-                                    querySlice = querySlice.Slice(1);
-                                }
-                            }
-                            else
-                            {
-                                Debug.Assert(querySlice[nextCharacterIdx] == ch);
-                                position += nextCharacterIdx + 1;
-                                querySlice = querySlice.Slice(nextCharacterIdx + 1);
-                                break;
-                            }
-
-                        } while (!querySlice.IsEmpty);
+                            position += querySlice.Length;
+                            querySlice = ReadOnlySpan<char>.Empty;
+                        }
+                        else
+                        {
+                            position += tokenLen - 1;
+                            querySlice = querySlice.Slice(tokenLen - 1);
+                        }
 
                         break;
 

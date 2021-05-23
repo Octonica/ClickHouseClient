@@ -82,7 +82,7 @@ namespace Octonica.ClickHouseClient.Tests
             await using var cmd = cn.CreateCommand();
 
             cmd.CommandText =
-                "select {a:UUID} a, {b} b, {long_parameter_name} /*+{_}*/ c, {d} d, {e123_456_789e} e, {_} f, {g} g, '{e123_456_789e}' h, \"{a}\" i--{g} should not be replaced" +
+                "select {a:UUID} a, {b} b, {long_parameter_name} /*+{_}*/ c, {d} d, {e123_456_789e} e, {_} f, {g} g, '{e123_456_789e}' h, '/v\\\\'`/v\\\\`, \"{a}\" i--{g} should not be replaced" +
                 Environment.NewLine +
                 "from (select 'some real value' as `{a}`)";
 
@@ -110,6 +110,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(now, reader.GetDateTime(reader.GetOrdinal("g")));
             Assert.Equal("{e123_456_789e}", reader.GetString(reader.GetOrdinal("h")));
             Assert.Equal("some real value", reader.GetString(reader.GetOrdinal("i")));
+            Assert.Equal(@"/v\", reader.GetString(reader.GetOrdinal(@"/v\")));
 
             Assert.False(await reader.ReadAsync());
         }
@@ -121,7 +122,7 @@ namespace Octonica.ClickHouseClient.Tests
             await using var cmd = cn.CreateCommand();
 
             cmd.CommandText =
-                "select cast(@a as UUID) a, @b b, @long_parameter_name /*+@_*/ c, @d d, {e123_456_789e} e, @_ f, {g} g, '@e123_456_789e' h, \"@a\" i--@g should not be replaced" +
+                "select cast(@a as UUID) a, @b b, @long_parameter_name /*+@_*/ c, @d d, {e123_456_789e} e, @_ f, {g} g, '@e123_456_789e' h, '/v\\\\\'`/v\\\\`, \"@a\" i--@g should not be replaced" +
                 Environment.NewLine +
                 "from (select 'some real value' as `@a`)";
 
@@ -149,6 +150,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(now, reader.GetDateTime(reader.GetOrdinal("g")));
             Assert.Equal("@e123_456_789e", reader.GetString(reader.GetOrdinal("h")));
             Assert.Equal("some real value", reader.GetString(reader.GetOrdinal("i")));
+            Assert.Equal(@"/v\", reader.GetString(reader.GetOrdinal(@"/v\")));
 
             Assert.False(await reader.ReadAsync());
         }

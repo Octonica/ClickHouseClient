@@ -17,8 +17,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -91,8 +93,7 @@ namespace Octonica.ClickHouseClient.Types
                 int count = 1;
                 int currentIdx = pOpenIdx;
                 int optionStartIdx = pOpenIdx + 1;
-                char? escaped = null;
-                ReadOnlySpan<char> significantChars = "(,)'`\\";                
+                ReadOnlySpan<char> significantChars = "(,)'`";
                 do
                 {
                     if (typeNameSpan.Length - 1 == currentIdx)
@@ -104,45 +105,34 @@ namespace Octonica.ClickHouseClient.Types
 
                     pNextIdx += currentIdx + 1;
                     currentIdx = pNextIdx;
-                    if ("'`\\".Contains(typeNameSpan[currentIdx]))
+                    if ("'`".Contains(typeNameSpan[currentIdx]))
                     {
-                        if (escaped == null)
-                        {
-                            if (typeNameSpan[currentIdx] != '\\')
-                                escaped = typeNameSpan[currentIdx];
-                        }
-                        else if (typeNameSpan[currentIdx] == '\\')
-                        {
-                            if (++currentIdx >= typeNameSpan.Length)
-                                break;
-                        }
-                        else if (escaped.Value == typeNameSpan[currentIdx])
-                        {
-                            escaped = null;
-                        }
-                    }
-                    else if (escaped == null)
-                    {
-                        if (typeNameSpan[currentIdx] == '(')
-                        {
-                            ++count;
-                        }
-                        else if (typeNameSpan[currentIdx] == ')')
-                        {
-                            --count;
-                            if (count == 0)
-                                break;
-                        }
-                        else if (count == 1)
-                        {
-                            var currentOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
-                            optionStartIdx = currentIdx + 1;
+                        var len = ClickHouseSyntaxHelper.GetQuotedTokenLength(typeNameSpan.Slice(currentIdx), typeNameSpan[currentIdx]);
+                        if (len < 0)
+                            break;
 
-                            if (options != null)
-                                options.Add(currentOption);
-                            else
-                                options = new List<ReadOnlyMemory<char>>(2) {currentOption};
-                        }
+                        Debug.Assert(len > 0);
+                        currentIdx += len - 1;
+                    }
+                    else if (typeNameSpan[currentIdx] == '(')
+                    {
+                        ++count;
+                    }
+                    else if (typeNameSpan[currentIdx] == ')')
+                    {
+                        --count;
+                        if (count == 0)
+                            break;
+                    }
+                    else if (count == 1)
+                    {
+                        var currentOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
+                        optionStartIdx = currentIdx + 1;
+
+                        if (options != null)
+                            options.Add(currentOption);
+                        else
+                            options = new List<ReadOnlyMemory<char>>(2) {currentOption};
                     }
 
                 } while (true);

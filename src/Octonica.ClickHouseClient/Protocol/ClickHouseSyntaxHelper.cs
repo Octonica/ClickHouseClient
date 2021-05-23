@@ -90,7 +90,7 @@ namespace Octonica.ClickHouseClient.Protocol
             return GetQuotedTokenLength(str, '\'');
         }
 
-        private static int GetQuotedTokenLength(ReadOnlySpan<char> str, char quoteSign)
+        public static int GetQuotedTokenLength(ReadOnlySpan<char> str, char quoteSign)
         {
             if (str.IsEmpty || str[0] != quoteSign)
                 return -1;
