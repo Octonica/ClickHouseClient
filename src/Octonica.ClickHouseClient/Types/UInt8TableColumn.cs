@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,8 @@ namespace Octonica.ClickHouseClient.Types
                 return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<byte, long>(this, v => v);
             if (typeof(T) == typeof(ulong))
                 return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<byte, ulong>(this, v => v);
+            if (typeof(T) == typeof(bool))
+                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<byte, bool>(this, v => v != 0);
 
             if (typeof(T) == typeof(short?))
                 return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<short>(null, new ReinterpretedTableColumn<byte, short>(this, v => v));
@@ -53,6 +55,8 @@ namespace Octonica.ClickHouseClient.Types
                 return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<long>(null, new ReinterpretedTableColumn<byte, long>(this, v => v));
             if (typeof(T) == typeof(ulong?))
                 return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<ulong>(null, new ReinterpretedTableColumn<byte, ulong>(this, v => v));
+            if (typeof(T) == typeof(bool?))
+                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<bool>(null, new ReinterpretedTableColumn<byte, bool>(this, v => v != 0));
 
             return base.TryReinterpret<T>();
         }
