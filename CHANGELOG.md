@@ -1,3 +1,18 @@
+### Octonica.ClickHouseClient release v1.1.13, 2021-05-29
+
+#### Bug Fix
+
+* Fix conversion from `System.Guid` to `UUID`. This bug affected `ClickHouseColumnWriter`.
+  It caused writing of corrupted values to a column of type `UUID` ([#29](https://github.com/Octonica/ClickHouseClient/issues/29)).
+
+#### New Feature
+
+* Add method `ClickHouseConnection.TryPing`. This method allows to send 'Ping' message and wait for response from the server.
+
+#### Improvement
+
+* Add cast from `UInt8` to `bool`. `ClickHouseDataReader.GetBoolean` no longer throws an exception for values of type `UInt8`.
+
 ### Octonica.ClickHouseClient release v1.1.12, 2021-05-19
 
 #### Backward Incompatible Change
