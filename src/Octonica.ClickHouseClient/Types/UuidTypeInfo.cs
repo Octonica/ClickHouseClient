@@ -82,12 +82,20 @@ namespace Octonica.ClickHouseClient.Types
                 var success = value.TryWriteBytes(writeTo);
                 Debug.Assert(success);
 
+                var tmp = writeTo[0];
+                writeTo[0] = writeTo[6];
+                writeTo[6] = writeTo[2];
+                writeTo[2] = writeTo[4];
+                writeTo[4] = tmp;
+
+                tmp = writeTo[1];
+                writeTo[1] = writeTo[7];
+                writeTo[7] = writeTo[3];
+                writeTo[3] = writeTo[5];
+                writeTo[5] = tmp;
+
                 for (int i = 0; i < 4; i++)
                 {
-                    var tmp = writeTo[i];
-                    writeTo[i] = writeTo[7 - i];
-                    writeTo[7 - i] = tmp;
-
                     tmp = writeTo[8 + i];
                     writeTo[8 + i] = writeTo[15 - i];
                     writeTo[15 - i] = tmp;

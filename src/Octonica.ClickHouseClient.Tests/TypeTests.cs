@@ -1948,6 +1948,46 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadGuidColumn()
+        {
+            var guids = new List<Guid> { Guid.Parse("74D47928-2423-4FE2-AD45-82E296BF6058"), Guid.Parse("2879D474-2324-E24F-AD45-82E296BF6058"), Guid.Empty };
+            guids.AddRange(Enumerable.Range(1, 100 - guids.Count).Select(_ => Guid.NewGuid()));
+
+            await WithTemporaryTable("uuid", "id Int32, guid UUID, str String", RunTest);
+
+            async Task RunTest(ClickHouseConnection connection, string tableName)
+            {
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, guid, str) VALUES", CancellationToken.None))
+                {
+                    await writer.WriteTableAsync(new object[] { Enumerable.Range(0, guids.Count), guids, guids.Select(v => v.ToString("D")) }, guids.Count, CancellationToken.None);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT id, guid, CAST(guid AS String) strGuid, (guid = CAST(str AS UUID)) eq FROM {tableName} ORDER BY id");
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    var guid = reader.GetGuid(1);
+                    var str = reader.GetString(2);
+                    var eq = reader.GetBoolean(3);
+
+                    Assert.Equal(count, id);
+                    Assert.Equal(guids[id], guid);
+                    Assert.True(Guid.TryParse(str, out var strGuid));
+                    Assert.Equal(guids[id], strGuid);
+                    Assert.True(eq);
+
+                    ++count;
+                }
+
+                Assert.Equal(guids.Count, count);
+            }
+        }
+
+        [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
             const string ddl = @"
