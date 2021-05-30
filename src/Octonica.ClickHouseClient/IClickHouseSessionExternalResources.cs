@@ -24,6 +24,6 @@ namespace Octonica.ClickHouseClient
     {
         ValueTask Release(bool async);
 
-        ValueTask ReleaseOnFailure(Exception? exception, bool async);
+        ValueTask<Exception?> ReleaseOnFailure(Exception? exception, bool async);
     }
 }

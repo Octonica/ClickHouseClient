@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,21 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseConnectionSettings? Settings { get; }
 
+        public int Counter { get; }
+
+        public ClickHouseTcpClient? TcpClient { get; }
+
         public ClickHouseConnectionState()
-            : this(ConnectionState.Closed, null)
+            : this(ConnectionState.Closed, null, null, 0)
         {
         }
 
-        public ClickHouseConnectionState(ConnectionState state, ClickHouseConnectionSettings? settings)
+        public ClickHouseConnectionState(ConnectionState state, ClickHouseTcpClient? tcpClient, ClickHouseConnectionSettings? settings, int counter)
         {
             State = state;
+            TcpClient = tcpClient;
             Settings = settings;
+            Counter = counter;
         }
     }
 }

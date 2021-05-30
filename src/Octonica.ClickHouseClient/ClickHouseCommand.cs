@@ -772,9 +772,10 @@ namespace Octonica.ClickHouseClient
                 return _connection?.Close(async) ?? default;
             }
 
-            public ValueTask ReleaseOnFailure(Exception? exception, bool async)
+            public async ValueTask<Exception?> ReleaseOnFailure(Exception? exception, bool async)
             {
-                return Release(async);
+                await Release(async);
+                return null;
             }
         }
     }

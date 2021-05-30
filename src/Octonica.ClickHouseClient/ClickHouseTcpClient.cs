@@ -470,7 +470,7 @@ namespace Octonica.ClickHouseClient
                 if (IsDisposed)
                     return null;
 
-                Exception? processedException = null;
+                Exception? networkException = null;
                 if (sendCancel)
                 {
                     try
@@ -479,17 +479,40 @@ namespace Octonica.ClickHouseClient
                     }
                     catch (Exception ex)
                     {
-                        var networkException = new ClickHouseException(ClickHouseErrorCodes.NetworkError, "Network error. Operation was not canceled properly.", ex);
-                        processedException = unhandledException != null ? (Exception) new AggregateException(unhandledException, networkException) : networkException;
+                        networkException = new ClickHouseException(ClickHouseErrorCodes.NetworkError, "Network error. Operation was not canceled properly.", ex);                        
                     }
                 }
 
                 _client.SetFailed(unhandledException);
 
+                Exception? externalException = null;
                 if (_externalResources != null)
-                    await _externalResources.ReleaseOnFailure(unhandledException, async);
+                {
+                    externalException = await _externalResources.ReleaseOnFailure(unhandledException, async);
 
-                return processedException;
+                    if (ReferenceEquals(unhandledException, externalException))
+                        externalException = null;
+                }
+
+                var exceptions = new List<Exception>(3);
+                if (unhandledException != null)
+                    exceptions.Add(unhandledException);
+
+                if (networkException != null)
+                    exceptions.Add(networkException);
+
+                if (externalException != null)
+                    exceptions.Add(externalException);
+
+                switch (exceptions.Count)
+                {
+                    case 0:
+                        return null;
+                    case 1:
+                        return exceptions[0];
+                    default:
+                        return new AggregateException(exceptions);
+                }
             }
 
             public void Dispose()

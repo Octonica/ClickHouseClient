@@ -43,5 +43,6 @@ namespace Octonica.ClickHouseClient.Exceptions
         public const int ColumnTypeMismatch = 18;
         public const int InvalidRowCount = 19;
         public const int NotSupportedInSyncronousMode = 20;
+        public const int CallbackError = 21;
     }
 }
