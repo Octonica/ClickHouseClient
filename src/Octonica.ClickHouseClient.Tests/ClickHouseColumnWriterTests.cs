@@ -27,13 +27,13 @@ using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
 {
-    public class ColumnWriterTests : ClickHouseTestsBase, IClassFixture<ColumnWriterTests.TableFixture>, IClassFixture<EncodingFixture>
+    public class ClickHouseColumnWriterTests : ClickHouseTestsBase, IClassFixture<ClickHouseColumnWriterTests.TableFixture>, IClassFixture<EncodingFixture>
     {
         private const string TestTableName = "stream_insert_test";
 
         private readonly TableFixture _tableFixture;
 
-        public ColumnWriterTests(TableFixture tableFixture)
+        public ClickHouseColumnWriterTests(TableFixture tableFixture)
         {
             _tableFixture = tableFixture;
         }

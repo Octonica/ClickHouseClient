@@ -20,7 +20,7 @@ using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
 {
-    public class ConnectionStringBuilderTests
+    public class ClickHouseConnectionStringBuilderTests
     {
         [Fact]
         public void FromString()
