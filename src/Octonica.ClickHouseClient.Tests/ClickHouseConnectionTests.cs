@@ -109,7 +109,7 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
-        public async Task OpenConncetionInParallel()
+        public async Task OpenConnectionInParallel()
         {
             // Only one thread should open the connection and other threads should fail
 
