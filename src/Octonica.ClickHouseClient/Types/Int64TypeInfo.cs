@@ -72,6 +72,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class Int64Reader : StructureReaderBase<long>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Int64Reader(int rowCount)
                 : base(sizeof(long), rowCount)
             {

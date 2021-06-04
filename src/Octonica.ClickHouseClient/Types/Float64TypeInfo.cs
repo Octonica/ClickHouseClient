@@ -61,6 +61,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class Float64Reader : StructureReaderBase<double>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Float64Reader(int rowCount)
                 : base(sizeof(double), rowCount)
             {

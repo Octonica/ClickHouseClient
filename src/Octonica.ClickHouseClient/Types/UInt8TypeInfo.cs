@@ -61,15 +61,11 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class UInt8Reader : StructureReaderBase<byte>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public UInt8Reader(int rowCount)
                 : base(sizeof(byte), rowCount)
             {
-            }
-
-            protected override int CopyTo(ReadOnlySequence<byte> source, Span<byte> target)
-            {
-                source.CopyTo(target);
-                return target.Length;
             }
 
             protected override byte ReadElement(ReadOnlySpan<byte> source)
@@ -77,7 +73,7 @@ namespace Octonica.ClickHouseClient.Types
                 return source[0];
             }
 
-            protected override IClickHouseTableColumn<byte> EndRead(ReadOnlyMemory<byte> buffer)
+            protected override IClickHouseTableColumn<byte> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<byte> buffer)
             {
                 return new UInt8TableColumn(buffer);
             }

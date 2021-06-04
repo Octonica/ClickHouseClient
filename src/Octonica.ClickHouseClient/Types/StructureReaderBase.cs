@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,23 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    public abstract class StructureReaderBase<T> : IClickHouseColumnReader
-        where T : struct
+    public abstract class StructureReaderBase<TIn, TOut> : IClickHouseColumnReader
+        where TIn : struct
     {
         private readonly int _rowCount;
 
         private int _position;
-        private readonly Memory<T> _memory;
+        private readonly TIn[]? _buffer;
 
         protected int ElementSize { get; }
+
+        protected virtual bool BitwiseCopyAllowed => false;
 
         public StructureReaderBase(int elementSize, int rowCount)
         {
@@ -39,7 +42,7 @@ namespace Octonica.ClickHouseClient.Types
             _rowCount = rowCount;
 
             if (rowCount > 0)
-                _memory = new Memory<T>(new T[rowCount]);
+                _buffer = new TIn[rowCount];
         }
 
         public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -52,8 +55,19 @@ namespace Octonica.ClickHouseClient.Types
             if (elementCount == 0)
                 return new SequenceSize(0, 0);
 
-            var count = CopyTo(sequence.Slice(0, byteSize), _memory.Slice(_position, elementCount).Span);
-            Debug.Assert(count >= 0 && count <= elementCount);
+            int count;
+            if (BitwiseCopyAllowed)
+            {
+                var targetBytes = MemoryMarshal.AsBytes(new Span<TIn>(_buffer, _position, elementCount));
+                Debug.Assert(byteSize == targetBytes.Length);
+                sequence.Slice(0, byteSize).CopyTo(targetBytes);
+                count = elementCount;
+            }
+            else
+            {
+                count = CopyTo(sequence.Slice(0, byteSize), ((Span<TIn>) _buffer).Slice(_position, elementCount));
+                Debug.Assert(count >= 0 && count <= elementCount);
+            }
 
             _position += count;
             return new SequenceSize(count * ElementSize, count);
@@ -65,7 +79,7 @@ namespace Octonica.ClickHouseClient.Types
             return new SequenceSize(count * ElementSize, count);
         }
 
-        protected virtual int CopyTo(ReadOnlySequence<byte> source, Span<T> target)
+        private int CopyTo(ReadOnlySequence<byte> source, Span<TIn> target)
         {
             Span<byte> tmpSpan = stackalloc byte[ElementSize];
             int count = 0;
@@ -83,21 +97,32 @@ namespace Octonica.ClickHouseClient.Types
             return count;
         }
 
-        protected abstract T ReadElement(ReadOnlySpan<byte> source);
+        protected abstract TIn ReadElement(ReadOnlySpan<byte> source);
 
-        protected virtual IClickHouseTableColumn<T> EndRead(ReadOnlyMemory<T> buffer)
-        {
-            return new StructureTableColumn<T>(buffer);
-        }
+        protected abstract IClickHouseTableColumn<TOut> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<TIn> buffer);
 
-        public IClickHouseTableColumn<T> EndRead()
+        public IClickHouseTableColumn<TOut> EndRead(ClickHouseColumnSettings? settings)
         {
-            return EndRead(_memory.Slice(0, _position));
+            return EndRead(settings, ((ReadOnlyMemory<TIn>)_buffer).Slice(0, _position));
         }
 
         IClickHouseTableColumn IClickHouseColumnReader.EndRead(ClickHouseColumnSettings? settings)
         {
-            return EndRead(_memory.Slice(0, _position));
+            return EndRead(settings);
+        }
+    }
+
+    public abstract class StructureReaderBase<T> : StructureReaderBase<T, T>
+        where T : struct
+    {
+        public StructureReaderBase(int elementSize, int rowCount)
+            : base(elementSize, rowCount)
+        {
+        }
+
+        protected override IClickHouseTableColumn<T> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<T> buffer)
+        {
+            return new StructureTableColumn<T>(buffer);
         }
     }
 }

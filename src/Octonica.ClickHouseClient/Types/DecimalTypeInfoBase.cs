@@ -20,6 +20,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -232,19 +233,14 @@ namespace Octonica.ClickHouseClient.Types
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
                 var byteLength = (int) Math.Min((_rowCount - elementPosition) * _elementSize, sequence.Length - sequence.Length % _elementSize);
+                var uintLength = byteLength / sizeof(uint);
 
-                Span<byte> tmpSpan = stackalloc byte[sizeof(uint)];
-                for (var slice = sequence.Slice(0, byteLength); !slice.IsEmpty; slice = slice.Slice(sizeof(uint)))
-                {
-                    if (slice.FirstSpan.Length >= sizeof(uint))
-                        _values[_position++] = BitConverter.ToUInt32(slice.FirstSpan);
-                    else
-                    {
-                        slice.Slice(0, sizeof(uint)).CopyTo(tmpSpan);
-                        _values[_position++] = BitConverter.ToUInt32(tmpSpan);
-                    }
-                }
+                var targetSpan = MemoryMarshal.AsBytes(new Span<uint>(_values, _position, uintLength));
+                Debug.Assert(targetSpan.Length == byteLength);
 
+                sequence.Slice(0, byteLength).CopyTo(targetSpan);
+
+                _position += uintLength;
                 return new SequenceSize(byteLength, byteLength / _elementSize);
             }
 

@@ -65,6 +65,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class UInt32Reader : StructureReaderBase<uint>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public UInt32Reader(int rowCount)
                 : base(sizeof(uint), rowCount)
             {
@@ -75,7 +77,7 @@ namespace Octonica.ClickHouseClient.Types
                 return BitConverter.ToUInt32(source);
             }
 
-            protected override IClickHouseTableColumn<uint> EndRead(ReadOnlyMemory<uint> buffer)
+            protected override IClickHouseTableColumn<uint> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<uint> buffer)
             {
                 return new UInt32TableColumn(buffer);
             }

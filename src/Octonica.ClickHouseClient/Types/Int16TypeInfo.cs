@@ -64,6 +64,8 @@ namespace Octonica.ClickHouseClient.Types
 
         internal sealed class Int16Reader : StructureReaderBase<short>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Int16Reader(int rowCount)
                 : base(sizeof(short), rowCount)
             {
@@ -74,7 +76,7 @@ namespace Octonica.ClickHouseClient.Types
                 return BitConverter.ToInt16(source);
             }
 
-            protected override IClickHouseTableColumn<short> EndRead(ReadOnlyMemory<short> buffer)
+            protected override IClickHouseTableColumn<short> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<short> buffer)
             {
                 return new Int16TableColumn(buffer);
             }

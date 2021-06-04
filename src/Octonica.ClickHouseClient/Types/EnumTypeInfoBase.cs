@@ -181,7 +181,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var column = _internalReader.EndRead();
+                var column = _internalReader.EndRead(null);
                 var enumConverter = settings?.EnumConverter;
                 if (enumConverter != null)
                 {

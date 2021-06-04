@@ -54,6 +54,8 @@ namespace Octonica.ClickHouseClient.Types
 
         internal sealed class Int8Reader : StructureReaderBase<sbyte>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Int8Reader(int rowCount)
                 : base(sizeof(sbyte), rowCount)
             {
@@ -64,7 +66,7 @@ namespace Octonica.ClickHouseClient.Types
                 return unchecked((sbyte) source[0]);
             }
 
-            protected override IClickHouseTableColumn<sbyte> EndRead(ReadOnlyMemory<sbyte> buffer)
+            protected override IClickHouseTableColumn<sbyte> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<sbyte> buffer)
             {
                 return new Int8TableColumn(buffer);
             }

@@ -16,7 +16,6 @@
 #endregion
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -199,54 +198,28 @@ namespace Octonica.ClickHouseClient.Types
             return new DateTime64TypeInfo(null, timezone, null);
         }
 
-        private sealed class DateTime64Reader : IClickHouseColumnReader
+        private sealed class DateTime64Reader : StructureReaderBase<ulong, DateTimeOffset>
         {
             private readonly int _precision;
             private readonly TimeZoneInfo _timeZone;
-            private readonly Memory<ulong> _buffer;
 
-            private int _position;
+            protected override bool BitwiseCopyAllowed => true;
 
             public DateTime64Reader(int rowCount, int precision, TimeZoneInfo timeZone)
+                : base(sizeof(ulong), rowCount)
             {
-                _buffer = new Memory<ulong>(new ulong[rowCount]);
                 _precision = precision;
                 _timeZone = timeZone;
             }
 
-            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            protected override ulong ReadElement(ReadOnlySpan<byte> source)
             {
-                if (_position >= _buffer.Length)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
-
-                Span<byte> tmpSpan = stackalloc byte[sizeof(ulong)];
-                int count = 0, maxElementsCount = _buffer.Length - _position;
-                for (var slice = sequence; slice.Length >= sizeof(ulong) && count < maxElementsCount; slice = slice.Slice(sizeof(ulong)), count++)
-                {
-                    if (slice.FirstSpan.Length > sizeof(ulong))
-                    {
-                        _buffer.Span[_position++] = BitConverter.ToUInt64(slice.FirstSpan);
-                    }
-                    else
-                    {
-                        slice.Slice(0, sizeof(ulong)).CopyTo(tmpSpan);
-                        _buffer.Span[_position++] = BitConverter.ToUInt64(tmpSpan);
-                    }
-                }
-
-                return new SequenceSize(count * sizeof(ulong), count);
+                return BitConverter.ToUInt64(source);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
+            protected override IClickHouseTableColumn<DateTimeOffset> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<ulong> buffer)
             {
-                var availableElementsCount = (int) sequence.Length / sizeof(uint);
-                var elementsCount = Math.Min(availableElementsCount, maxElementsCount);
-                return new SequenceSize(elementsCount * sizeof(uint), elementsCount);
-            }
-
-            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
-            {
-                return new DateTime64TableColumn(_buffer.Slice(0, _position), _precision, _timeZone);
+                return new DateTime64TableColumn(buffer, _precision, _timeZone);
             }
         }
 

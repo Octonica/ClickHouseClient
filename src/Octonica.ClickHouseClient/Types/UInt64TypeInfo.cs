@@ -67,6 +67,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class UInt64Reader : StructureReaderBase<ulong>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public UInt64Reader(int rowCount)
                 : base(sizeof(ulong), rowCount)
             {

@@ -68,6 +68,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class Int32Reader : StructureReaderBase<int>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Int32Reader(int rowCount)
                 : base(sizeof(int), rowCount)
             {
@@ -78,7 +80,7 @@ namespace Octonica.ClickHouseClient.Types
                 return BitConverter.ToInt32(source);
             }
 
-            protected override IClickHouseTableColumn<int> EndRead(ReadOnlyMemory<int> buffer)
+            protected override IClickHouseTableColumn<int> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<int> buffer)
             {
                 return new Int32TableColumn(buffer);
             }
