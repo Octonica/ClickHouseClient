@@ -327,6 +327,13 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Open(bool async, CancellationToken cancellationToken)
         {
+            if (!BitConverter.IsLittleEndian)
+            {
+                throw new NotSupportedException(
+                    "An architecture of the processor is not supported. Only little-endian architectures are supported." + Environment.NewLine +
+                    "Please, report an issue if you see this message (https://github.com/Octonica/ClickHouseClient/issues).");
+            }
+
             var connectionState = _connectionState;
             switch (connectionState.State)
             {
