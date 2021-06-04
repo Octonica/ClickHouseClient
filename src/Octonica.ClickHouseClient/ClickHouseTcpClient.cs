@@ -108,7 +108,7 @@ namespace Octonica.ClickHouseClient
 
         private void SetFailed(Exception? unhandledException)
         {
-            Dispose();
+            Dispose(false);
             _unhandledException = unhandledException;
             // 'Failed' is the terminal state. Plain assignment should work just as well as interlocked operations.
             _state = (int)ClickHouseTcpClientState.Failed;
@@ -116,12 +116,17 @@ namespace Octonica.ClickHouseClient
 
         public void Dispose()
         {
+            Dispose(true);
+        }
+
+        private void Dispose(bool disposing)
+        {
             _semaphore.Dispose();
             _reader.Dispose();
             _writer.Dispose();
 
             // The disposed TcpClient returns null for Client
-            _client.Client?.Close(0);
+            _client.Client?.Close(disposing ? 1 : 0);
             _client.Dispose();
         }
 
