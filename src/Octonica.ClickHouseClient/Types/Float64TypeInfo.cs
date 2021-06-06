@@ -42,7 +42,7 @@ namespace Octonica.ClickHouseClient.Types
             if (typeof(T) == typeof(double))
                 doubleRows = (IReadOnlyList<double>)rows;
             else if (typeof(T) == typeof(float))
-                doubleRows = new MappedReadOnlyList<float, double>((IReadOnlyList<float>)rows, v => v);
+                doubleRows = MappedReadOnlyList<float, double>.Map((IReadOnlyList<float>)rows, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

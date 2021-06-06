@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -165,7 +165,7 @@ namespace Octonica.ClickHouseClient.Types
 
                     var tuple8Args = type.GetGenericArguments();
                     var extraTupleType = tuple8Args[^1];
-                    var extraColumn = TryMakeTupleColumn(extraTupleType, rowCount, new ReadOnlyListSpan<IClickHouseTableColumn>(columns, 7));
+                    var extraColumn = TryMakeTupleColumn(extraTupleType, rowCount, columns.Slice(7));
                     if (extraColumn == null)
                         return null;
 

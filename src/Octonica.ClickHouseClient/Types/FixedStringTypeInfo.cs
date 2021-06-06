@@ -173,12 +173,12 @@ namespace Octonica.ClickHouseClient.Types
             protected override int RowCount => _rows.Count;
 
             public FixedStringBytesColumnWriter(string columnName, string columnType, IReadOnlyList<byte[]?> rows, int length)
-                : this(columnName, columnType, new MappedReadOnlyList<byte[]?, ReadOnlyMemory<byte>>(rows, b => b.AsMemory()), length)
+                : this(columnName, columnType, MappedReadOnlyList<byte[]?, ReadOnlyMemory<byte>>.Map(rows, b => b.AsMemory()), length)
             {
             }
 
             public FixedStringBytesColumnWriter(string columnName, string columnType, IReadOnlyList<Memory<byte>> rows, int length)
-                : this(columnName, columnType, new MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>(rows, m => m), length)
+                : this(columnName, columnType, MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>.Map(rows, m => m), length)
             {
             }
 
@@ -207,12 +207,12 @@ namespace Octonica.ClickHouseClient.Types
             protected override int RowCount => _rows.Count;
 
             public FixedStringStringColumnWriter(string columnName, string columnType, IReadOnlyList<Memory<char>> rows, int length, Encoding? stringEncoding)
-                : this(columnName, columnType, new MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>(rows, m => m), length, stringEncoding)
+                : this(columnName, columnType, MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>.Map(rows, m => m), length, stringEncoding)
             {
             }
 
             public FixedStringStringColumnWriter(string columnName, string columnType, IReadOnlyList<string?> rows, int length, Encoding? stringEncoding)
-                : this(columnName, columnType, new MappedReadOnlyList<string?, ReadOnlyMemory<char>>(rows, str => str.AsMemory()), length, stringEncoding)
+                : this(columnName, columnType, MappedReadOnlyList<string?, ReadOnlyMemory<char>>.Map(rows, str => str.AsMemory()), length, stringEncoding)
             {
             }
 

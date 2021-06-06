@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ using System.Linq;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal sealed class ListSpan<T> : IReadOnlyList<T>
+    internal sealed class ListSpan<T> : IReadOnlyListExt<T>
     {
         private readonly IList<T> _innerList;
         private readonly int _offset;
 
         public int Count { get; }
 
-        public ListSpan(IList<T> innerList, int offset, int count)
+        private ListSpan(IList<T> innerList, int offset, int count)
         {
             if (innerList == null)
                 throw new ArgumentNullException(nameof(innerList));
@@ -53,6 +53,41 @@ namespace Octonica.ClickHouseClient.Utils
             return GetEnumerator();
         }
 
+        public IReadOnlyListExt<T> Slice(int start, int length)
+        {
+            if (start < 0 || start > Count)
+                throw new ArgumentOutOfRangeException(nameof(start));
+            if (start + length > Count)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            return new ListSpan<T>(_innerList, start + _offset, length);
+        }
+
+        public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
+        {
+            return MappedListSpan<T, TOut>.Create(_innerList, map, _offset, Count);
+        }
+
+        public int CopyTo(Span<T> span, int start)
+        {
+            if (start < 0 || start > Count)
+                throw new ArgumentOutOfRangeException(nameof(start));
+            
+            var length = Math.Min(Count - start, span.Length);
+            if (_innerList is T[] array)
+            {
+                new ReadOnlySpan<T>(array, _offset + start, length).CopyTo(span);
+            }
+            else
+            {
+                var end = _offset + start + length;
+                for (int i = _offset + start, j = 0; i < end; i++, j++)
+                    span[j] = _innerList[i];
+            }
+
+            return length;            
+        }
+
         public T this[int index]
         {
             get
@@ -62,6 +97,14 @@ namespace Octonica.ClickHouseClient.Utils
 
                 return _innerList[index + _offset];
             }
+        }
+
+        public static IReadOnlyListExt<T> Slice(IList<T> list, int offset, int count)
+        {
+            if (list is IReadOnlyListExt<T> readOnlyListExt)
+                return readOnlyListExt.Slice(offset, count);
+
+            return new ListSpan<T>(list, offset, count);
         }
     }
 }

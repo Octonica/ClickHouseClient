@@ -45,13 +45,13 @@ namespace Octonica.ClickHouseClient.Types
             IReadOnlyList<uint> preparedRows;
 
             if (typeof(IPAddress).IsAssignableFrom(type))
-                preparedRows = new MappedReadOnlyList<IPAddress, uint>((IReadOnlyList<IPAddress>)rows, IpAddressToUInt32);
+                preparedRows = MappedReadOnlyList<IPAddress, uint>.Map((IReadOnlyList<IPAddress>)rows, IpAddressToUInt32);
             else if (type == typeof(string))
-                preparedRows = new MappedReadOnlyList<string, uint>((IReadOnlyList<string>)rows, IpAddressStringToUInt32);
+                preparedRows = MappedReadOnlyList<string, uint>.Map((IReadOnlyList<string>)rows, IpAddressStringToUInt32);
             else if (type == typeof(uint))
                 preparedRows = (IReadOnlyList<uint>)rows;
             else if (type == typeof(int))
-                preparedRows = new MappedReadOnlyList<int, uint>((IReadOnlyList<int>)rows, v => unchecked((uint)v));
+                preparedRows = MappedReadOnlyList<int, uint>.Map((IReadOnlyList<int>)rows, v => unchecked((uint)v));
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

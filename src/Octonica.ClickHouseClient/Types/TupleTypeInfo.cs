@@ -183,7 +183,7 @@ namespace Octonica.ClickHouseClient.Types
                     break;
                 default:
                     tupleType = typeof(Tuple<,,,,,,,>);
-                    var restType = MakeTupleType(new ReadOnlyListSpan<Type>(genericArgs, 7));
+                    var restType = MakeTupleType(genericArgs.Slice(7));
 
                     var tuple8ArgsArr = new Type[8];
                     for (int i = 0; i < 7; i++)
@@ -448,11 +448,6 @@ namespace Octonica.ClickHouseClient.Types
                 }
             }
 
-            private static MappedReadOnlyList<TIn, TOut> MapList<TIn, TOut>(IReadOnlyList<TIn> list, Func<TIn, TOut> map)
-            {
-                return new MappedReadOnlyList<TIn, TOut>(list, map);
-            }
-
             private interface IColumnFactory
             {
                 TupleColumnWriter Create(string columnName, string columnType, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings);
@@ -465,7 +460,7 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(1)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -479,8 +474,8 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(2)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -494,9 +489,9 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(3)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -510,10 +505,10 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(4)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -527,11 +522,11 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(5)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -545,12 +540,12 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(6)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings)
                     };
                     
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -564,13 +559,13 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7>>) untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(7)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, MapList(rows, t => t.Item7), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -585,19 +580,19 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>>) untypedRows;
 #pragma warning restore CS8714
 
-                    var subColumns = new ReadOnlyListSpan<IClickHouseColumnTypeInfo>(elementTypes, 7);
+                    var subColumns = elementTypes.Slice(7);
                     var subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
-                    var lastColumn = CreateColumnWriter(columnName, subType, subColumns, MapList(rows, t => t.Rest), columnSettings);
+                    var lastColumn = CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
 
                     var columns = new List<IClickHouseColumnWriter>(7 + lastColumn._columns.Count)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, MapList(rows, t => t.Item7), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
                     };
                     columns.AddRange(lastColumn._columns);
 
@@ -612,7 +607,7 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(1)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -626,8 +621,8 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(2)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -641,9 +636,9 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(3)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -657,10 +652,10 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(4)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -674,11 +669,11 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(5)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -692,12 +687,12 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(6)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -711,13 +706,13 @@ namespace Octonica.ClickHouseClient.Types
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>)untypedRows;
                     var columns = new List<IClickHouseColumnWriter>(7)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, MapList(rows, t => t.Item7), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
                     };
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
@@ -731,19 +726,19 @@ namespace Octonica.ClickHouseClient.Types
                 {
                     var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>>) untypedRows;
 
-                    var subColumns = new ReadOnlyListSpan<IClickHouseColumnTypeInfo>(elementTypes, 7);
+                    var subColumns = elementTypes.Slice(7);
                     var subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
-                    var lastColumn = CreateColumnWriter(columnName, subType, subColumns, MapList(rows, t => t.Rest), columnSettings);
+                    var lastColumn = CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
 
                     var columns = new List<IClickHouseColumnWriter>(7 + lastColumn._columns.Count)
                     {
-                        elementTypes[0].CreateColumnWriter(columnName, MapList(rows, t => t.Item1), columnSettings),
-                        elementTypes[1].CreateColumnWriter(columnName, MapList(rows, t => t.Item2), columnSettings),
-                        elementTypes[2].CreateColumnWriter(columnName, MapList(rows, t => t.Item3), columnSettings),
-                        elementTypes[3].CreateColumnWriter(columnName, MapList(rows, t => t.Item4), columnSettings),
-                        elementTypes[4].CreateColumnWriter(columnName, MapList(rows, t => t.Item5), columnSettings),
-                        elementTypes[5].CreateColumnWriter(columnName, MapList(rows, t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, MapList(rows, t => t.Item7), columnSettings)
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
+                        elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
+                        elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
+                        elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
+                        elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
                     };
                     columns.AddRange(lastColumn._columns);
 

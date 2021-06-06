@@ -43,17 +43,17 @@ namespace Octonica.ClickHouseClient.Types
             if (type == typeof(long))
                 longRows = (IReadOnlyList<long>)rows;
             else if (type == typeof(int))
-                longRows = new MappedReadOnlyList<int, long>((IReadOnlyList<int>)rows, v => v);
+                longRows = MappedReadOnlyList<int, long>.Map((IReadOnlyList<int>)rows, v => v);
             else if (type == typeof(uint))
-                longRows = new MappedReadOnlyList<uint, long>((IReadOnlyList<uint>)rows, v => v);
+                longRows = MappedReadOnlyList<uint, long>.Map((IReadOnlyList<uint>)rows, v => v);
             else if (type == typeof(short))
-                longRows = new MappedReadOnlyList<short, long>((IReadOnlyList<short>)rows, v => v);
+                longRows = MappedReadOnlyList<short, long>.Map((IReadOnlyList<short>)rows, v => v);
             else if (type == typeof(ushort))
-                longRows = new MappedReadOnlyList<ushort, long>((IReadOnlyList<ushort>)rows, v => v);
+                longRows = MappedReadOnlyList<ushort, long>.Map((IReadOnlyList<ushort>)rows, v => v);
             else if (type == typeof(sbyte))
-                longRows = new MappedReadOnlyList<sbyte, long>((IReadOnlyList<sbyte>)rows, v => v);
+                longRows = MappedReadOnlyList<sbyte, long>.Map((IReadOnlyList<sbyte>)rows, v => v);
             else if (type == typeof(byte))
-                longRows = new MappedReadOnlyList<byte, long>((IReadOnlyList<byte>)rows, v => v);
+                longRows = MappedReadOnlyList<byte, long>.Map((IReadOnlyList<byte>)rows, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             

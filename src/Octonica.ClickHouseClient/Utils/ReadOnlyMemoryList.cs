@@ -21,7 +21,7 @@ using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal sealed class ReadOnlyMemoryList<T> : IReadOnlyList<T>
+    internal sealed class ReadOnlyMemoryList<T> : IReadOnlyListExt<T>
     {
         private readonly ReadOnlyMemory<T> _memory;
 
@@ -46,6 +46,31 @@ namespace Octonica.ClickHouseClient.Utils
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        public IReadOnlyListExt<T> Slice(int start, int length)
+        {
+            if (start < 0 || start > Count)
+                throw new ArgumentOutOfRangeException(nameof(start));
+            if (length < 0 || start + length > Count)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            return new ReadOnlyMemoryList<T>(_memory.Slice(start, length));
+        }
+
+        public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
+        {
+            return MappedReadOnlyList<T, TOut>.Map(_memory, map);
+        }
+
+        public int CopyTo(Span<T> span, int start)
+        {
+            if (start < 0 || start > _memory.Length)
+                throw new ArgumentOutOfRangeException(nameof(start));
+
+            var length = Math.Min(_memory.Length - start, span.Length);
+            _memory.Slice(start, length).Span.CopyTo(span);
+            return length;            
         }
 
         public T this[int index] => _memory.Span[index];

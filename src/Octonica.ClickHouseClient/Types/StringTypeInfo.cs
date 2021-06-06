@@ -44,7 +44,7 @@ namespace Octonica.ClickHouseClient.Types
 
             if (typeof(T) == typeof(char[]))
             {
-                var mappedList = new MappedReadOnlyList<char[]?, ReadOnlyMemory<char>>((IReadOnlyList<char[]?>)rows, m => m.AsMemory());
+                var mappedList = MappedReadOnlyList<char[]?, ReadOnlyMemory<char>>.Map((IReadOnlyList<char[]?>)rows, m => m.AsMemory());
                 return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
             }
 
@@ -53,7 +53,7 @@ namespace Octonica.ClickHouseClient.Types
 
             if (typeof(T) == typeof(Memory<char>))
             {
-                var mappedList = new MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>((IReadOnlyList<Memory<char>>) rows, m => m);
+                var mappedList = MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>.Map((IReadOnlyList<Memory<char>>) rows, m => m);
                 return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
             }
 
@@ -65,7 +65,7 @@ namespace Octonica.ClickHouseClient.Types
 
             if (typeof(T) == typeof(Memory<byte>))
             {
-                var mappedList = new MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>((IReadOnlyList<Memory<byte>>) rows, m => m);
+                var mappedList = MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>.Map((IReadOnlyList<Memory<byte>>) rows, m => m);
                 return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, mappedList);
             }
 

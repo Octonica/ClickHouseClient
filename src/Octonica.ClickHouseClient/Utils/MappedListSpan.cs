@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,30 +22,34 @@ using System.Linq;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal sealed class ReadOnlyListSpan<T> : IReadOnlyListExt<T>
+    internal sealed class MappedListSpan<TIn, TOut> : IReadOnlyListExt<TOut>
     {
-        private readonly IReadOnlyList<T> _innerList;
+        private readonly IList<TIn> _innerList;
+        private readonly Func<TIn, TOut> _map;
         private readonly int _offset;
 
         public int Count { get; }
 
-        private ReadOnlyListSpan(IReadOnlyList<T> innerList, int offset, int count)
+        private MappedListSpan(IList<TIn> innerList, Func<TIn, TOut> map, int offset, int count)
         {
             if (innerList == null)
                 throw new ArgumentNullException(nameof(innerList));
+            if (map == null)
+                throw new ArgumentNullException(nameof(map));
             if (offset < 0 || offset > innerList.Count)
                 throw new ArgumentOutOfRangeException(nameof(offset));
             if (count < 0 || offset + count > innerList.Count)
                 throw new ArgumentOutOfRangeException(nameof(count));
 
             _innerList = innerList;
+            _map = map;
             _offset = offset;
             Count = count;
         }
 
-        public IEnumerator<T> GetEnumerator()
+        public IEnumerator<TOut> GetEnumerator()
         {
-            return _innerList.Skip(_offset).Take(Count).GetEnumerator();
+            return _innerList.Skip(_offset).Take(Count).Select(_map).GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -53,58 +57,59 @@ namespace Octonica.ClickHouseClient.Utils
             return GetEnumerator();
         }
 
-        public IReadOnlyListExt<T> Slice(int start, int length)
+        public IReadOnlyListExt<TOut> Slice(int start, int length)
         {
             if (start < 0 || start > Count)
                 throw new ArgumentOutOfRangeException(nameof(start));
             if (length < 0 || start + length > Count)
                 throw new ArgumentOutOfRangeException(nameof(length));
 
-            return Slice(_innerList, _offset + start, length);
+            return new MappedListSpan<TIn, TOut>(_innerList, _map, _offset + start, length);
         }
 
-        public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
+        public IReadOnlyListExt<T> Map<T>(Func<TOut, T> map)
         {
-            return MappedReadOnlyListSpan<T, TOut>.Create(_innerList, map, _offset, Count);
+            if (map == null)
+                throw new ArgumentNullException(nameof(map));
+
+            return new MappedListSpan<TIn, T>(_innerList, Combine(_map, map), _offset, Count);
+
+            static Func<TIn, T> Combine(Func<TIn, TOut> f1, Func<TOut, T> f2)
+            {
+                return v => f2(f1(v));
+            }
         }
 
-        public int CopyTo(Span<T> span, int start)
+        public int CopyTo(Span<TOut> span, int start)
         {
             if (start < 0 || start > Count)
                 throw new ArgumentOutOfRangeException(nameof(start));
 
             var length = Math.Min(Count - start, span.Length);
-            if (_innerList is T[] array)
-            {
-                new ReadOnlySpan<T>(array, _offset + start, length).CopyTo(span);
-            }
-            else
-            {
-                var end = _offset + start + length;
-                for (int i = _offset + start, j = 0; i < end; i++, j++)
-                    span[j] = _innerList[i];
-            }
+            var end = _offset + start + length;
+            for (int i = _offset + start, j = 0; i < end; i++, j++)
+                span[j] = _map(_innerList[i]);
 
             return length;
         }
 
-        public T this[int index]
+        public TOut this[int index]
         {
             get
             {
                 if (index < 0 || index >= Count)
                     throw new IndexOutOfRangeException();
 
-                return _innerList[index + _offset];
+                return _map(_innerList[index + _offset]);
             }
         }
 
-        public static IReadOnlyListExt<T> Slice(IReadOnlyList<T> list, int offset, int count)
+        public static IReadOnlyListExt<TOut> Create(IList<TIn> list, Func<TIn, TOut> map, int offset, int count)
         {
-            if (list is IReadOnlyListExt<T> readOnlyListExt)
-                return readOnlyListExt.Slice(offset, count);
+            if (list is IReadOnlyListExt<TIn> readOnlyListExt)
+                return readOnlyListExt.Slice(offset, count).Map(map);
 
-            return new ReadOnlyListSpan<T>(list, offset, count);
-        }        
+            return new MappedListSpan<TIn, TOut>(list, map, offset, count);
+        }
     }
 }

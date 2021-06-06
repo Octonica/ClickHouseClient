@@ -405,7 +405,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(new MappedReadOnlyList<Memory<T>, IReadOnlyList<T>?>((IReadOnlyList<Memory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+                return new ArrayLinearizedList<T>(MappedReadOnlyList<Memory<T>, IReadOnlyList<T>?>.Map((IReadOnlyList<Memory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
             }
         }
 
@@ -418,7 +418,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(new MappedReadOnlyList<ReadOnlyMemory<T>, IReadOnlyList<T>?>((IReadOnlyList<ReadOnlyMemory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+                return new ArrayLinearizedList<T>(MappedReadOnlyList<ReadOnlyMemory<T>, IReadOnlyList<T>?>.Map((IReadOnlyList<ReadOnlyMemory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
             }
         }
 
@@ -476,7 +476,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseColumnWriter Dispatch<T>()
             {
-                var mappedRows = new MappedReadOnlyList<Array, IReadOnlyList<T>>(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
+                var mappedRows = MappedReadOnlyList<Array, IReadOnlyList<T>>.Map(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
                 var linearizedList = new ArrayLinearizedList<T>(mappedRows);
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
                 return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);

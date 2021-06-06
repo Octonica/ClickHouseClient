@@ -107,7 +107,7 @@ namespace Octonica.ClickHouseClient.Types
 
             if (typeof(T) == typeof(string))
             {
-                var list = new MappedReadOnlyList<string, TValue>(
+                var list = MappedReadOnlyList<string, TValue>.Map(
                     (IReadOnlyList<string>)rows,
                     key => _enumMap.TryGetValue(key, out var value) ? value : throw new InvalidCastException($"The value \"{key}\" can't be converted to {ComplexTypeName}."));
                 return CreateInternalColumnWriter(columnName, list);

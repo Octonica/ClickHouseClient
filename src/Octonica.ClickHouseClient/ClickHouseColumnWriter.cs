@@ -762,7 +762,7 @@ namespace Octonica.ClickHouseClient
                     }
 
                     if (readOnlyList.Count > _rowCount)
-                        readOnlyList = new ReadOnlyListSpan<T>(readOnlyList, 0, _rowCount);
+                        readOnlyList = readOnlyList.Slice(0, _rowCount);
 
                     return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, readOnlyList, _columnSettings);
                 }
@@ -776,7 +776,7 @@ namespace Octonica.ClickHouseClient
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
-                    var listSpan = new ListSpan<T>(list, 0, _rowCount);
+                    var listSpan = list.Slice(0, _rowCount);
                     return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, listSpan, _columnSettings);
                 }
 
@@ -837,7 +837,7 @@ namespace Octonica.ClickHouseClient
                     }
 
                     if (readOnlyList.Count > _rowCount)
-                        readOnlyList = new ReadOnlyListSpan<object?>(readOnlyList, 0, _rowCount);
+                        readOnlyList = readOnlyList.Slice(0, _rowCount);
                 }
                 else if (_collection is IList<object?> list)
                 {
@@ -848,7 +848,7 @@ namespace Octonica.ClickHouseClient
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
-                    readOnlyList = new ListSpan<object?>(list, 0, _rowCount);
+                    readOnlyList = list.Slice(0, _rowCount);
                 }
                 else if (_checkAsyncEnumerable && _collection is IAsyncEnumerable<object?>)
                 {
@@ -889,7 +889,7 @@ namespace Octonica.ClickHouseClient
                     return null;
                 }
 
-                var mappedList = new MappedReadOnlyList<object?, T>(readOnlyList, CastTo<T>);
+                var mappedList = readOnlyList.Map(CastTo<T>);
                 return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, mappedList, _columnSettings);
             }
 

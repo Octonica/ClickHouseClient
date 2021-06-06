@@ -46,7 +46,7 @@ namespace Octonica.ClickHouseClient.Types
             if(typeof(IPAddress).IsAssignableFrom(type))
                 preparedRows = (IReadOnlyList<IPAddress?>)rows;
             else if(type == typeof(string))
-                preparedRows = new MappedReadOnlyList<string?, IPAddress?>((IReadOnlyList<string?>)rows, ParseIpAddress);
+                preparedRows = MappedReadOnlyList<string?, IPAddress?>.Map((IReadOnlyList<string?>)rows, ParseIpAddress);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

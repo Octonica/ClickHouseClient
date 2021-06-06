@@ -99,21 +99,21 @@ namespace Octonica.ClickHouseClient.Types
             if (type == typeof(decimal))
                 decimalRows = (IReadOnlyList<decimal>)rows;
             else if (type == typeof(long))
-                decimalRows = new MappedReadOnlyList<long, decimal>((IReadOnlyList<long>)rows, v => v);
+                decimalRows = MappedReadOnlyList<long, decimal>.Map((IReadOnlyList<long>)rows, v => v);
             else if (type == typeof(ulong))
-                decimalRows = new MappedReadOnlyList<ulong, decimal>((IReadOnlyList<ulong>)rows, v => v);
+                decimalRows = MappedReadOnlyList<ulong, decimal>.Map((IReadOnlyList<ulong>)rows, v => v);
             else if (type == typeof(int))
-                decimalRows = new MappedReadOnlyList<int, decimal>((IReadOnlyList<int>)rows, v => v);
+                decimalRows = MappedReadOnlyList<int, decimal>.Map((IReadOnlyList<int>)rows, v => v);
             else if (type == typeof(uint))
-                decimalRows = new MappedReadOnlyList<uint, decimal>((IReadOnlyList<uint>)rows, v => v);
+                decimalRows = MappedReadOnlyList<uint, decimal>.Map((IReadOnlyList<uint>)rows, v => v);
             else if (type == typeof(short))
-                decimalRows = new MappedReadOnlyList<short, decimal>((IReadOnlyList<short>)rows, v => v);
+                decimalRows = MappedReadOnlyList<short, decimal>.Map((IReadOnlyList<short>)rows, v => v);
             else if (type == typeof(ushort))
-                decimalRows = new MappedReadOnlyList<ushort, decimal>((IReadOnlyList<ushort>)rows, v => v);
+                decimalRows = MappedReadOnlyList<ushort, decimal>.Map((IReadOnlyList<ushort>)rows, v => v);
             else if (type == typeof(sbyte))
-                decimalRows = new MappedReadOnlyList<sbyte, decimal>((IReadOnlyList<sbyte>)rows, v => v);
+                decimalRows = MappedReadOnlyList<sbyte, decimal>.Map((IReadOnlyList<sbyte>)rows, v => v);
             else if (type == typeof(byte))
-                decimalRows = new MappedReadOnlyList<byte, decimal>((IReadOnlyList<byte>)rows, v => v);
+                decimalRows = MappedReadOnlyList<byte, decimal>.Map((IReadOnlyList<byte>)rows, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

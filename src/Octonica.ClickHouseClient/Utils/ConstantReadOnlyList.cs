@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ using System.Linq;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal class ConstantReadOnlyList<T> : IReadOnlyList<T>
+    internal class ConstantReadOnlyList<T> : IReadOnlyListExt<T>
     {
         [AllowNull]
         private readonly T _value;
@@ -47,6 +47,34 @@ namespace Octonica.ClickHouseClient.Utils
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        public IReadOnlyListExt<T> Slice(int start, int length)
+        {
+            if (start < 0 || start > Count)
+                throw new ArgumentOutOfRangeException(nameof(start));
+            if (length < 0 || start + length > Count)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            return new ConstantReadOnlyList<T>(_value, length);
+        }
+
+        public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
+        {
+            if (map == null)
+                throw new ArgumentNullException(nameof(map));
+
+            return new ConstantReadOnlyList<TOut>(map(_value), Count);            
+        }
+
+        public int CopyTo(Span<T> span, int offset)
+        {
+            if (offset < 0 || offset > Count)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+
+            var length = Math.Min(span.Length, Count - offset);
+            span.Slice(0, length).Fill(_value);
+            return length;
         }
 
         public T this[int index]

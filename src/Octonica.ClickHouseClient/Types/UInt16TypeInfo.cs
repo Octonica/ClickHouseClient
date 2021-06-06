@@ -43,7 +43,7 @@ namespace Octonica.ClickHouseClient.Types
             if (type == typeof(ushort))
                 ushortRows = (IReadOnlyList<ushort>)rows;
             else if (type == typeof(byte))
-                ushortRows = new MappedReadOnlyList<byte, ushort>((IReadOnlyList<byte>)rows, v => v);
+                ushortRows = MappedReadOnlyList<byte, ushort>.Map((IReadOnlyList<byte>)rows, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
