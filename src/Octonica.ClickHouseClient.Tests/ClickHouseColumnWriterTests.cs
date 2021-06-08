@@ -596,8 +596,12 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task InsertLargeTable()
+        [Theory]
+        [InlineData(0)]
+        [InlineData(null)]
+        [InlineData(2111)]
+        [InlineData(999_990)]
+        public async Task InsertLargeTable(int? maxBlockSize)
         {
             // "Large" means that the size of the table is greater than the size of the buffer
             const int rowCount = 100_000;
@@ -610,6 +614,10 @@ namespace Octonica.ClickHouseClient.Tests
 
             await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}(id, str) VALUES"))
             {
+                // Leave a default value intact when maxBlockSize == 0
+                if (maxBlockSize == null || maxBlockSize > 0)
+                    writer.MaxBlockSize = maxBlockSize;                
+
                 var table = new object[] {Enumerable.Range(startId, rowCount), Enumerable.Range(startId, rowCount).Select(num => num.ToString())};
                 await writer.WriteTableAsync(table, rowCount, CancellationToken.None);
                 await writer.EndWriteAsync(CancellationToken.None);

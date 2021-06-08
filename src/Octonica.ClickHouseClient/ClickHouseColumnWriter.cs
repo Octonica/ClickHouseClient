@@ -40,14 +40,39 @@ namespace Octonica.ClickHouseClient
 
         private ClickHouseColumnSettings?[]? _columnSettings;
 
+        private int? _rowsPerBlock;
+
         public int FieldCount => _columns.Count;
 
         public bool IsClosed => _session.IsDisposed || _session.IsFailed;
+
+        /// <summary>
+        /// The maximal number of rows in a single block of data. 
+        /// <b>null</b> if the size of block is not limited.
+        /// </summary>
+        public int? MaxBlockSize
+        {
+            get => _rowsPerBlock;
+            set
+            {
+                if (value <= 0)
+                    throw new ArgumentException("A number of rows in a block must be greater than zero.");
+
+                _rowsPerBlock = value;
+            }
+        }
 
         internal ClickHouseColumnWriter(ClickHouseTcpClient.Session session, ReadOnlyCollection<ColumnInfo> columns)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _columns = columns;
+
+            if (columns.Count <= 100)
+                MaxBlockSize = 8000;
+            else if (columns.Count >= 1000)
+                MaxBlockSize = 800;
+            else
+                MaxBlockSize = 8800 - 8 * columns.Count;
         }
 
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
@@ -269,7 +294,7 @@ namespace Octonica.ClickHouseClient
             if (IsClosed)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The writer is closed.");
 
-            var writers = new List<IClickHouseColumnWriter>(_columns.Count);
+            var writers = new List<IColumnWriterFactory>(_columns.Count);
             for (int i = 0; i < _columns.Count; i++)
             {
                 var column = columns[i];
@@ -358,7 +383,7 @@ namespace Octonica.ClickHouseClient
                  */
 
                 var explicitTypeDispatcher = settings?.GetColumnTypeDispatcher();
-                IClickHouseColumnWriter? columnWriter;
+                IColumnWriterFactory? columnWriter;
                 if (explicitTypeDispatcher != null)
                 {
                     Debug.Assert(settings?.ColumnType != null);
@@ -495,8 +520,17 @@ namespace Octonica.ClickHouseClient
                 writers.Add(columnWriter);
             }
 
-            var table = new ClickHouseTableWriter(string.Empty, rowCount, writers);
-            await SendTable(table, async, cancellationToken);
+            int offset;
+            var blockSize = MaxBlockSize ?? rowCount;
+            for (offset = 0; offset + blockSize < rowCount; offset += blockSize)
+            {
+                var table = new ClickHouseTableWriter(string.Empty, blockSize, writers.Select(w => w.Create(offset, blockSize)));
+                await SendTable(table, async, cancellationToken);
+            }
+
+            var finalBlockSize = rowCount - offset;
+            var finalTable = new ClickHouseTableWriter(string.Empty, finalBlockSize, writers.Select(w => w.Create(offset, finalBlockSize)));
+            await SendTable(finalTable, async, cancellationToken);
 
             static ClickHouseException CreateInterfaceAmbiguousException(Type itf, Type altItf, string columnName, int columnIndex)
             {
@@ -604,7 +638,32 @@ namespace Octonica.ClickHouseClient
             await EndWrite(true, async, CancellationToken.None);
         }
 
-        private class NullColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
+        private interface IColumnWriterFactory
+        {
+            public IClickHouseColumnWriter Create(int offset, int length);
+        }
+
+        private class ColumnWriterFactory<T> : IColumnWriterFactory
+        {
+            private readonly ColumnInfo _columnInfo;
+            private readonly IReadOnlyList<T> _rows;
+            private readonly ClickHouseColumnSettings? _columnSettings;
+
+            public ColumnWriterFactory(ColumnInfo columnInfo, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
+            {
+                _columnInfo = columnInfo;
+                _rows = rows;
+                _columnSettings = columnSettings;
+            }
+
+            public IClickHouseColumnWriter Create(int offset, int length)
+            {
+                var slice = _rows.Slice(offset, length);
+                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, slice, _columnSettings);
+            }
+        }
+
+        private class NullColumnWriterDispatcher : ITypeDispatcher<IColumnWriterFactory>
         {
             private readonly ColumnInfo _columnInfo;
             private readonly ClickHouseColumnSettings? _columnSettings;
@@ -617,14 +676,14 @@ namespace Octonica.ClickHouseClient
                 _rowCount = rowCount;
             }
 
-            public IClickHouseColumnWriter Dispatch<T>()
+            public IColumnWriterFactory Dispatch<T>()
             {
                 var rows = new ConstantReadOnlyList<T>(default, _rowCount);
-                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
             }
         }
 
-        private class AsyncColumnWriterDispatcher : ITypeDispatcher<Task<IClickHouseColumnWriter>>
+        private class AsyncColumnWriterDispatcher : ITypeDispatcher<Task<IColumnWriterFactory>>
         {
             private readonly object _asyncEnumerable;
             private readonly ColumnInfo _columnInfo;
@@ -649,32 +708,42 @@ namespace Octonica.ClickHouseClient
                 _cancellationToken = cancellationToken;
             }
 
-            public async Task<IClickHouseColumnWriter> Dispatch<T>()
+            public async Task<IColumnWriterFactory> Dispatch<T>()
             {
-                var rows = new List<T>(_rowCount);
                 if (_rowCount == 0)
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                    return new ColumnWriterFactory<T>(_columnInfo, Array.Empty<T>(), _columnSettings);
 
-                await foreach (var rowValue in ((IAsyncEnumerable<T>) _asyncEnumerable).WithCancellation(_cancellationToken))
+                ConfiguredCancelableAsyncEnumerable<T>.Enumerator enumerator = default;
+                bool disposeEnumerator = false;
+                try
                 {
-                    rows.Add(rowValue);
+                    enumerator = ((IAsyncEnumerable<T>)_asyncEnumerable).WithCancellation(_cancellationToken).GetAsyncEnumerator();
+                    disposeEnumerator = true;
 
-                    if (rows.Count == _rowCount)
-                        break;
+                    var rows = new T[_rowCount];
+                    for (int i = 0; i < _rowCount; i++)
+                    {
+                        if (!await enumerator.MoveNextAsync())
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.InvalidRowCount,
+                                $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {i} row(s), but the required number of rows is {_rowCount}.");
+                        }
+
+                        rows[i] = enumerator.Current;
+                    }
+
+                    return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
                 }
-
-                if (rows.Count < _rowCount)
+                finally
                 {
-                    throw new ClickHouseException(
-                        ClickHouseErrorCodes.InvalidRowCount,
-                        $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                    if (disposeEnumerator)
+                        await enumerator.DisposeAsync();
                 }
-
-                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
             }
         }
 
-        private class AsyncObjectColumnWriterDispatcher : ITypeDispatcher<Task<IClickHouseColumnWriter>>
+        private class AsyncObjectColumnWriterDispatcher : ITypeDispatcher<Task<IColumnWriterFactory>>
         {
             private readonly IAsyncEnumerable<object?> _asyncEnumerable;
             private readonly ColumnInfo _columnInfo;
@@ -699,33 +768,42 @@ namespace Octonica.ClickHouseClient
                 _cancellationToken = cancellationToken;
             }
 
-            public async Task<IClickHouseColumnWriter> Dispatch<T>()
+            public async Task<IColumnWriterFactory> Dispatch<T>()
             {
-                var rows = new List<T>(_rowCount);
                 if (_rowCount == 0)
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                    return new ColumnWriterFactory<T>(_columnInfo, Array.Empty<T>(), _columnSettings);
 
-                await foreach (var rowValue in _asyncEnumerable.WithCancellation(_cancellationToken))
+                ConfiguredCancelableAsyncEnumerable<object?>.Enumerator enumerator = default;
+                bool disposeEnumerator = false;
+                try
                 {
-                    var val = ColumnWriterObjectCollectionDispatcher.CastTo<T>(rowValue);
-                    rows.Add(val);
+                    enumerator = _asyncEnumerable.WithCancellation(_cancellationToken).GetAsyncEnumerator();
+                    disposeEnumerator = true;
 
-                    if (rows.Count == _rowCount)
-                        break;
+                    var rows = new T[_rowCount];
+                    for (int i = 0; i < _rowCount; i++)
+                    {
+                        if (!await enumerator.MoveNextAsync())
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.InvalidRowCount,
+                                $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {i} row(s), but the required number of rows is {_rowCount}.");
+                        }
+
+                        rows[i] = ColumnWriterObjectCollectionDispatcher.CastTo<T>(enumerator.Current);
+                    }
+
+                    return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
                 }
-
-                if (rows.Count < _rowCount)
+                finally
                 {
-                    throw new ClickHouseException(
-                        ClickHouseErrorCodes.InvalidRowCount,
-                        $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                    if (disposeEnumerator)
+                        await enumerator.DisposeAsync();
                 }
-
-                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
             }
         }
 
-        private class ColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter?>
+        private class ColumnWriterDispatcher : ITypeDispatcher<IColumnWriterFactory?>
         {
             private readonly object _collection;
             private readonly ColumnInfo _columnInfo;
@@ -750,7 +828,7 @@ namespace Octonica.ClickHouseClient
                 _checkAsyncEnumerable = checkAsyncEnumerable;
             }
 
-            public IClickHouseColumnWriter? Dispatch<T>()
+            public IColumnWriterFactory? Dispatch<T>()
             {
                 if (_collection is IReadOnlyList<T> readOnlyList)
                 {
@@ -764,7 +842,7 @@ namespace Octonica.ClickHouseClient
                     if (readOnlyList.Count > _rowCount)
                         readOnlyList = readOnlyList.Slice(0, _rowCount);
 
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, readOnlyList, _columnSettings);
+                    return new ColumnWriterFactory<T>(_columnInfo, readOnlyList, _columnSettings);
                 }
 
                 if (_collection is IList<T> list)
@@ -777,7 +855,7 @@ namespace Octonica.ClickHouseClient
                     }
 
                     var listSpan = list.Slice(0, _rowCount);
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, listSpan, _columnSettings);
+                    return new ColumnWriterFactory<T>(_columnInfo, listSpan, _columnSettings);
                 }
 
                 if (_checkAsyncEnumerable && _collection is IAsyncEnumerable<T>)
@@ -788,16 +866,29 @@ namespace Octonica.ClickHouseClient
 
                 if (_collection is IEnumerable<T> genericEnumerable)
                 {
-                    List<T> rows = new List<T>(_rowCount);
-                    rows.AddRange(genericEnumerable.Take(_rowCount));
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
+                    using var enumerator = genericEnumerable.GetEnumerator();
+
+                    T[] rows = new T[_rowCount];
+                    for (int i = 0; i < _rowCount; i++)
+                    {
+                        if (!enumerator.MoveNext())
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.InvalidRowCount,
+                                $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {i} row(s), but the required number of rows is {_rowCount}.");
+                        }
+
+                        rows[i] = enumerator.Current;
+                    }
+
+                    return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
                 }
 
                 return null;
             }
         }
 
-        private class ColumnWriterObjectCollectionDispatcher : ITypeDispatcher<IClickHouseColumnWriter?>
+        private class ColumnWriterObjectCollectionDispatcher : ITypeDispatcher<IColumnWriterFactory?>
         {
             private readonly object _collection;
             private readonly ColumnInfo _columnInfo;
@@ -825,7 +916,7 @@ namespace Octonica.ClickHouseClient
                 _ignoreNonGenericEnumerable = ignoreNonGenericEnumerable;
             }
 
-            public IClickHouseColumnWriter? Dispatch<T>()
+            public IColumnWriterFactory? Dispatch<T>()
             {
                 if (_collection is IReadOnlyList<object?> readOnlyList)
                 {
@@ -857,31 +948,48 @@ namespace Octonica.ClickHouseClient
                 }
                 else if (_collection is IEnumerable<object?> genericEnumerable)
                 {
-                    List<object?> rows = new List<object?>(_rowCount);
-                    rows.AddRange(genericEnumerable.Take(_rowCount));
-                    readOnlyList = rows;
+                    using var enumerator = genericEnumerable.GetEnumerator();
+
+                    T[] rows = new T[_rowCount];
+                    for (int i = 0; i < _rowCount; i++)
+                    {
+                        if (!enumerator.MoveNext())
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.InvalidRowCount,
+                                $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {i} row(s), but the required number of rows is {_rowCount}.");
+                        }
+
+                        rows[i] = CastTo<T>(enumerator.Current);
+                    }
+
+                    return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
                 }
                 else if (!_ignoreNonGenericEnumerable && _collection is IEnumerable enumerable)
                 {
-                    List<T> rows = new List<T>(_rowCount);
-
-                    int count = 0;
-                    foreach (object? item in enumerable)
+                    IEnumerator? enumerator = null;
+                    try
                     {
-                        rows.Add(CastTo<T>(item));
+                        enumerator = enumerable.GetEnumerator();
+                        T[] rows = new T[_rowCount];
+                        for (int i = 0; i < _rowCount; i++)
+                        {
+                            if (!enumerator.MoveNext())
+                            {
+                                throw new ClickHouseException(
+                                    ClickHouseErrorCodes.InvalidRowCount,
+                                    $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {i} row(s), but the required number of rows is {_rowCount}.");
+                            }
 
-                        if (++count == _rowCount)
-                            break;
+                            rows[i] = CastTo<T>(enumerator.Current);
+                        }
+
+                        return new ColumnWriterFactory<T>(_columnInfo, rows, _columnSettings);
                     }
-
-                    if (rows.Count < _rowCount)
+                    finally
                     {
-                        throw new ClickHouseException(
-                            ClickHouseErrorCodes.ColumnTypeMismatch,
-                            $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {rows.Count} row(s), but the required number of rows is {_rowCount}.");
+                        (enumerator as IDisposable)?.Dispose();
                     }
-
-                    return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
                 }
                 else
                 {
@@ -890,7 +998,7 @@ namespace Octonica.ClickHouseClient
                 }
 
                 var mappedList = readOnlyList.Map(CastTo<T>);
-                return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, mappedList, _columnSettings);
+                return new ColumnWriterFactory<T>(_columnInfo, mappedList, _columnSettings);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
