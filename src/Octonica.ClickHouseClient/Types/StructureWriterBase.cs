@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -34,6 +37,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public string ColumnType { get; }
 
+        protected virtual bool BitwiseCopyAllowed => false;
+
         protected StructureWriterBase(string columnName, string columnType, int elementSize, IReadOnlyList<T> rows)
         {
             ElementSize = elementSize;
@@ -42,18 +47,62 @@ namespace Octonica.ClickHouseClient.Types
             ColumnType = columnType;
         }
 
-        public virtual SequenceSize WriteNext(Span<byte> writeTo)
+        public SequenceSize WriteNext(Span<byte> writeTo)
         {
             var elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
 
-            for (int i = 0; i < elementsCount; i++, _position++)
+            if (BitwiseCopyAllowed) 
             {
-                WriteElement(writeTo.Slice(i * ElementSize), _rows[_position]);
+                var targetSpan = MemoryMarshal.Cast<byte, T>(writeTo.Slice(0, elementsCount * ElementSize));
+                var length = _rows.CopyTo(targetSpan, _position);
+                Debug.Assert(length == elementsCount);
+                _position += length;
+            }
+            else
+            {
+                for (int i = 0; i < elementsCount; i++, _position++)
+                {
+                    WriteElement(writeTo.Slice(i * ElementSize), _rows[_position]);
+                }
             }
 
             return new SequenceSize(elementsCount * ElementSize, elementsCount);
         }
 
         protected abstract void WriteElement(Span<byte> writeTo, in T value);
+    }
+
+    public abstract class StructureWriterBase<TIn, TOut> : IClickHouseColumnWriter
+        where TOut: struct
+    {
+        private readonly IReadOnlyList<TIn> _rows;
+
+        private int _position;
+
+        protected int ElementSize { get; }
+
+        public string ColumnName { get; }
+
+        public string ColumnType { get; }
+
+        protected StructureWriterBase(string columnName, string columnType, int elementSize, IReadOnlyList<TIn> rows)
+        {
+            ElementSize = elementSize;
+            _rows = rows;
+            ColumnName = columnName;
+            ColumnType = columnType;
+        }
+
+        public SequenceSize WriteNext(Span<byte> writeTo)
+        {
+            var elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
+
+            var targetSpan = MemoryMarshal.Cast<byte, TOut>(writeTo.Slice(0, elementsCount * ElementSize));
+            _position += _rows.Map(Convert).CopyTo(targetSpan, _position);
+
+            return new SequenceSize(elementsCount * ElementSize, elementsCount);
+        }
+
+        protected abstract TOut Convert(TIn value);        
     }
 }

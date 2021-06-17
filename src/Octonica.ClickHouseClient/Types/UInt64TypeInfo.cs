@@ -82,6 +82,8 @@ namespace Octonica.ClickHouseClient.Types
 
         internal sealed class UInt64Writer : StructureWriterBase<ulong>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public UInt64Writer(string columnName, string columnType, IReadOnlyList<ulong> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)
             {

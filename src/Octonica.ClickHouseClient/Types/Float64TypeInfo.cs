@@ -76,6 +76,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class Float64Writer : StructureWriterBase<double>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public Float64Writer(string columnName, string columnType, IReadOnlyList<double> rows)
                 : base(columnName, columnType, sizeof(double), rows)
             {

@@ -131,7 +131,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeWriter : StructureWriterBase<DateTime>
+        private sealed class DateTimeWriter : StructureWriterBase<DateTime, uint>
         {
             private readonly TimeZoneInfo _timeZone;
 
@@ -141,7 +141,7 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override void WriteElement(Span<byte> writeTo, in DateTime value)
+            protected override uint Convert(DateTime value)
             {
                 uint seconds;
                 if (value == default)
@@ -157,12 +157,11 @@ namespace Octonica.ClickHouseClient.Types
                     seconds = (uint) doubleSeconds;
                 }
 
-                var success = BitConverter.TryWriteBytes(writeTo, seconds);
-                Debug.Assert(success);
+                return seconds;
             }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, uint>
         {
             private readonly TimeZoneInfo _timeZone;
 
@@ -172,7 +171,7 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override void WriteElement(Span<byte> writeTo, in DateTimeOffset value)
+            protected override uint Convert(DateTimeOffset value)
             {
                 uint seconds;
                 if (value == default)
@@ -190,8 +189,7 @@ namespace Octonica.ClickHouseClient.Types
                     seconds = (uint)doubleSeconds;
                 }
 
-                var success = BitConverter.TryWriteBytes(writeTo, seconds);
-                Debug.Assert(success);
+                return seconds;
             }
         }
     }

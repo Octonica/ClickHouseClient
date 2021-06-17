@@ -112,6 +112,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class IpV4Writer : StructureWriterBase<uint>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public IpV4Writer(string columnName, string columnType, IReadOnlyList<uint> rows)
                 : base(columnName, columnType, sizeof(uint), rows)
             {

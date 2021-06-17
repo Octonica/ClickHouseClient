@@ -223,7 +223,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeWriter : StructureWriterBase<DateTime>
+        private sealed class DateTimeWriter : StructureWriterBase<DateTime, ulong>
         {
             private readonly int _ticksScale;
             private readonly long _ticksMaxValue;
@@ -237,7 +237,7 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override void WriteElement(Span<byte> writeTo, in DateTime value)
+            protected override ulong Convert(DateTime value)
             {
                 ulong ticks;
                 if (value == default)
@@ -256,12 +256,11 @@ namespace Octonica.ClickHouseClient.Types
                         ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
                 }
 
-                var success = BitConverter.TryWriteBytes(writeTo, ticks);
-                Debug.Assert(success);
+                return ticks;
             }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, ulong>
         {
             private readonly int _ticksScale;
             private readonly long _ticksMaxValue;
@@ -275,7 +274,7 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override void WriteElement(Span<byte> writeTo, in DateTimeOffset value)
+            protected override ulong Convert(DateTimeOffset value)
             {
                 ulong ticks;
                 if (value == default)
@@ -296,8 +295,7 @@ namespace Octonica.ClickHouseClient.Types
                         ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
                 }
 
-                var success = BitConverter.TryWriteBytes(writeTo, ticks);
-                Debug.Assert(success);
+                return ticks;
             }
         }
     }

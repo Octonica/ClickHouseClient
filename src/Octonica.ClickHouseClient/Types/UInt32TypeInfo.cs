@@ -85,6 +85,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class UInt32Writer : StructureWriterBase<uint>
         {
+            protected override bool BitwiseCopyAllowed => true;
+
             public UInt32Writer(string columnName, string columnType, IReadOnlyList<uint> rows)
                 : base(columnName, columnType, sizeof(uint), rows)
             {

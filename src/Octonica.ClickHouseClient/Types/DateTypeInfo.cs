@@ -67,18 +67,17 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateWriter : StructureWriterBase<DateTime>
+        private sealed class DateWriter : StructureWriterBase<DateTime, ushort>
         {
             public DateWriter(string columnName, string columnType, IReadOnlyList<DateTime> rows)
                 : base(columnName, columnType, sizeof(ushort), rows)
             {
             }
 
-            protected override void WriteElement(Span<byte> writeTo, in DateTime value)
+            protected override ushort Convert(DateTime value)
             {
                 ushort days = value == default ? (ushort) 0 : (ushort) (value - DateTime.UnixEpoch).TotalDays;
-                var success = BitConverter.TryWriteBytes(writeTo, days);
-                Debug.Assert(success);
+                return days;
             }
         }
     }
