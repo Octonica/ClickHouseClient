@@ -1853,6 +1853,10 @@ namespace Octonica.ClickHouseClient.Tests
             param.ClickHouseDbType = ClickHouseDbType.IpV6;
             result = await cmd.ExecuteScalarAsync<string>();
             Assert.Equal("::ffff:192.0.121.234", result);
+
+            param.Value = null;
+            result = await cmd.ExecuteScalarAsync();
+            Assert.Equal(DBNull.Value, result);
         }
 
         [Fact]

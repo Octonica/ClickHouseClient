@@ -113,7 +113,7 @@ namespace Octonica.ClickHouseClient.Types
                     var ipAddress = _rows[i];
                     if (ipAddress == null)
                     {
-                        writeTo.Slice(i * AddressSize).Fill(0);
+                        writeTo.Slice(i * AddressSize, AddressSize).Fill(0);
                         continue;
                     }
 
@@ -123,7 +123,7 @@ namespace Octonica.ClickHouseClient.Types
                     if (ipAddress.AddressFamily != AddressFamily.InterNetworkV6)
                         throw new InvalidCastException($"The network address \"{ipAddress}\" is not a IPv6 address.");
 
-                    if (!ipAddress.TryWriteBytes(writeTo.Slice(i * AddressSize, AddressSize), out var bytesWritten) || bytesWritten != AddressSize)
+                    if (!ipAddress.TryWriteBytes(writeTo.Slice(i * AddressSize), out var bytesWritten) || bytesWritten != AddressSize)
                         throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: IPv6 address writing error.");
                 }
 
