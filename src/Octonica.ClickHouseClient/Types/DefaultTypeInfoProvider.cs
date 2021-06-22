@@ -18,9 +18,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Net;
+using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -161,13 +165,319 @@ namespace Octonica.ClickHouseClient.Types
             return (baseTypeName, options);
         }
 
+        public IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseParameterTypeInfo parameterType)
+        {
+            string? tzCode;
+            string typeName;
+            IntermediateClickHouseTypeInfo typeInfo;
+            switch (parameterType.ClickHouseDbType)
+            {
+                case ClickHouseDbType.AnsiString:
+                case ClickHouseDbType.AnsiStringFixedLength:
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{parameterType.ClickHouseDbType}\" is not supported. String encoding can be specified with the property \"{nameof(IClickHouseParameterTypeInfo.StringEncoding)}\".");
+                case ClickHouseDbType.Array:
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{parameterType.ClickHouseDbType}\" is not supported. An array could be declared with properties \"{nameof(IClickHouseParameterTypeInfo.ArrayRank)}\" or \"{nameof(ClickHouseParameter.IsArray)}\".");
+                case ClickHouseDbType.Enum:
+                case ClickHouseDbType.Nothing:
+                case ClickHouseDbType.Time:
+                case ClickHouseDbType.Tuple:
+                case ClickHouseDbType.Xml:
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{parameterType.ClickHouseDbType}\" is not supported.");
+
+                case ClickHouseDbType.Binary:
+                    if (parameterType.Size <= 0)
+                    {
+                        typeInfo = new IntermediateClickHouseTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 1);
+                        goto AFTER_TYPE_INFO_DEFINED;
+                    }
+
+                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", parameterType.Size);
+                    break;
+                case ClickHouseDbType.Byte:
+                    typeName = "UInt8";
+                    break;
+                case ClickHouseDbType.Boolean:
+                    typeName = "UInt8";
+                    break;
+                case ClickHouseDbType.Currency:
+                    typeName = "Decimal(18, 4)";
+                    break;
+                case ClickHouseDbType.Date:
+                    typeName = "Date";
+                    break;
+                case ClickHouseDbType.Decimal:
+                    typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale);
+                    break;
+                case ClickHouseDbType.Double:
+                    typeName = "Float64";
+                    break;
+                case ClickHouseDbType.Guid:
+                    typeName = "UUID";
+                    break;
+                case ClickHouseDbType.Int16:
+                    typeName = "Int16";
+                    break;
+                case ClickHouseDbType.Int32:
+                    typeName = "Int32";
+                    break;
+                case ClickHouseDbType.Int64:
+                    typeName = "Int64";
+                    break;
+                case ClickHouseDbType.Object:
+                    if (parameterType.ValueType != typeof(DBNull))
+                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{parameterType.ClickHouseDbType}\" is not supported.");
+
+                    typeName = "Nothing";
+                    break;
+                case ClickHouseDbType.SByte:
+                    typeName = "Int8";
+                    break;
+                case ClickHouseDbType.Single:
+                    typeName = "Float32";
+                    break;
+                case ClickHouseDbType.String:
+                    typeName = "String";
+                    break;
+                case ClickHouseDbType.UInt16:
+                    typeName = "UInt16";
+                    break;
+                case ClickHouseDbType.UInt32:
+                    typeName = "UInt32";
+                    break;
+                case ClickHouseDbType.UInt64:
+                    typeName = "UInt64";
+                    break;
+                case ClickHouseDbType.VarNumeric:
+                    typeName = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Decimal({0}, {1})",
+                        parameterType.Precision ?? DecimalTypeInfoBase.DefaultPrecision,
+                        parameterType.Scale ?? DecimalTypeInfoBase.DefaultScale);
+
+                    break;
+                case ClickHouseDbType.StringFixedLength:
+                    if (parameterType.Size <= 0)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The size of the fixed string must be a positive number.");
+                    
+                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", parameterType.Size);
+                    break;
+                case ClickHouseDbType.DateTime2:
+                    tzCode = GetTimeZoneCode(parameterType.TimeZone);
+                    typeName = tzCode == null ? "DateTime64(7)" : $"DateTime64(7, '{tzCode}')";
+                    break;
+                case ClickHouseDbType.DateTime64:
+                    tzCode = GetTimeZoneCode(parameterType.TimeZone);
+                    typeName = tzCode == null
+                        ? string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", parameterType.Precision ?? DateTime64TypeInfo.DefaultPrecision)
+                        : string.Format(CultureInfo.InvariantCulture, "DateTime64({0}, '{1}')", parameterType.Precision ?? DateTime64TypeInfo.DefaultPrecision, tzCode);
+
+                    break;
+                case ClickHouseDbType.DateTime:
+                case ClickHouseDbType.DateTimeOffset:
+                    tzCode = GetTimeZoneCode(parameterType.TimeZone);
+                    typeName = tzCode == null ? "DateTime" : $"DateTime('{tzCode}')";
+                    break;
+                case ClickHouseDbType.IpV4:
+                    typeName = "IPv4";
+                    break;
+                case ClickHouseDbType.IpV6:
+                    typeName = "IPv6";
+                    break;
+                case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
+                    goto default;
+                case null:
+                    typeInfo = GetTypeFromValue(parameterType.ValueType, parameterType.IsNullable ?? false, parameterType.TimeZone);
+                    goto AFTER_TYPE_INFO_DEFINED;
+                default:
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"There is no type associated with the value \"{parameterType.ClickHouseDbType}\".");
+            }
+
+            if (parameterType.IsNullable != null)
+            {
+                typeInfo = new IntermediateClickHouseTypeInfo(parameterType.ClickHouseDbType.Value, typeName, parameterType.IsNullable.Value, parameterType.ArrayRank ?? 0);
+            }
+            else
+            {
+                // Derive nullability from the value's type. It's important to know whether the value is nullable or not because
+                // nullability is a part of ClickHouse type
+                var autoType = GetTypeFromValue(parameterType.ValueType, parameterType.IsNullable ?? false, parameterType.TimeZone);
+                typeInfo = new IntermediateClickHouseTypeInfo(parameterType.ClickHouseDbType.Value, typeName, autoType.IsNullable, parameterType.ArrayRank ?? 0);
+            }
+
+        // This label is an alternative exit point for switch
+        // It's a shortcut for several cases when typeInfo is fully defined
+        AFTER_TYPE_INFO_DEFINED:
+
+            bool isNull = parameterType.ValueType == typeof(DBNull);
+            if (isNull && parameterType.IsNullable == false)
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The value of the type \"{parameterType.ValueType}\" can't be declared as non-nullable.");
+
+            bool isNullable;
+            if (parameterType.IsNullable != null)
+                isNullable = parameterType.IsNullable.Value;
+            else if (isNull)
+                isNullable = true;
+            else
+                isNullable = typeInfo.IsNullable;
+
+            typeName = typeInfo.ClickHouseType;
+            if (isNullable)
+                typeName = $"Nullable({typeName})";
+
+            var arrayRank = parameterType?.ArrayRank ?? typeInfo.ArrayRank;
+            for (int i = 0; i < arrayRank; i++)
+                typeName = $"Array({typeName})";
+
+            return GetTypeInfo(typeName);
+        }
+
+        internal static IntermediateClickHouseTypeInfo GetTypeFromValue(Type valueType, bool valueCanBeNull, TimeZoneInfo? timeZone)
+        {
+            if (valueType == typeof(string))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.String, "String", valueCanBeNull, 0);
+            if (valueType == typeof(byte))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 0);
+            if (valueType == typeof(bool))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Boolean, "UInt8", false, 0);
+            if (valueType == typeof(decimal))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
+            if (valueType == typeof(double))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Double, "Float64", false, 0);
+            if (valueType == typeof(Guid))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Guid, "UUID", false, 0);
+            if (valueType == typeof(short))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int16, "Int16", false, 0);
+            if (valueType == typeof(int))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int32, "Int32", false, 0);
+            if (valueType == typeof(long))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int64, "Int64", false, 0);
+            if (valueType == typeof(sbyte))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.SByte, "Int8", false, 0);
+            if (valueType == typeof(float))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Single, "Float32", false, 0);
+            if (valueType == typeof(ushort))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt16, "UInt16", false, 0);
+            if (valueType == typeof(uint))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt32, "UInt32", false, 0);
+            if (valueType == typeof(ulong))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt64, "UInt64", false, 0);
+            if (valueType == typeof(IPAddress))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
+            if (valueType == typeof(DBNull))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Nothing, "Nothing", true, 0);
+
+            if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
+            {
+                var tzCode = GetTimeZoneCode(timeZone);
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')", false, 0);
+            }
+
+            int arrayRank = 1;
+            Type? elementType = null;
+            if (valueType.IsArray)
+            {
+                arrayRank = valueType.GetArrayRank();
+                elementType = valueType.GetElementType();
+
+                if (elementType == typeof(char))
+                {
+                    elementType = typeof(string);
+                    --arrayRank;
+                }
+            }
+            else
+            {
+                foreach (var itf in valueType.GetInterfaces())
+                {
+                    if (!itf.IsGenericType)
+                        continue;
+
+                    if (itf.GetGenericTypeDefinition() != typeof(IReadOnlyList<>))
+                        continue;
+
+                    var listElementType = itf.GetGenericArguments()[0];
+                    if (elementType != null)
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.TypeNotSupported,
+                            $"The type \"{valueType}\" implements \"{typeof(IReadOnlyList<>)}\" at least twice with generic arguments \"{elementType}\" and \"{listElementType}\".");
+                    }
+
+                    elementType = listElementType;
+                }
+            }
+
+            if (elementType == null && valueType.IsGenericType)
+            {
+                var valueTypeDef = valueType.GetGenericTypeDefinition();
+                if (valueTypeDef == typeof(Memory<>) || valueTypeDef == typeof(ReadOnlyMemory<>))
+                {
+                    elementType = valueType.GetGenericArguments()[0];
+
+                    // Memory<char> or ReadOnlyMemory<char> should be interpreted as string
+                    if (elementType == typeof(char))
+                        return GetTypeFromValue(typeof(string), false, timeZone);
+                }
+            }
+
+            if (elementType != null)
+            {
+                try
+                {
+                    var elementInfo = GetTypeFromValue(elementType, arrayRank > 0 || valueCanBeNull, timeZone);
+                    return new IntermediateClickHouseTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, elementInfo.IsNullable, elementInfo.ArrayRank + arrayRank);
+                }
+                catch (ClickHouseException ex)
+                {
+                    if (ex.ErrorCode != ClickHouseErrorCodes.TypeNotSupported)
+                        throw;
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.TypeNotSupported,
+                        $"The type \"{valueType}\" is not supported. See the inner exception for details.",
+                        ex);
+                }
+            }
+
+            if (valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                elementType = valueType.GetGenericArguments()[0];
+                try
+                {
+                    var elementInfo = GetTypeFromValue(elementType, false, timeZone);
+                    return new IntermediateClickHouseTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, true, elementInfo.ArrayRank);
+                }
+                catch (ClickHouseException ex)
+                {
+                    if (ex.ErrorCode != ClickHouseErrorCodes.TypeNotSupported)
+                        throw;
+
+                    throw new ClickHouseException(
+                        ClickHouseErrorCodes.TypeNotSupported,
+                        $"The type \"{valueType}\" is not supported. See the inner exception for details.",
+                        ex);
+                }
+            }
+
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{valueType}\" is not supported.");
+        }
+
+        private static string? GetTimeZoneCode(TimeZoneInfo? timeZone)
+        {
+            var tzCode = timeZone?.Id;
+            if (tzCode != null && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                tzCode = TZConvert.WindowsToIana(tzCode);
+
+            return tzCode;
+        }
+
         public IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo)
         {
             if (serverInfo == null)
                 throw new ArgumentNullException(nameof(serverInfo));
 
             return new DefaultTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
-        }
+        }        
 
         protected static IEnumerable<IClickHouseColumnTypeInfo> GetDefaultTypes()
         {

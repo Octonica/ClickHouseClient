@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,21 @@
  */
 #endregion
 
-using System;
-
 namespace Octonica.ClickHouseClient.Types
 {
-    public interface IClickHouseTypeInfoProvider
+    internal readonly struct IntermediateClickHouseTypeInfo
     {
-        IClickHouseColumnTypeInfo GetTypeInfo(string typeName);
+        public ClickHouseDbType DbType { get; }
+        public string ClickHouseType { get; }
+        public bool IsNullable { get; }
+        public int ArrayRank { get; }
 
-        IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName);
-
-        IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseParameterTypeInfo parameterType);
-
-        IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);        
+        public IntermediateClickHouseTypeInfo(ClickHouseDbType dbType, string clickHouseType, bool isNullable, int arrayRank)
+        {
+            DbType = dbType;
+            ClickHouseType = clickHouseType;
+            IsNullable = isNullable;
+            ArrayRank = arrayRank;
+        }
     }
 }
