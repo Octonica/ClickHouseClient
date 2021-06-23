@@ -300,9 +300,10 @@ namespace Octonica.ClickHouseClient
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The parameter \"{ParameterName}\" is declared as non-nullable but it's value is null.");
 
             IClickHouseColumnTypeInfo typeInfo;
+            var adapter = new ParameterColumnTypeDescriptorAdapter(this);
             try
             {
-                typeInfo = typeInfoProvider.GetTypeInfo(new ParameterTypeInfoAdapter(this));
+                typeInfo = typeInfoProvider.GetTypeInfo(adapter);
             }
             catch (ClickHouseException ex)
             {
@@ -349,9 +350,8 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();
-            var columnSettings = StringEncoding == null ? null : new ClickHouseColumnSettings(StringEncoding);
-            var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, columnSettings, typeInfo);
+            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();            
+            var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, adapter.Settings, typeInfo);
             var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
             return column;
         }
@@ -459,9 +459,13 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        private class ParameterTypeInfoAdapter : IClickHouseParameterTypeInfo
+        private class ParameterColumnTypeDescriptorAdapter : IClickHouseColumnDescriptor
         {
             private readonly ClickHouseParameter _parameter;
+
+            public string ColumnName => _parameter.Id;
+
+            public ClickHouseColumnSettings? Settings => _parameter.StringEncoding == null ? null : new ClickHouseColumnSettings(_parameter.StringEncoding);
 
             public ClickHouseDbType? ClickHouseDbType => _parameter._forcedType ?? _parameter.GetValueDependentType()?.DbType;
 
@@ -473,15 +477,13 @@ namespace Octonica.ClickHouseClient
 
             public byte? Precision => _parameter._forcedPrecision;
 
-            public byte? Scale => _parameter._forcedScale;
-
-            public Encoding? StringEncoding => _parameter.StringEncoding;
+            public byte? Scale => _parameter._forcedScale;            
 
             public TimeZoneInfo? TimeZone => _parameter.TimeZone;
 
-            public int? ArrayRank => _parameter._forcedArrayRank;
+            public int? ArrayRank => _parameter._forcedArrayRank;            
 
-            public ParameterTypeInfoAdapter(ClickHouseParameter parameter)
+            public ParameterColumnTypeDescriptorAdapter(ClickHouseParameter parameter)
             {
                 _parameter = parameter;
             }

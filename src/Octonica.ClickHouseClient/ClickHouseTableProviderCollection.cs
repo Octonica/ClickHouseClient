@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,26 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Utils;
 using System;
 
-namespace Octonica.ClickHouseClient.Types
+namespace Octonica.ClickHouseClient
 {
-    public interface IClickHouseTypeInfoProvider
+    public class ClickHouseTableProviderCollection : IndexedCollectionBase<string, IClickHouseTableProvider>
     {
-        IClickHouseColumnTypeInfo GetTypeInfo(string typeName);
+        public ClickHouseTableProviderCollection()
+            : base(StringComparer.OrdinalIgnoreCase)
+        {
+        }
 
-        IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName);
+        public ClickHouseTableProviderCollection(int capacity)
+            : base(capacity, StringComparer.OrdinalIgnoreCase)
+        {
+        }
 
-        IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnDescriptor columnDescriptor);
-
-        IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);        
+        protected sealed override string GetKey(IClickHouseTableProvider item)
+        {
+            return item.TableName;
+        }
     }
 }

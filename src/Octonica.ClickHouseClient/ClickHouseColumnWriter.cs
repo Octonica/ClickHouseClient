@@ -413,7 +413,7 @@ namespace Octonica.ClickHouseClient
             await EndWrite(true, async, CancellationToken.None);
         }
 
-        private static async ValueTask<IClickHouseColumnWriterFactory> CreateColumnWriterFactory(ColumnInfo columnInfo, object? column, int columnIndex, int rowCount, ClickHouseColumnSettings? settings, bool async, CancellationToken cancellationToken)
+        internal static async ValueTask<IClickHouseColumnWriterFactory> CreateColumnWriterFactory(ColumnInfo columnInfo, object? column, int columnIndex, int rowCount, ClickHouseColumnSettings? settings, bool async, CancellationToken cancellationToken)
         {
             if (settings?.ColumnType == typeof(object))
             {

@@ -15,13 +15,17 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
 using System;
-using System.Text;
 
 namespace Octonica.ClickHouseClient
 {
-    public interface IClickHouseParameterTypeInfo
+    public interface IClickHouseColumnDescriptor
     {
+        string ColumnName { get; }
+
+        ClickHouseColumnSettings? Settings { get; }
+
         ClickHouseDbType? ClickHouseDbType { get; }
 
         Type ValueType { get; }
@@ -32,9 +36,7 @@ namespace Octonica.ClickHouseClient
 
         byte? Precision { get; }
 
-        byte? Scale { get; }
-
-        Encoding? StringEncoding { get; }
+        byte? Scale { get; }        
 
         TimeZoneInfo? TimeZone { get; }
 

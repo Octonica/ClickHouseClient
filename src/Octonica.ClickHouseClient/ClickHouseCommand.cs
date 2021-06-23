@@ -19,7 +19,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
@@ -73,6 +72,8 @@ namespace Octonica.ClickHouseClient
         public new ClickHouseParameterCollection Parameters { get; } = new ClickHouseParameterCollection();
 
         protected sealed override DbParameterCollection DbParameterCollection => Parameters;
+
+        public ClickHouseTableProviderCollection TableProviders { get; } = new ClickHouseTableProviderCollection();
 
         protected override DbTransaction? DbTransaction
         {
@@ -488,7 +489,7 @@ namespace Octonica.ClickHouseClient
         private async ValueTask<string> SendQuery(ClickHouseTcpClient.Session session, CommandBehavior behavior, bool async, CancellationToken cancellationToken)
         {
             string commandText;
-            IClickHouseTableWriter[]? tableWriters = null;
+            List<IClickHouseTableWriter>? tableWriters = null;
 
             try
             {
@@ -496,7 +497,23 @@ namespace Octonica.ClickHouseClient
                 commandText = PrepareCommandText(parametersTable, out var parameters);
 
                 if (parameters != null)
-                    tableWriters = new[] {CreateParameterTableWriter(session.TypeInfoProvider, parametersTable)};
+                {
+                    tableWriters = new List<IClickHouseTableWriter>(TableProviders.Count + 1);
+                    tableWriters.Add(CreateParameterTableWriter(session.TypeInfoProvider, parametersTable));
+                }
+
+                if (TableProviders.Count > 0)
+                {
+                    tableWriters ??= new List<IClickHouseTableWriter>(TableProviders.Count);
+                    foreach(var tableProvider in TableProviders)
+                    {
+                        if (tableProvider.ColumnCount == 0)
+                            continue;
+
+                        var tableWriter = await CreateTableWriter(tableProvider, session.TypeInfoProvider, async, cancellationToken);
+                        tableWriters.Add(tableWriter);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -564,6 +581,25 @@ namespace Octonica.ClickHouseClient
         private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
         {
             return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
+        }
+
+        private static async ValueTask<IClickHouseTableWriter> CreateTableWriter(IClickHouseTableProvider tableProvider, IClickHouseTypeInfoProvider typeInfoProvider, bool async, CancellationToken cancellationToken)
+        {
+            var factories = new List<IClickHouseColumnWriterFactory>(tableProvider.ColumnCount);
+
+            var rowCount = tableProvider.RowCount;
+            for (int i = 0; i < tableProvider.ColumnCount; i++)
+            {
+                var columnDescriptor = tableProvider.GetColumnDescriptor(i);
+                var typeInfo = typeInfoProvider.GetTypeInfo(columnDescriptor);
+                var columnInfo = new ColumnInfo(columnDescriptor.ColumnName, typeInfo);
+                var column = tableProvider.GetColumn(i);
+
+                var factory = await ClickHouseColumnWriter.CreateColumnWriterFactory(columnInfo, column, i, rowCount, columnDescriptor.Settings, async, cancellationToken);
+                factories.Add(factory);
+            }
+
+            return new ClickHouseTableWriter(tableProvider.TableName, rowCount, factories.Select(f => f.Create(0, rowCount)));
         }
 
         private string PrepareCommandText(string parametersTable, out HashSet<string>? parameters)

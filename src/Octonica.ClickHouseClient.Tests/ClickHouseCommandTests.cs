@@ -17,9 +17,12 @@
 
 using Octonica.ClickHouseClient.Exceptions;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -359,6 +362,108 @@ namespace Octonica.ClickHouseClient.Tests
             cmd.CommandText = "It IS NOT a query...";
             await Assert.ThrowsAsync<ClickHouseServerException>(() => cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection));
             Assert.Equal(ConnectionState.Closed, cn.State);
-        }        
+        }
+
+        [Fact]
+        public async Task TableParameterSingleColumn()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN param_table");
+            
+            var tableProvider = new ClickHouseTableProvider("param_table", 100);
+            tableProvider.Columns.AddColumn(Enumerable.Range(500, int.MaxValue / 2));
+
+            cmd.TableProviders.Add(tableProvider);
+
+            var expectedValues = new HashSet<int>(Enumerable.Range(500, 100));
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while(await reader.ReadAsync())
+            {
+                var value = reader.GetInt32(0);
+                Assert.True(expectedValues.Remove(value));
+            }
+
+            Assert.Empty(expectedValues);
+        }
+
+        [Fact]
+        public async Task TableParameterAndScalarParameter()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN (SELECT {val}*val FROM param_table)");
+
+            var tableProvider = new ClickHouseTableProvider("param_table", 100);
+            tableProvider.Columns.AddColumn("val", Enumerable.Range(500, int.MaxValue / 2));
+
+            cmd.TableProviders.Add(tableProvider);
+
+            cmd.Parameters.AddWithValue("val", 3);
+
+            var expectedValues = new HashSet<int>(Enumerable.Range(500, 100).Select(v => v * 3));
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetInt32(0);
+                Assert.True(expectedValues.Remove(value));
+            }
+
+            Assert.Empty(expectedValues);
+        }
+
+        [Fact]
+        public async Task MultipleTableParameters()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT T2.id AS id, T1.id AS user_id, T1.value AS user, T2.value AS ip FROM q_user AS T1 LEFT JOIN q_addr AS T2 ON T1.id = T2.user_id WHERE T2.id%{param} != 0 ORDER BY T2.id");
+
+            var users = new (int id, string name)[] { (1, "user1"), (2, "user2"), (3, "admin1"), (4, "admin2") };
+            var addr = new (int id, string? ip)[] { (1, "8.8.8.8"), (2, "9.9.9.9"), (3, null), (4, null), (3, "127.0.0.1"), (4, "127.0.0.1"), (1, "2001:0db8:0000:0000:0000:ff00:0042:8329"), (4, "::ffff:192.0.2.1"), (2, "fe80::883b:771b:71c6:7c31") };
+
+            var usersTable = new ClickHouseTableProvider("q_user", users.Length);
+            usersTable.Columns.AddColumn("id", users.Select(u => u.id));
+            usersTable.Columns.AddColumn("value", users.Select(u => u.name));
+
+            cmd.TableProviders.Add(usersTable);
+
+            var addrTable = new ClickHouseTableProvider("q_addr", addr.Length);
+            addrTable.Columns.AddColumn("id", Enumerable.Range(0, addr.Length));
+            addrTable.Columns.AddColumn("user_id", addr.Select(a => a.id));
+            var ipColumn = addrTable.Columns.AddColumn("value", addr.Select(a => a.ip));
+            ipColumn.ClickHouseDbType = ClickHouseDbType.IpV6;
+            ipColumn.IsNullable = true;
+
+            cmd.TableProviders.Add(addrTable);
+
+            cmd.Parameters.AddWithValue("param", 7);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            int expectedId = 1;
+            while(await reader.ReadAsync())
+            {
+                var id = reader.GetInt32(0);
+                Assert.Equal(expectedId, id);
+
+                var userId = reader.GetInt32(1);
+                var user = reader.GetString(2);
+                var ip = reader.GetFieldValue<IPAddress>(3, null);
+
+                Assert.Equal(addr[expectedId].id, userId);
+                var expectedUser = users.Single(u => u.id == userId).name;
+                Assert.Equal(expectedUser, user);
+
+                var expectedIp = addr[expectedId].ip == null ? null : IPAddress.Parse(addr[expectedId].ip).MapToIPv6();
+                Assert.Equal(expectedIp, ip);
+
+                if (++expectedId % 7 == 0)
+                    ++expectedId;
+            }
+
+            Assert.Equal(addr.Length, expectedId);
+        }
     }
 }
