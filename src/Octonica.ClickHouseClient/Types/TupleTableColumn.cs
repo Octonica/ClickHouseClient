@@ -121,6 +121,8 @@ namespace Octonica.ClickHouseClient.Types
                         reinterpreterTypeDef = typeof(TupleTableColumn<,>.Reinterpreter);
                     else if (typeDef == typeof(ValueTuple<,>))
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,>.Reinterpreter);
+                    else if (typeDef == typeof(KeyValuePair<,>))
+                        reinterpreterTypeDef = typeof(KeyValuePairTableColumn<,>.Reinterpreter);
                     break;
                 case 3:
                     if (typeDef == typeof(Tuple<,,>))

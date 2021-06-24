@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,5 +84,7 @@ namespace Octonica.ClickHouseClient
         Enum = ClickHouseSpecificTypeDelimiterCode + 6,
 
         DateTime64 = ClickHouseSpecificTypeDelimiterCode + 7,
+
+        Map = ClickHouseSpecificTypeDelimiterCode + 8,
     }
 }

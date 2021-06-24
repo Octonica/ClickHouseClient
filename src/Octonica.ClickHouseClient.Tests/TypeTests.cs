@@ -1992,6 +1992,98 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public async Task ReadMapScalar()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT CAST(([1, 2, 3, 0], ['Ready', 'Steady', 'Go', null]), 'Map(UInt8, Nullable(String))') AS map");
+            var result = await cmd.ExecuteScalarAsync();
+
+            Assert.Equal(new[] { new KeyValuePair<byte, string?>(1, "Ready"), new KeyValuePair<byte, string?>(2, "Steady"), new KeyValuePair<byte, string?>(3, "Go"), new KeyValuePair<byte, string?>(0, null) }, result);            
+        }
+
+        [Fact]
+        public async Task ReadMapColumn()
+        {
+            await WithTemporaryTable("map", "id Int32, map Map(String, Nullable(Int32))", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var expectedDict = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Ready"] = 1,
+                    ["Steady"] = 2,
+                    ["Go"] = 3,
+                    ["Unknown"] = null,
+                    ["Ok"] = 1,
+                    ["NotOk"] = -1,
+                    ["Oh"] = 199,
+                    ["hh"] = null,
+                    ["hO"] = 201,
+                    ["null"] = null,
+                };
+
+                var expectedLists = new string[][]
+                {
+                    new string[]{ "Ready", "Steady", "Go", "Unknown" },
+                    new string[]{ "Ok", "NotOk" },
+                    new string[]{ "Oh", "hh", "hO" },
+                    new string[0],
+                    new string[]{ "null" },
+                };
+
+                var cmd = cn.CreateCommand(@$"INSERT INTO {tableName}(id, map)
+SELECT 1, CAST((['Ready', 'Steady', 'Go', 'Unknown'], [1, 2, 3, null]), 'Map(String, Nullable(Int32))') AS map
+UNION ALL SELECT 2, CAST((['Ok', 'NotOk'], [1, -1]), 'Map(String, Nullable(Int32))')
+UNION ALL SELECT 3, CAST((['Oh', 'hh', 'hO'], [199, null, 201]), 'Map(String, Nullable(Int32))')
+UNION ALL SELECT 4, CAST(([], []), 'Map(String, Nullable(Int32))')
+UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
+
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = $"SELECT map FROM {tableName} ORDER BY id";
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                var columnType = reader.GetFieldTypeInfo(0);
+                Assert.Equal("Map", columnType.TypeName);
+                Assert.Equal("Map(String, Nullable(Int32))", columnType.ComplexTypeName);
+                Assert.Equal(2, columnType.GenericArgumentsCount);
+                Assert.Equal(2, columnType.TypeArgumentsCount);
+
+                var keyArg = columnType.GetGenericArgument(0);
+                var typeArg1 = columnType.GetTypeArgument(0);
+                Assert.Same(keyArg, typeArg1);
+                Assert.Equal("String", keyArg.ComplexTypeName);
+
+                var valueArg = columnType.GetGenericArgument(1);
+                var typeArg2 = columnType.GetTypeArgument(1);
+                Assert.Same(valueArg, typeArg2);
+                Assert.Equal("Nullable(Int32)", valueArg.ComplexTypeName);
+
+                Assert.Equal(typeof(KeyValuePair<string, int?>[]), columnType.GetFieldType());
+
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    var value = reader.GetValue(0);
+                    var pairs = Assert.IsType<KeyValuePair<string, int?>[]>(value);
+                    var expectedKeys = expectedLists[count];
+
+                    Assert.Equal(expectedKeys.Length, pairs.Length);
+                    for (int i = 0; i < expectedKeys.Length; i++)
+                    {
+                        Assert.Equal(expectedKeys[i], pairs[i].Key);
+                        Assert.Equal(expectedDict[expectedKeys[i]], pairs[i].Value);
+                    }
+
+                    ++count;
+                }
+
+                Assert.Equal(expectedLists.Length, count);                
+            }            
+        }
+
+        [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
             const string ddl = @"

@@ -383,12 +383,14 @@ namespace Octonica.ClickHouseClient.Types
                                 factoryType = typeof(TupleColumnFactory<,>);
                             else if (listItemTypeDef == typeof(ValueTuple<,>))
                                 factoryType = typeof(ValueTupleColumnFactory<,>);
+                            else if (listItemTypeDef == typeof(KeyValuePair<,>))
+                                factoryType = typeof(KeyValuePairColumnFactory<,>);
                             break;
                         case 3:
                             if (listItemTypeDef == typeof(Tuple<,,>))
                                 factoryType = typeof(TupleColumnFactory<,,>);
                             else if (listItemTypeDef == typeof(ValueTuple<,,>))
-                                factoryType = typeof(ValueTupleColumnFactory<,,>);
+                                factoryType = typeof(ValueTupleColumnFactory<,,>);                            
                             break;
                         case 4:
                             if (listItemTypeDef == typeof(Tuple<,,,>))
@@ -743,6 +745,22 @@ namespace Octonica.ClickHouseClient.Types
                     columns.AddRange(lastColumn._columns);
 
                     return new TupleColumnWriter(columnName, columnType, columns, rows.Count);
+                }
+            }
+
+            private sealed class KeyValuePairColumnFactory<TKey, TValue> : IColumnFactory
+            {
+                public TupleColumnWriter Create(string columnName, string columnType, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
+                {
+                    var rows = (IReadOnlyList<KeyValuePair<TKey, TValue>>)untypedRows;
+
+                    var columns = new List<IClickHouseColumnWriter>(2)
+                    {
+                        elementTypes[0].CreateColumnWriter(columnName, rows.Map(p => p.Key), columnSettings),
+                        elementTypes[1].CreateColumnWriter(columnName, rows.Map(p => p.Value), columnSettings)
+                    };
+
+                    return new TupleColumnWriter(columnName, columnType, columns, rows.Count);                    
                 }
             }
         }

@@ -1128,6 +1128,66 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public async Task InsertMapValues()
+        {
+            var map1 = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 };
+            var map2 = new KeyValuePair<string, int>[] { new KeyValuePair<string, int>("c", 3) };
+            var map3 = new List<Tuple<string, int>> { new Tuple<string, int>("d", 5), new Tuple<string, int>("e", 6) };
+            var map4 = new List<(string key, int value)> { ("f", 7), ("g", 8), ("h", 9), ("i", 10) };
+
+            await WithTemporaryTable("map", "id Int32, map Map(String, Int32)", Test);
+
+            async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, map) VALUES", CancellationToken.None))
+                {
+                    await writer.WriteTableAsync(new object[] { AsListOfOne(1), AsListOfOne(map1) }, 1, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] { AsListOfOne(2), AsListOfOne(map2) }, 1, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] { AsListOfOne(3), AsListOfOne(map3) }, 1, CancellationToken.None);
+                    await writer.WriteTableAsync(new object[] { AsListOfOne(4), AsListOfOne(map4) }, 1, CancellationToken.None);
+                }
+
+                var cmd = cn.CreateCommand($"SELECT map FROM {tableName} ORDER BY id");
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                int count = 0;
+                while(await reader.ReadAsync())
+                {
+                    KeyValuePair<string, int>[] expected;
+                    switch (++count)
+                    {
+                        case 1:
+                            expected = map1.ToArray();
+                            break;
+                        case 2:
+                            expected = map2;
+                            break;
+                        case 3:
+                            expected = map3.Select(t => new KeyValuePair<string, int>(t.Item1, t.Item2)).ToArray();
+                            break;
+                        case 4:
+                            expected = map4.Select(t => new KeyValuePair<string, int>(t.key, t.value)).ToArray();
+                            break;
+                        default:
+                            Assert.True(false, "Too many rows.");
+                            throw new InvalidOperationException();
+                    }
+
+                    var actual = reader.GetFieldValue<KeyValuePair<string, int>[]>(0);
+                    Assert.Equal(expected, actual);
+                }
+
+                Assert.Equal(4, count);
+            }
+
+            static IReadOnlyList<T> AsListOfOne<T>(T value)
+            {
+                return new[] { value };
+            }
+        }
+
         protected override string GetTempTableName(string tableNameSuffix)
         {
             return $"{TestTableName}_{tableNameSuffix}";

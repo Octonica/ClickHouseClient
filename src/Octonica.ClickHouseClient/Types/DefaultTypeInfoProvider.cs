@@ -182,6 +182,7 @@ namespace Octonica.ClickHouseClient.Types
                 case ClickHouseDbType.Time:
                 case ClickHouseDbType.Tuple:
                 case ClickHouseDbType.Xml:
+                case ClickHouseDbType.Map:
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported.");
 
                 case ClickHouseDbType.Binary:
@@ -522,6 +523,8 @@ namespace Octonica.ClickHouseClient.Types
 
                 new Enum8TypeInfo(),
                 new Enum16TypeInfo(),
+
+                new MapTypeInfo(),
             };
         }
     }
