@@ -48,6 +48,7 @@ cmd.Parameters.AddWithValue("id", Guid.NewGuid());
 cmd.Parameters.AddWithValue("dt", DateTime.Now, System.Data.DbType.DateTime);
 var _ = cmd.ExecuteNonQuery();
 ```
+For more information see [Parameters](docs/Parameters.md).
 #### Bulk insert
 ```csharp
 using var conn = new ClickHouseConnection("Host=127.0.0.1");
