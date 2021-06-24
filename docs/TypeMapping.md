@@ -36,3 +36,4 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Array(T) | T[] | | |
 | Tuple(T1, ... Tn) | System.Tuple<T1, ... Tn> | System.ValueTuple<T1, ... Tn> | |
 | LowCardinality<T> | T | | The method for `T` |
+| Map(TKey, TValue) | System.Collections.Generic.KeyValuePair<TKey, TValue>[] | System.Tuple<TKey, TValue>[], System.ValueTuple<TKey, TValue>[] | |
