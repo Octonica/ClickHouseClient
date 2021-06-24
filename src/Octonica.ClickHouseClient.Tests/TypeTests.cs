@@ -1430,13 +1430,9 @@ namespace Octonica.ClickHouseClient.Tests
             var param = new ClickHouseParameter("param") { DbType = DbType.Guid };
             cmd.Parameters.Add(param);
             param.Value = parameterValue;
-
-            // ClickHouse bug https://github.com/ClickHouse/ClickHouse/issues/7834
-            var ex = await Assert.ThrowsAsync<ClickHouseServerException>(() => cmd.ExecuteScalarAsync<Guid>());
-            Assert.StartsWith("DB::Exception: There are no UInt128 literals in SQL", ex.Message);
             
-            //var result = await cmd.ExecuteScalarAsync<Guid>();
-            //Assert.Equal(parameterValue, result);
+            var result = await cmd.ExecuteScalarAsync<Guid>();
+            Assert.Equal(parameterValue, result);
         }
 
         [Fact]
