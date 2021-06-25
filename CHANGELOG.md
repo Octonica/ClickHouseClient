@@ -1,3 +1,19 @@
+### Octonica.ClickHouseClient release v1.2.1, 2021-06-25
+
+### New Feature
+
+* Add support for user-defined tables in queries. New property `ClickHouseCommand.TableProviders` provides access to a collection of user-defined
+  tables associated with the command. See the section *'Table-valued parameters'* of [Parameters](docs/Parameters.md) for details ([#24](https://github.com/Octonica/ClickHouseClient/issues/24)).
+* Add property `ClickHouseColumnWriter.MaxBlockSize`. This property allows to set the maximal number of rows which can be sent to the server as
+  a single block of data. If an input table contains more rows than `MaxBlockSize` it will be sent to the server by parts ([#26](https://github.com/Octonica/ClickHouseClient/issues/26)).
+* Add support for the experimental type `Map(key, value)` ([#31](https://github.com/Octonica/ClickHouseClient/issues/31)).
+* Add support for long integer types `Int128`, `UInt128`, `Int256` and `UInt256` ([#27](https://github.com/Octonica/ClickHouseClient/issues/27)).
+
+#### Improvement
+
+* Improve performance of reading and writing values of primitive types.
+* Improve connection state management and error handling.
+
 ### Octonica.ClickHouseClient release v1.1.13, 2021-05-29
 
 #### Bug Fix
