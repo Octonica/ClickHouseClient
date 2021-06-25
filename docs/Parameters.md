@@ -75,11 +75,11 @@ var users = new[] {"user1", "user2", "admin1", "admin2"};
 var ips = new[] {"1.1.1.1", "2.2.2.2", "127.0.0.1", "::ffff:192.0.2.1"};
 
 var pTableProvider = new ClickHouseTableProvider("ptable", users.Length);
-pTableProvider.Columns.AddColumn("id", Enumerable.Range(1, users.Length));
-pTableProvider.Columns.AddColumn("user", users);
+pTableProvider.AddColumn("id", Enumerable.Range(1, users.Length));
+pTableProvider.AddColumn("user", users);
 
 // The settings of the column are similar to the settings of parameter
-var ipColumn = pTableProvider.Columns.AddColumn("ip", ips);
+var ipColumn = pTableProvider.AddColumn("ip", ips);
 ipColumn.ClickHouseDbType = ClickHouseDbType.IpV6;
 ipColumn.IsNullable = false;
 
@@ -100,7 +100,7 @@ connection.Open();
 var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN param_table");
 
 var tableProvider = new ClickHouseTableProvider("param_table", 100);
-tableProvider.Columns.AddColumn(Enumerable.Range(500, int.MaxValue / 2));
+tableProvider.AddColumn(Enumerable.Range(500, int.MaxValue / 2));
 
 cmd.TableProviders.Add(tableProvider);
 

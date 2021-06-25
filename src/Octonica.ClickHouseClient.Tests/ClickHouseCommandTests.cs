@@ -372,7 +372,7 @@ namespace Octonica.ClickHouseClient.Tests
             var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN param_table");
             
             var tableProvider = new ClickHouseTableProvider("param_table", 100);
-            tableProvider.Columns.AddColumn(Enumerable.Range(500, int.MaxValue / 2));
+            tableProvider.AddColumn(Enumerable.Range(500, int.MaxValue / 2));
 
             cmd.TableProviders.Add(tableProvider);
 
@@ -396,7 +396,7 @@ namespace Octonica.ClickHouseClient.Tests
             var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN (SELECT {val}*val FROM param_table)");
 
             var tableProvider = new ClickHouseTableProvider("param_table", 100);
-            tableProvider.Columns.AddColumn("val", Enumerable.Range(500, int.MaxValue / 2));
+            tableProvider.AddColumn("val", Enumerable.Range(500, int.MaxValue / 2));
 
             cmd.TableProviders.Add(tableProvider);
 
@@ -425,15 +425,15 @@ namespace Octonica.ClickHouseClient.Tests
             var addr = new (int id, string? ip)[] { (1, "8.8.8.8"), (2, "9.9.9.9"), (3, null), (4, null), (3, "127.0.0.1"), (4, "127.0.0.1"), (1, "2001:0db8:0000:0000:0000:ff00:0042:8329"), (4, "::ffff:192.0.2.1"), (2, "fe80::883b:771b:71c6:7c31") };
 
             var usersTable = new ClickHouseTableProvider("q_user", users.Length);
-            usersTable.Columns.AddColumn("id", users.Select(u => u.id));
-            usersTable.Columns.AddColumn("value", users.Select(u => u.name));
+            usersTable.AddColumn("id", users.Select(u => u.id));
+            usersTable.AddColumn("value", users.Select(u => u.name));
 
             cmd.TableProviders.Add(usersTable);
 
             var addrTable = new ClickHouseTableProvider("q_addr", addr.Length);
-            addrTable.Columns.AddColumn("id", Enumerable.Range(0, addr.Length));
-            addrTable.Columns.AddColumn("user_id", addr.Select(a => a.id));
-            var ipColumn = addrTable.Columns.AddColumn("value", addr.Select(a => a.ip));
+            addrTable.AddColumn("id", Enumerable.Range(0, addr.Length));
+            addrTable.AddColumn("user_id", addr.Select(a => a.id));
+            var ipColumn = addrTable.AddColumn("value", addr.Select(a => a.ip));
             ipColumn.ClickHouseDbType = ClickHouseDbType.IpV6;
             ipColumn.IsNullable = true;
 

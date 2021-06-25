@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient
 {
@@ -38,6 +39,36 @@ namespace Octonica.ClickHouseClient
 
             TableName = tableName;
             RowCount = rowCount;
+        }
+
+        public ClickHouseTableColumn AddColumn(object column)
+        {
+            return Columns.AddColumn(column);
+        }
+
+        public ClickHouseTableColumn AddColumn(object column, Type columnType)
+        {
+            return Columns.AddColumn(column, columnType);
+        }
+
+        public ClickHouseTableColumn AddColumn(string columnName, object column)
+        {
+            return Columns.AddColumn(columnName, column);
+        }
+
+        public ClickHouseTableColumn AddColumn(string columnName, object column, Type columnType)
+        {
+            return Columns.AddColumn(columnName, column, columnType);
+        }
+
+        public ClickHouseTableColumn AddColumn<T>(IReadOnlyList<T> column)
+        {
+            return Columns.AddColumn(column);
+        }
+
+        public ClickHouseTableColumn AddColumn<T>(string columnName, IReadOnlyList<T> column)
+        {
+            return Columns.AddColumn(columnName, column);
         }
 
         object IClickHouseTableProvider.GetColumn(int index)
