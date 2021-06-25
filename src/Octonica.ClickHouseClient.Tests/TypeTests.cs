@@ -22,6 +22,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -2077,6 +2078,323 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
                 Assert.Equal(expectedLists.Length, count);                
             }            
+        }
+
+        [Fact]
+        public async Task ReadInt128Column()
+        {
+            var minValue = -(BigInteger.One << 127);
+            var maxValue = (BigInteger.One << 127) - BigInteger.One;
+
+            var maxStrLen = maxValue.ToString().Length;
+            var sb = new StringBuilder(maxStrLen + 1).Append('-');
+            for (int i = 1; i <= maxStrLen; i++)
+                sb.Append((char)('0' + (i % 10)));
+
+            var strValues = new[] { minValue.ToString(), sb.ToString(), "-1", "0", "1", sb.ToString(1, maxStrLen), maxValue.ToString() };
+
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT CAST(value AS Int128) AS v, v = bigIntValue AS testPassed FROM ptable ORDER BY id");
+
+            var tableProvider = new ClickHouseTableProvider("ptable", strValues.Length);
+            tableProvider.Columns.AddColumn("id", Enumerable.Range(1, strValues.Length));
+            tableProvider.Columns.AddColumn("value", strValues);
+            var bigIntColumn = tableProvider.Columns.AddColumn("bigIntValue", strValues.Select(v => BigInteger.Parse(v)));
+            bigIntColumn.ClickHouseDbType = ClickHouseDbType.Int128;
+            cmd.TableProviders.Add(tableProvider);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var valueColumnType = reader.GetFieldTypeInfo(0);
+            Assert.Equal("Int128", valueColumnType.ComplexTypeName);
+            Assert.Equal(ClickHouseDbType.Int128, valueColumnType.GetDbType());
+
+            int count = 0;
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetValue(0);
+                var expectedValue = BigInteger.Parse(strValues[count]);
+                Assert.Equal(expectedValue, value);
+
+                var testPassed = reader.GetBoolean(1);
+                Assert.True(testPassed);
+
+                ++count;
+            }
+
+            Assert.Equal(strValues.Length, count);
+        }
+
+        [Fact]
+        public async Task ReadInt128ParameterScalar()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT {v}");
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.Int128 };
+            cmd.Parameters.Add(parameter);
+
+            var pairs = new (object value, BigInteger expected)[] 
+            {
+                (0, 0),
+                (-1, -1),
+                (1, 1),
+                (byte.MaxValue, byte.MaxValue),
+                (sbyte.MinValue, sbyte.MinValue),
+                (sbyte.MaxValue, sbyte.MaxValue),
+                (short.MinValue, short.MinValue),
+                (short.MaxValue, short.MaxValue),
+                (ushort.MaxValue, ushort.MaxValue),
+                (int.MinValue, int.MinValue),
+                (int.MaxValue, int.MaxValue),
+                (uint.MaxValue, uint.MaxValue),
+                (long.MinValue, long.MinValue),
+                (long.MaxValue, long.MaxValue),
+                (ulong.MaxValue, ulong.MaxValue),
+                (-(BigInteger.One << 127), -(BigInteger.One << 127)),
+                ((BigInteger.One << 127) - 1, (BigInteger.One << 127) - 1),
+            };
+
+            foreach(var pair in pairs)
+            {
+                parameter.Value = pair.value;
+                var result = await cmd.ExecuteScalarAsync();
+                var bigIntResult = Assert.IsType<BigInteger>(result);
+                Assert.Equal(pair.expected, bigIntResult);
+            }            
+        }
+
+        [Fact]
+        public async Task ReadUInt128Column()
+        {
+            var maxValue = (BigInteger.One << 128) - BigInteger.One;
+
+            var maxStrLen = maxValue.ToString().Length;
+            var sb = new StringBuilder(maxStrLen);
+            for (int i = 1; i <= maxStrLen; i++)
+                sb.Append((char)('0' + (i % 10)));
+
+            var strValues = new[] { "0", "1", sb.ToString(), maxValue.ToString() };
+
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT CAST(value AS UInt128) AS v, v = bigIntValue AS testPassed FROM ptable ORDER BY id");
+
+            var tableProvider = new ClickHouseTableProvider("ptable", strValues.Length);
+            tableProvider.Columns.AddColumn("id", Enumerable.Range(1, strValues.Length));
+            tableProvider.Columns.AddColumn("value", strValues);
+            var bigIntColumn = tableProvider.Columns.AddColumn("bigIntValue", strValues.Select(v => BigInteger.Parse(v)));
+            bigIntColumn.ClickHouseDbType = ClickHouseDbType.UInt128;
+            cmd.TableProviders.Add(tableProvider);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var valueColumnType = reader.GetFieldTypeInfo(0);
+            Assert.Equal("UInt128", valueColumnType.ComplexTypeName);
+            Assert.Equal(ClickHouseDbType.UInt128, valueColumnType.GetDbType());
+
+            int count = 0;
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetValue(0);
+                var expectedValue = BigInteger.Parse(strValues[count]);
+                Assert.Equal(expectedValue, value);
+
+                var testPassed = reader.GetBoolean(1);
+                Assert.True(testPassed);
+
+                ++count;
+            }
+
+            Assert.Equal(strValues.Length, count);
+        }
+
+        [Fact]
+        public async Task ReadUInt128ParameterScalar()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT {v}");
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.UInt128 };
+            cmd.Parameters.Add(parameter);
+
+            var pairs = new (object value, BigInteger expected)[]
+            {
+                (0u, 0u),
+                (1u, 1u),
+                (byte.MaxValue, byte.MaxValue),
+                (ushort.MaxValue, ushort.MaxValue),
+                (uint.MaxValue, uint.MaxValue),
+                (ulong.MaxValue, ulong.MaxValue),
+                ((BigInteger.One << 128) - 1, (BigInteger.One << 128) - 1),
+            };
+
+            foreach (var pair in pairs)
+            {
+                parameter.Value = pair.value;
+                var result = await cmd.ExecuteScalarAsync();
+                var bigIntResult = Assert.IsType<BigInteger>(result);
+                Assert.Equal(pair.expected, bigIntResult);
+            }
+        }
+
+        [Fact]
+        public async Task ReadInt256Column()
+        {
+            var minValue = -(BigInteger.One << 255);            
+            var maxValue = (BigInteger.One << 255) - BigInteger.One;
+
+            var maxStrLen = maxValue.ToString().Length;
+            var sb = new StringBuilder(maxStrLen + 1).Append('-');
+            for (int i = 1; i <= maxStrLen; i++)
+                sb.Append((char)('0' + (i % 10)));
+
+            var strValues = new[] { minValue.ToString(), sb.ToString(), "-1", "0", "1", sb.ToString(1, maxStrLen), maxValue.ToString() };
+
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT CAST(value AS Int256) AS v, v = bigIntValue AS testPassed FROM ptable ORDER BY id");
+
+            var tableProvider = new ClickHouseTableProvider("ptable", strValues.Length);
+            tableProvider.Columns.AddColumn("id", Enumerable.Range(1, strValues.Length));
+            tableProvider.Columns.AddColumn("value", strValues);
+            tableProvider.Columns.AddColumn("bigIntValue", strValues.Select(v => BigInteger.Parse(v)));            
+            cmd.TableProviders.Add(tableProvider);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var valueColumnType = reader.GetFieldTypeInfo(0);
+            Assert.Equal("Int256", valueColumnType.ComplexTypeName);
+            Assert.Equal(ClickHouseDbType.Int256, valueColumnType.GetDbType());
+
+            int count = 0;
+            while(await reader.ReadAsync())
+            {
+                var value = reader.GetValue(0);
+                var expectedValue = BigInteger.Parse(strValues[count]);
+                Assert.Equal(expectedValue, value);
+
+                var testPassed = reader.GetBoolean(1);
+                Assert.True(testPassed);
+
+                ++count;
+            }
+
+            Assert.Equal(strValues.Length, count);
+        }
+
+        [Fact]
+        public async Task ReadInt256ParameterScalar()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT {v}");
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.Int256 };
+            cmd.Parameters.Add(parameter);
+
+            var pairs = new (object value, BigInteger expected)[]
+            {
+                (0, 0),
+                (-1, -1),
+                (1, 1),
+                (byte.MaxValue, byte.MaxValue),
+                (sbyte.MinValue, sbyte.MinValue),
+                (sbyte.MaxValue, sbyte.MaxValue),
+                (short.MinValue, short.MinValue),
+                (short.MaxValue, short.MaxValue),
+                (ushort.MaxValue, ushort.MaxValue),
+                (int.MinValue, int.MinValue),
+                (int.MaxValue, int.MaxValue),
+                (uint.MaxValue, uint.MaxValue),
+                (long.MinValue, long.MinValue),
+                (long.MaxValue, long.MaxValue),
+                (ulong.MaxValue, ulong.MaxValue),
+                (-(BigInteger.One << 255), -(BigInteger.One << 255)),
+                ((BigInteger.One << 255) - 1, (BigInteger.One << 255) - 1),
+            };
+
+            foreach (var pair in pairs)
+            {
+                if (pair.value is BigInteger)
+                    parameter.ResetDbType();
+
+                parameter.Value = pair.value;
+                var result = await cmd.ExecuteScalarAsync();
+                var bigIntResult = Assert.IsType<BigInteger>(result);
+                Assert.Equal(pair.expected, bigIntResult);
+            }
+        }
+
+        [Fact]
+        public async Task ReadUInt256Column()
+        {
+            var maxValue = (BigInteger.One << 256) - BigInteger.One;
+
+            var maxStrLen = maxValue.ToString().Length;
+            var sb = new StringBuilder(maxStrLen);
+            sb.Append("11");
+            for (int i = 3; i <= maxStrLen; i++)
+                sb.Append((char)('0' + (i % 10)));
+
+            var strValues = new[] { "0", "1", sb.ToString(), maxValue.ToString() };
+
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT CAST(value AS UInt256) AS v, v = bigIntValue AS testPassed FROM ptable ORDER BY id");
+
+            var tableProvider = new ClickHouseTableProvider("ptable", strValues.Length);
+            tableProvider.Columns.AddColumn("id", Enumerable.Range(1, strValues.Length));
+            tableProvider.Columns.AddColumn("value", strValues);
+            var bigIntColumn = tableProvider.Columns.AddColumn("bigIntValue", strValues.Select(v => BigInteger.Parse(v)));
+            bigIntColumn.ClickHouseDbType = ClickHouseDbType.UInt256;
+            cmd.TableProviders.Add(tableProvider);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var valueColumnType = reader.GetFieldTypeInfo(0);
+            Assert.Equal("UInt256", valueColumnType.ComplexTypeName);
+            Assert.Equal(ClickHouseDbType.UInt256, valueColumnType.GetDbType());            
+
+            int count = 0;
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetValue(0);
+                var expectedValue = BigInteger.Parse(strValues[count]);
+                Assert.Equal(expectedValue, value);
+
+                var testPassed = reader.GetBoolean(1);
+                Assert.True(testPassed);
+
+                ++count;
+            }
+
+            Assert.Equal(strValues.Length, count);
+        }
+
+        [Fact]
+        public async Task ReadUInt256ParameterScalar()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            var cmd = cn.CreateCommand("SELECT {v}");
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.UInt256 };
+            cmd.Parameters.Add(parameter);
+
+            var pairs = new (object value, BigInteger expected)[]
+            {
+                (0u, 0u),                
+                (1u, 1u),
+                (byte.MaxValue, byte.MaxValue),
+                (ushort.MaxValue, ushort.MaxValue),
+                (uint.MaxValue, uint.MaxValue),
+                (ulong.MaxValue, ulong.MaxValue),
+                ((BigInteger.One << 256) - 1, (BigInteger.One << 256) - 1),
+            };
+
+            foreach (var pair in pairs)
+            {
+                parameter.Value = pair.value;
+                var result = await cmd.ExecuteScalarAsync();
+                var bigIntResult = Assert.IsType<BigInteger>(result);
+                Assert.Equal(pair.expected, bigIntResult);
+            }
         }
 
         [Fact]

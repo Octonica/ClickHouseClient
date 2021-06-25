@@ -86,5 +86,10 @@ namespace Octonica.ClickHouseClient
         DateTime64 = ClickHouseSpecificTypeDelimiterCode + 7,
 
         Map = ClickHouseSpecificTypeDelimiterCode + 8,
+
+        Int128 = ClickHouseSpecificTypeDelimiterCode + 9,
+        UInt128 = ClickHouseSpecificTypeDelimiterCode + 10,
+        Int256 = ClickHouseSpecificTypeDelimiterCode + 11,
+        UInt256 = ClickHouseSpecificTypeDelimiterCode + 12,
     }
 }

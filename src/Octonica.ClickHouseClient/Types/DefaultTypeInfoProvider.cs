@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -224,6 +225,12 @@ namespace Octonica.ClickHouseClient.Types
                 case ClickHouseDbType.Int64:
                     typeName = "Int64";
                     break;
+                case ClickHouseDbType.Int128:
+                    typeName = "Int128";
+                    break;
+                case ClickHouseDbType.Int256:
+                    typeName = "Int256";
+                    break;
                 case ClickHouseDbType.Object:
                     if (columnDescriptor.ValueType != typeof(DBNull))
                         throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported.");
@@ -247,6 +254,12 @@ namespace Octonica.ClickHouseClient.Types
                     break;
                 case ClickHouseDbType.UInt64:
                     typeName = "UInt64";
+                    break;
+                case ClickHouseDbType.UInt128:
+                    typeName = "UInt128";
+                    break;
+                case ClickHouseDbType.UInt256:
+                    typeName = "UInt256";
                     break;
                 case ClickHouseDbType.VarNumeric:
                     typeName = string.Format(
@@ -354,6 +367,8 @@ namespace Octonica.ClickHouseClient.Types
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int64, "Int64", false, 0);
             if (valueType == typeof(sbyte))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.SByte, "Int8", false, 0);
+            if (valueType == typeof(BigInteger))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int256, "Int256", false, 0);
             if (valueType == typeof(float))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Single, "Float32", false, 0);
             if (valueType == typeof(ushort))
@@ -504,11 +519,15 @@ namespace Octonica.ClickHouseClient.Types
                 new Int16TypeInfo(),
                 new Int32TypeInfo(),
                 new Int64TypeInfo(),
+                new Int128TypeInfo(),
+                new Int256TypeInfo(),
 
                 new UInt8TypeInfo(),
                 new UInt16TypeInfo(),
                 new UInt32TypeInfo(),
                 new UInt64TypeInfo(),
+                new UInt128TypeInfo(),
+                new UInt256TypeInfo(),
 
                 new StringTypeInfo(),
                 new FixedStringTypeInfo(),

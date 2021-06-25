@@ -14,10 +14,14 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Int16 | short | int, long | `GetInt16` |
 | Int32 | int | long | `GetInt32` |
 | Int64 | long | | `GetInt64` |
+| Int128 | System.Numerics.BigInteger | | |
+| Int256 | System.Numerics.BigInteger | | |
 | UInt8 | byte | ushort, uint, ulong, int, long | |
 | UInt16 | ushort | uint, ulong, int, long | `GetUInt16` |
 | UInt32 | uint | ulong, long | `GetUInt132` |
 | UInt64 | ulong | | `GetUInt64` |
+| UInt128 | System.Numerics.BigInteger | | |
+| UInt256 | System.Numerics.BigInteger | | |
 | Float32 | float | double | `GetFloat` |
 | Float64 | double | | `GetDouble` |
 | Decimal | decimal | | `GetDecimal` |
