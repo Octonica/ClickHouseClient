@@ -114,7 +114,7 @@ namespace Octonica.ClickHouseClient
         {
             var asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
             var version = asm.GetName().Version;
-            DefaultClientVersion = new ClickHouseVersion(version?.Major ?? 1, version?.Minor ?? 0, version?.Revision ?? 0);
+            DefaultClientVersion = new ClickHouseVersion(version?.Major ?? 1, version?.Minor ?? 0, version?.Build ?? 0);
 
             AllProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
