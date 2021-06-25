@@ -125,13 +125,12 @@ namespace Octonica.ClickHouseClient.Tests
             tcs.SetResult(true);
             await Assert.ThrowsAnyAsync<Exception>(() => Task.WhenAll(tasks));
 
-            Task? notFailedTask = null;
+            int notFailedTaskCount = 0;
             foreach (var task in tasks)
             {
                 if (task.Exception == null)
                 {
-                    Assert.Null(notFailedTask);
-                    notFailedTask = task;
+                    ++notFailedTaskCount;
                     continue;
                 }
 
@@ -141,7 +140,8 @@ namespace Octonica.ClickHouseClient.Tests
                 Assert.Equal(ClickHouseErrorCodes.InvalidConnectionState, ex.ErrorCode);
             }
 
-            Assert.NotNull(notFailedTask);
+            // There should be at least one completed task and several failed tasks
+            Assert.True(notFailedTaskCount > 0 && notFailedTaskCount < tasks.Count);
             Assert.Equal(ConnectionState.Open, connection.State);
             Assert.Equal(0x10001, counter);
 
