@@ -40,6 +40,11 @@ namespace Octonica.ClickHouseClient.Types
             return new EnumColumnReader(internalReader, reversedEnumMap);
         }
 
+        protected override SimpleSkippingColumnReader CreateInternalSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(short), rowCount);
+        }
+
         protected override IClickHouseColumnTypeInfo CreateDetailedTypeInfo(string complexTypeName, IEnumerable<KeyValuePair<string, short>> values)
         {
             return new Enum16TypeInfo(TypeName, complexTypeName, values);

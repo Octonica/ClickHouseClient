@@ -25,6 +25,8 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class UuidTypeInfo : SimpleTypeInfo
     {
+        private const int UuidSize = 16;
+
         public UuidTypeInfo()
             : base("UUID")
         {
@@ -33,6 +35,11 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             return new UuidReader(rowCount);
+        }
+
+        public override IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(UuidSize, rowCount);
         }
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -56,7 +63,7 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class UuidReader : StructureReaderBase<Guid>
         {
             public UuidReader(int rowCount)
-                : base(16, rowCount)
+                : base(UuidSize, rowCount)
             {
             }
 
@@ -73,7 +80,7 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class UuidWriter:StructureWriterBase<Guid>
         {
             public UuidWriter(string columnName, string columnType, IReadOnlyList<Guid> rows)
-                : base(columnName, columnType, 16, rows)
+                : base(columnName, columnType, UuidSize, rows)
             {
             }
 

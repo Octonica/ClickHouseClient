@@ -80,6 +80,23 @@ namespace Octonica.ClickHouseClient.Types
             return new DecimalReader(_precision.Value, _scale.Value, rowCount);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_precision == null || _scale == null)
+            {
+                if (_precision == null && _scale == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
+
+                if (_scale == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+
+                // Currently there is no implementation which requires only the precision value
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
+            }
+
+            return new SimpleSkippingColumnReader(GetElementSize(_precision.Value), rowCount);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_precision == null && _scale == null)
@@ -242,12 +259,6 @@ namespace Octonica.ClickHouseClient.Types
 
                 _position += uintLength;
                 return new SequenceSize(byteLength, byteLength / _elementSize);
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                var count = Math.Min(maxElementsCount, (int) sequence.Length / _elementSize);
-                return new SequenceSize(count * _elementSize, count);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,12 @@
  */
 #endregion
 
+using System.Buffers;
+
 namespace Octonica.ClickHouseClient.Protocol
 {
-    public interface IClickHouseColumnReader : IClickHouseColumnReaderBase
+    public interface IClickHouseColumnReaderBase
     {
-        IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings);
+        SequenceSize ReadNext(ReadOnlySequence<byte> sequence);
     }
 }

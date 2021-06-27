@@ -49,6 +49,11 @@ namespace Octonica.ClickHouseClient.Types
             return new Int8TypeInfo.Int8Reader(rowCount);
         }
 
+        protected override SimpleSkippingColumnReader CreateInternalSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(byte), rowCount);
+        }
+
         protected override IClickHouseColumnWriter CreateInternalColumnWriter<T>(string columnName, IReadOnlyList<T> rows)
         {
             if (typeof(T) != typeof(sbyte))

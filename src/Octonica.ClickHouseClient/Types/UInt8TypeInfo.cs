@@ -16,7 +16,6 @@
 #endregion
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -34,6 +33,11 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             return new UInt8Reader(rowCount);
+        }
+
+        public override IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(byte), rowCount);
         }
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)

@@ -98,7 +98,15 @@ namespace Octonica.ClickHouseClient.Types
             return CreateColumnReader(internalReader, _reversedEnumMap);
         }
 
-        protected abstract EnumColumnReaderBase CreateColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap);
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_enumMap == null || _reversedEnumMap == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
+
+            return CreateInternalSkippingColumnReader(rowCount);
+        }
+
+        protected abstract EnumColumnReaderBase CreateColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap);        
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
@@ -154,6 +162,8 @@ namespace Octonica.ClickHouseClient.Types
 
         protected abstract StructureReaderBase<TValue> CreateInternalColumnReader(int rowCount);
 
+        protected abstract SimpleSkippingColumnReader CreateInternalSkippingColumnReader(int rowCount);
+
         protected abstract IClickHouseColumnWriter CreateInternalColumnWriter<T>(string columnName, IReadOnlyList<T> rows);
 
         protected abstract bool TryParse(ReadOnlySpan<char> text, out TValue value);
@@ -172,11 +182,6 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 return _internalReader.ReadNext(sequence);
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                return _internalReader.Skip(sequence, maxElementsCount, ref skipContext);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)

@@ -36,6 +36,11 @@ namespace Octonica.ClickHouseClient.Types
             return new Float64Reader(rowCount);
         }
 
+        public override IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(double), rowCount);
+        }
+
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             IReadOnlyList<double> doubleRows;

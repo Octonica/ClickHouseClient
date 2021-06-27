@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,11 @@ namespace Octonica.ClickHouseClient.Types
         public int GenericArgumentsCount => 0;
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
+        {
+            return new NothingColumnReader(rowCount);
+        }
+
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             return new NothingColumnReader(rowCount);
         }
@@ -77,19 +82,8 @@ namespace Octonica.ClickHouseClient.Types
                 if (_position >= _rowCount)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
-                var result = Skip(sequence, _rowCount - _position);
-                _position += result.Elements;
-                return result;
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                return Skip(sequence, maxElementsCount);
-            }
-
-            private static SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount)
-            {
-                var size = (int) Math.Min(sequence.Length, maxElementsCount);
+                var size = (int)Math.Min(sequence.Length, _rowCount - _position);
+                _position += size;
                 return new SequenceSize(size, size);
             }
 

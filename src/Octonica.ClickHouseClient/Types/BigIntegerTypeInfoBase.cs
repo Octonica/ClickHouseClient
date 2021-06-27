@@ -43,6 +43,11 @@ namespace Octonica.ClickHouseClient.Types
             return new BigIntegerColumnReader(rowCount, _elementByteSize, _isUnsigned);
         }
 
+        public sealed override IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(_elementByteSize, rowCount);
+        }
+
         public sealed override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             var type = typeof(T);
@@ -121,12 +126,6 @@ namespace Octonica.ClickHouseClient.Types
 
                 _position += elementCount;
                 return new SequenceSize(byteCount, elementCount);
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                var elementCount = (int)Math.Min(maxElementsCount, sequence.Length / _elementByteSize);
-                return new SequenceSize(elementCount * _elementByteSize, elementCount);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)

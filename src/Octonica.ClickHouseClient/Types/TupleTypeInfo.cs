@@ -18,7 +18,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -60,6 +59,14 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return new TupleColumnReader(rowCount, _elementTypes);
+        }
+
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_elementTypes == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return new TupleSkippingColumnReader(rowCount, _elementTypes);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -246,17 +253,6 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(result.Bytes + lastColumnSize.Bytes, lastColumnSize.Elements);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                TupleSkipContext tupleSkipContext;
-                if (skipContext != null)
-                    tupleSkipContext = (TupleSkipContext) skipContext;
-                else
-                    skipContext = tupleSkipContext = new TupleSkipContext(maxElementsCount, _elementTypes);
-
-                return tupleSkipContext.Skip(sequence, maxElementsCount);
-            }
-
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
                 var columns = new List<IClickHouseTableColumn>(_elementTypes.Count);
@@ -270,33 +266,30 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private class TupleSkipContext
+        private sealed class TupleSkippingColumnReader : IClickHouseColumnReaderBase
         {
             private readonly int _rowCount;
             private readonly List<IClickHouseColumnTypeInfo> _elementTypes;
 
-            private readonly List<IClickHouseColumnReader> _readers;
+            private IClickHouseColumnReaderBase _elementReader;
+            private int _elementReaderIndex;
 
-            private int _position;
-            private object? _currentReaderSkipContext;
+            private int _position;            
 
-            public TupleSkipContext(int rowCount, List<IClickHouseColumnTypeInfo> elementTypes)
+            public TupleSkippingColumnReader(int rowCount, List<IClickHouseColumnTypeInfo> elementTypes)
             {
                 _rowCount = rowCount;
                 _elementTypes = elementTypes;
 
-                _readers = new List<IClickHouseColumnReader>(elementTypes.Count) {_elementTypes[0].CreateColumnReader(0)};
+                _elementReader = _elementTypes[0].CreateSkippingColumnReader(_rowCount);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount)
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                Debug.Assert(maxElementsCount == _rowCount - _position);
-
                 var result = new SequenceSize(0, 0);
-                while (_readers.Count != _elementTypes.Count)
+                while (_elementReaderIndex < _elementTypes.Count - 1)
                 {
-                    var expectedCount = _rowCount - _position;
-                    var actualCount = _readers[^1].Skip(sequence.Slice(result.Bytes), expectedCount, ref _currentReaderSkipContext);
+                    var actualCount = _elementReader.ReadNext(sequence.Slice(result.Bytes));
 
                     result = result.AddBytes(actualCount.Bytes);
                     _position += actualCount.Elements;
@@ -304,11 +297,10 @@ namespace Octonica.ClickHouseClient.Types
                         return result;
 
                     _position = 0;
-                    _currentReaderSkipContext = null;
-                    _readers.Add(_elementTypes[_readers.Count].CreateColumnReader(0));
+                    _elementReader = _elementTypes[++_elementReaderIndex].CreateSkippingColumnReader(_rowCount);                    
                 }
 
-                var lastColumnCount = _readers[^1].Skip(sequence.Slice(result.Bytes), maxElementsCount, ref _currentReaderSkipContext);
+                var lastColumnCount = _elementReader.ReadNext(sequence.Slice(result.Bytes));
                 _position += lastColumnCount.Elements;
 
                 return lastColumnCount.AddBytes(result.Bytes);

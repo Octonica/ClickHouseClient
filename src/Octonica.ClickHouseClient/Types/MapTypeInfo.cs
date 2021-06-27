@@ -58,6 +58,14 @@ namespace Octonica.ClickHouseClient.Types
             return new MapReader(_underlyingType.CreateColumnReader(rowCount), fieldType);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_underlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return _underlyingType.CreateSkippingColumnReader(rowCount);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_underlyingType == null)
@@ -161,11 +169,6 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 return _underlyingReader.ReadNext(sequence);
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                return _underlyingReader.Skip(sequence, maxElementsCount, ref skipContext);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)

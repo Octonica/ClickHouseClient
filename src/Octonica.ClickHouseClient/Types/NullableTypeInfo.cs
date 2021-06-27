@@ -57,6 +57,14 @@ namespace Octonica.ClickHouseClient.Types
             return new NullableColumnReader(rowCount, UnderlyingType);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (UnderlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return new NullableSkippingColumnReader(rowCount, UnderlyingType);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (UnderlyingType == null)
@@ -161,49 +169,53 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(bytesCount + baseResult.Bytes, baseResult.Elements);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
+            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                int position = 0;
-                if (skipContext != null)
+                var baseReader = _baseColumnReader ?? _underlyingType.CreateColumnReader(0);
+                return NullableTableColumn.MakeNullableColumn(_nullFlags, baseReader.EndRead(settings));
+            }
+        }
+
+        private sealed class NullableSkippingColumnReader : IClickHouseColumnReaderBase
+        {
+            private readonly int _rowCount;
+            private readonly IClickHouseColumnTypeInfo _underlyingType;
+
+            private IClickHouseColumnReaderBase? _baseReader;
+            private int _position;
+
+            public NullableSkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo underlyingType)
+            {
+                _rowCount = rowCount;
+                _underlyingType = underlyingType;
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                if (_baseReader != null)
                 {
-                    (IClickHouseColumnReader? baseReader, object? originalSkipContext, int count) = (Tuple<IClickHouseColumnReader?, object?, int>) skipContext;
-                    position = count;
+                    var result = _baseReader.ReadNext(sequence);
+                    return result;
+                }                
 
-                    if (baseReader != null)
-                    {
-                        var baseSkipContext = originalSkipContext;
-                        var result = baseReader.Skip(sequence, maxElementsCount, ref baseSkipContext);
-
-                        if (!ReferenceEquals(baseSkipContext, originalSkipContext))
-                            skipContext = new Tuple<IClickHouseColumnReader?, object?, int>(baseReader, baseSkipContext, count);
-
-                        return result;
-                    }
-                }
-
-                var prefixBytesCount = maxElementsCount - position;
+                var prefixBytesCount = _rowCount - _position;
                 if (prefixBytesCount < 0)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
                 if (sequence.Length <= prefixBytesCount)
                 {
-                    skipContext = new Tuple<IClickHouseColumnReader?, object?, int>(null, null, (int) (position + sequence.Length));
-                    return new SequenceSize((int) sequence.Length, 0);
+                    _position += (int)sequence.Length;
+                    return new SequenceSize((int)sequence.Length, 0);
+                }
+                else
+                {
+                    _position += prefixBytesCount;
                 }
 
-                var baseColumnReader = _underlyingType.CreateColumnReader(0);
-                object? baseColumnReaderSkipContext = null;
-
-                var baseSize = baseColumnReader.Skip(sequence.Slice(prefixBytesCount), maxElementsCount, ref baseColumnReaderSkipContext);
-                skipContext = new Tuple<IClickHouseColumnReader?, object?, int>(baseColumnReader, baseColumnReaderSkipContext, position + baseSize.Elements);
+                _baseReader = _underlyingType.CreateSkippingColumnReader(_rowCount);
+                var baseSize = _baseReader.ReadNext(sequence.Slice(prefixBytesCount));
 
                 return new SequenceSize(baseSize.Bytes + prefixBytesCount, baseSize.Elements);
-            }
-
-            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
-            {
-                var baseReader = _baseColumnReader ?? _underlyingType.CreateColumnReader(0);
-                return NullableTableColumn.MakeNullableColumn(_nullFlags, baseReader.EndRead(settings));
             }
         }
 

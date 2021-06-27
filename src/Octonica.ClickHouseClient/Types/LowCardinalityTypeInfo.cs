@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,10 +48,29 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
+            return new LowCardinalityColumnReader(rowCount, GetBaseTypeInfoForColumnReader());
+        }
+
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new LowCardinalitySkippingColumnReader(rowCount, GetBaseTypeInfoForColumnReader());
+        }
+
+        private IClickHouseColumnTypeInfo GetBaseTypeInfoForColumnReader()
+        {
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new LowCardinalityColumnReader(rowCount, _baseType);
+            if (_baseType is NullableTypeInfo nullableBaseType)
+            {
+                if (nullableBaseType.UnderlyingType == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{_baseType.ComplexTypeName}\" is not fully specified.");
+
+                // LowCardinality column stores NULL as the key 0
+                return nullableBaseType.UnderlyingType;
+            }
+
+            return _baseType;
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -102,7 +121,7 @@ namespace Octonica.ClickHouseClient.Types
             return _baseType;
         }
 
-        private class LowCardinalityColumnReader : IClickHouseColumnReader
+        private sealed class LowCardinalityColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
             private readonly IClickHouseColumnTypeInfo _baseType;
@@ -117,19 +136,7 @@ namespace Octonica.ClickHouseClient.Types
             public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType)
             {
                 _rowCount = rowCount;
-
-                if (baseType is NullableTypeInfo nullableBaseType)
-                {
-                    if (nullableBaseType.UnderlyingType == null)
-                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{baseType.ComplexTypeName}\" is not fully specified.");
-
-                    // LowCardinality column stores NULL as the key 0
-                    _baseType = nullableBaseType.UnderlyingType;
-                }
-                else
-                {
-                    _baseType = baseType;
-                }
+                _baseType = baseType;
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -192,32 +199,6 @@ namespace Octonica.ClickHouseClient.Types
                 return result;
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                var slice = sequence;
-                var result = new SequenceSize(0, 0);
-                LowCardinalityColumnReaderSkipContext knownSkipContext;
-                if (skipContext == null)
-                {
-                    var header = TryReadHeader(slice);
-                    if (header == null)
-                        return result;
-
-                    result = result.AddBytes(header.Value.bytesRead);
-                    slice = slice.Slice(header.Value.bytesRead);
-
-                    var baseReader = _baseType.CreateColumnReader(0);
-                    skipContext = knownSkipContext = new LowCardinalityColumnReaderSkipContext(baseReader, header.Value.keyCount, header.Value.keySize);
-                }
-                else
-                {
-                    knownSkipContext = (LowCardinalityColumnReaderSkipContext) skipContext;
-                }
-
-                result += knownSkipContext.SkipNext(slice, maxElementsCount);
-                return result;
-            }
-
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
                 var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
@@ -228,7 +209,7 @@ namespace Octonica.ClickHouseClient.Types
                 return new LowCardinalityTableColumn(new ReadOnlyMemory<byte>(_buffer, 0, _position * _keySize), _keySize, valuesColumn);
             }
 
-            private static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
+            public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
             {
                 Span<ulong> headerValues = stackalloc ulong[3];
                 var headerBytes = MemoryMarshal.AsBytes(headerValues);
@@ -282,29 +263,47 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class LowCardinalityColumnReaderSkipContext
+        private sealed class LowCardinalitySkippingColumnReader : IClickHouseColumnReaderBase
         {
-            private readonly IClickHouseColumnReader _baseReader;
-            private readonly int _baseRowCount;
-            private readonly int _keySize;
+            private readonly int _rowCount;
+            private readonly IClickHouseColumnTypeInfo _baseType;
 
-            private object? _baseSkipContext;
+            private IClickHouseColumnReaderBase? _baseReader;
+            private int _baseRowCount;
+            private int _keySize;
+
             private int _basePosition;
             private bool _headerSkipped;
+            private int _position;
             
-            public LowCardinalityColumnReaderSkipContext(IClickHouseColumnReader baseReader, int baseRowCount, int keySize)
+            public LowCardinalitySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType)
             {
-                _baseReader = baseReader;
-                _baseRowCount = baseRowCount;
-                _keySize = keySize;
+                _rowCount = rowCount;
+                _baseType = baseType;
             }
 
-            public SequenceSize SkipNext(ReadOnlySequence<byte> sequence, int maxElementsCount)
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var result = new SequenceSize(0, 0);
+                var slice = sequence;
+                var result = new SequenceSize(0, 0);                
+                if (_baseReader == null)
+                {
+                    var header = LowCardinalityColumnReader.TryReadHeader(slice);
+                    if (header == null)
+                        return result;
+
+                    result = result.AddBytes(header.Value.bytesRead);
+                    slice = slice.Slice(header.Value.bytesRead);
+
+                    _baseRowCount = header.Value.keyCount;
+                    _keySize = header.Value.keySize;
+
+                    _baseReader = _baseType.CreateSkippingColumnReader(_baseRowCount);
+                }
+
                 if (_basePosition < _baseRowCount)
                 {
-                    var baseResult = _baseReader.Skip(sequence, _baseRowCount - _basePosition, ref _baseSkipContext);
+                    var baseResult = _baseReader.ReadNext(slice);
 
                     _basePosition += baseResult.Elements;
                     result = result.AddBytes(baseResult.Bytes);
@@ -318,11 +317,22 @@ namespace Octonica.ClickHouseClient.Types
                     if (sequence.Length - result.Bytes < sizeof(ulong))
                         return result;
 
+                    ulong length = 0;
+                    sequence.Slice(result.Bytes, sizeof(ulong)).CopyTo(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref length, 1)));
+
+                    if ((int)length != _rowCount)
+                        throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Row count check failed: {_rowCount} rows expected, {length} rows detected.");
+
                     result = result.AddBytes(sizeof(ulong));
                     _headerSkipped = true;
                 }
 
-                var elementCount = Math.Min(((int) sequence.Length - result.Bytes) / _keySize, maxElementsCount);
+                var maxElementsCount = _rowCount - _position;
+                if (maxElementsCount <= 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+
+                var elementCount = (int)Math.Min((sequence.Length - result.Bytes) / _keySize, maxElementsCount);
+                _position += elementCount;
                 result += new SequenceSize(elementCount * _keySize, elementCount);
 
                 return result;

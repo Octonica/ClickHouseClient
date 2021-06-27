@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 #endregion
 
-
 using System;
 using System.Collections.Generic;
 using Octonica.ClickHouseClient.Protocol;
@@ -25,6 +24,8 @@ namespace Octonica.ClickHouseClient.Types
     public interface IClickHouseColumnTypeInfo : IClickHouseTypeInfo
     {
         IClickHouseColumnReader CreateColumnReader(int rowCount);
+
+        IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount);
 
         IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings);
 

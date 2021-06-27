@@ -56,6 +56,14 @@ namespace Octonica.ClickHouseClient.Types
             return new ArrayColumnReader(rowCount, _elementTypeInfo);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_elementTypeInfo == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return new ArraySkippingColumnReader(rowCount, _elementTypeInfo);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_elementTypeInfo == null)
@@ -258,17 +266,6 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(bytesCount + elementsSize.Bytes, elementsCount);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                ArrayColumnSkipContext typedSkipContext;
-                if (skipContext != null)
-                    typedSkipContext = (ArrayColumnSkipContext) skipContext;
-                else
-                    skipContext = typedSkipContext = new ArrayColumnSkipContext(_elementType, maxElementsCount);
-
-                return typedSkipContext.Skip(sequence, maxElementsCount);
-            }
-
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
                 var elementColumnReader = _elementColumnReader ?? _elementType.CreateColumnReader(0);
@@ -305,25 +302,30 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class ArrayColumnSkipContext
+        private sealed class ArraySkippingColumnReader : IClickHouseColumnReaderBase
         {
             private readonly IClickHouseColumnTypeInfo _elementType;
             private readonly List<(int offset, int length)> _ranges;
+            private readonly int _rowCount;
 
-            private IClickHouseColumnReader? _elementColumnReader;
-            private object? _elementColumnReaderSkipContext;
+            private IClickHouseColumnReaderBase? _elementColumnReader;            
 
             private int _position;
             private int _elementPosition;
 
-            public ArrayColumnSkipContext(IClickHouseColumnTypeInfo elementType, int initialCapacity)
+            public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
             {
                 _elementType = elementType;
-                _ranges = new List<(int offset, int length)>(initialCapacity);
+                _rowCount = rowCount;
+                _ranges = new List<(int offset, int length)>(rowCount);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount)
-            { 
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                var maxElementsCount = _rowCount - _position;
+                if (maxElementsCount <= 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+
                 int bytesCount = 0;
                 var slice = sequence;
 
@@ -358,14 +360,14 @@ namespace Octonica.ClickHouseClient.Types
                         totalLength = length;
                     }
 
-                    _elementColumnReader = _elementType.CreateColumnReader(checked((int) totalLength));
+                    _elementColumnReader = _elementType.CreateSkippingColumnReader(checked((int) totalLength));
                 }
 
                 if (maxElementsCount > _ranges.Count - _position)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
                 var maxElementRange = _ranges[_position + maxElementsCount - 1];
-                var elementsSize = _elementColumnReader.Skip(slice, maxElementRange.offset + maxElementRange.length - _elementPosition, ref _elementColumnReaderSkipContext);
+                var elementsSize = _elementColumnReader.ReadNext(slice);
 
                 _elementPosition += elementsSize.Elements;
                 var elementsCount = 0;

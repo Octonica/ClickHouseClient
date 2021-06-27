@@ -157,6 +157,11 @@ namespace Octonica.ClickHouseClient.Types
             return new DateTime64Reader(rowCount, _precision ?? DefaultPrecision, _timeZone);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(ulong), rowCount);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(DateTime))

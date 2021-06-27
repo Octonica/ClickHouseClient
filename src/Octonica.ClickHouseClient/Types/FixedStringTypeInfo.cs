@@ -57,6 +57,14 @@ namespace Octonica.ClickHouseClient.Types
             return new FixedStringReader(rowCount, _length.Value);
         }
 
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            if (_length == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
+
+            return new SimpleSkippingColumnReader(_length.Value, rowCount);
+        }
+
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_length == null)
@@ -152,12 +160,6 @@ namespace Octonica.ClickHouseClient.Types
                 sequence.Slice(0, bytesCount).CopyTo(_buffer.Span.Slice(_position));
                 _position += bytesCount;
                 return new SequenceSize(bytesCount, elementsCount);
-            }
-
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-            {
-                var elementsCount = Math.Min(maxElementsCount, (int) sequence.Length / _rowSize);
-                return new SequenceSize(elementsCount * _rowSize, elementsCount);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)

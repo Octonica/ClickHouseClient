@@ -73,12 +73,6 @@ namespace Octonica.ClickHouseClient.Types
             return new SequenceSize(count * ElementSize, count);
         }
 
-        public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
-        {
-            var count = Math.Min(maxElementsCount, (int) sequence.Length / ElementSize);
-            return new SequenceSize(count * ElementSize, count);
-        }
-
         private int CopyTo(ReadOnlySequence<byte> source, Span<TIn> target)
         {
             Span<byte> tmpSpan = stackalloc byte[ElementSize];

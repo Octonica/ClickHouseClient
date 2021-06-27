@@ -280,16 +280,33 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)
             {
-                return await WithCancellationToken(cancellationToken, ct => ReadTable(dataMessage, columnSettings, false, async, ct));
+                var result = await WithCancellationToken(
+                    cancellationToken,
+                    ct =>
+                        ReadTable(
+                            (typeInfo, rowCount) => typeInfo.CreateColumnReader(rowCount),
+                            (columnInfo, reader, index) => ReadTableColumn(columnInfo, reader, columnSettings == null || columnSettings.Count <= index ? null : columnSettings[index]),
+                            async,
+                            ct)
+                );
+
+                Debug.Assert(result.columns != null);
+                var blockHeader = new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
+                return new ClickHouseTable(blockHeader, result.columns.AsReadOnly());
             }
 
             public async ValueTask<BlockHeader> SkipTable(ServerDataMessage dataMessage, bool async, CancellationToken cancellationToken)
             {
-                var table = await WithCancellationToken(cancellationToken, ct => ReadTable(dataMessage, null, true, async, ct));
-                return table.Header;
+                var result = await WithCancellationToken(cancellationToken, ct => ReadTable((typeInfo, rowCount) => typeInfo.CreateSkippingColumnReader(rowCount), null, async, ct));
+                return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);                
             }
 
-            private async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool skip, bool async, CancellationToken cancellationToken)
+            private async ValueTask<(List<ColumnInfo> columnInfos, List<IClickHouseTableColumn>? columns, int rowCount)> ReadTable<TReader>(
+                Func<IClickHouseColumnTypeInfo, int, TReader> createColumnReader,
+                Func<ColumnInfo, TReader, int, IClickHouseTableColumn>? readTableColumn,
+                bool async,
+                CancellationToken cancellationToken)
+                where TReader : IClickHouseColumnReaderBase
             {
                 CheckDisposed();
 
@@ -326,7 +343,7 @@ namespace Octonica.ClickHouseClient
                     throw new NotImplementedException("TODO: implement support for is_overflows.");
 
                 var columnInfos = new List<ColumnInfo>(columnCount);
-                var columns = new List<IClickHouseTableColumn>(columnCount);
+                var columns = readTableColumn == null ? null : new List<IClickHouseTableColumn>(columnCount);
                 for (int i = 0; i < columnCount; i++)
                 {
                     var columnName = await reader.ReadString(async, cancellationToken);
@@ -336,15 +353,10 @@ namespace Octonica.ClickHouseClient
                     columnInfos.Add(columnInfo);
 
                     var columnRowCount = rowCount;
-                    var columnReader = columnType.CreateColumnReader(skip ? 0 : columnRowCount);
-                    object? skipContext = null;
+                    var columnReader = createColumnReader(columnType, rowCount);
                     while (columnRowCount > 0)
                     {
-                        SequenceSize sequenceSize;
-                        if (skip)
-                            sequenceSize = await reader.ReadRaw(seq => columnReader.Skip(seq, columnRowCount, ref skipContext), async, cancellationToken);
-                        else
-                            sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);
+                        var sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);
 
                         if (sequenceSize.Elements < 0)
                             throw new InvalidOperationException("The number of elements must be greater than zero.");
@@ -356,22 +368,30 @@ namespace Octonica.ClickHouseClient
                         columnRowCount -= sequenceSize.Elements;
                     }
 
-                    var settings = columnSettings == null || columnSettings.Count <= i ? null : columnSettings[i];
-                    var column = columnReader.EndRead(settings);
-
-                    var typeDispatcher = settings?.GetColumnTypeDispatcher();
-                    if (typeDispatcher != null)
+                    if (columns != null)
                     {
-                        Debug.Assert(settings != null && settings.ColumnType != null);
-                        column = ReinterpretedTableColumn.GetReinterpetedTableColumn(column, typeDispatcher, CreateCastFunc(columnInfo, settings.ColumnType));
+                        Debug.Assert(readTableColumn != null);
+                        var column = readTableColumn(columnInfo, columnReader, i);
+                        columns.Add(column);
                     }
-
-                    columns.Add(column);
                 }
 
                 reader.EndDecompress();
-                var blockHeader = new BlockHeader(dataMessage.TempTableName, columnInfos.AsReadOnly(), rowCount);
-                return new ClickHouseTable(blockHeader, columns.AsReadOnly());
+                return (columnInfos, columns, rowCount);                
+            }
+
+            private static IClickHouseTableColumn ReadTableColumn(ColumnInfo columnInfo, IClickHouseColumnReader columnReader, ClickHouseColumnSettings? settings)
+            {
+                var column = columnReader.EndRead(settings);
+
+                var typeDispatcher = settings?.GetColumnTypeDispatcher();
+                if (typeDispatcher != null)
+                {
+                    Debug.Assert(settings != null && settings.ColumnType != null);
+                    column = ReinterpretedTableColumn.GetReinterpetedTableColumn(column, typeDispatcher, CreateCastFunc(columnInfo, settings.ColumnType));
+                }
+
+                return column;
             }
 
             private static Func<object, object> CreateCastFunc(ColumnInfo columnInfo, Type targetType)

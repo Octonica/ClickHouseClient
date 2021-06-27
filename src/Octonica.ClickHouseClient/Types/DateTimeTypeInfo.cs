@@ -16,9 +16,7 @@
 #endregion
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using TimeZoneConverter;
@@ -53,6 +51,11 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             return new DateTimeReader(rowCount, _timeZone);
+        }
+
+        public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new SimpleSkippingColumnReader(sizeof(uint), rowCount);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)

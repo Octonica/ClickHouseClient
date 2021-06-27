@@ -37,6 +37,11 @@ namespace Octonica.ClickHouseClient.Types
             return new StringColumnReader(rowCount);
         }
 
+        public override IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
+        {
+            return new StringSkippingColumnReader(rowCount);
+        }
+
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(string))
@@ -145,8 +150,29 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(bytesCount, elementsCount);
             }
 
-            public SequenceSize Skip(ReadOnlySequence<byte> sequence, int maxElementsCount, ref object? skipContext)
+            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
+                return new StringTableColumn(settings?.StringEncoding ?? Encoding.UTF8, _layouts, _segments);
+            }
+        }
+
+        private sealed class StringSkippingColumnReader : IClickHouseColumnReaderBase
+        {
+            private readonly int _rowCount;
+
+            private int _position;
+
+            public StringSkippingColumnReader(int rowCount)
+            {
+                _rowCount = rowCount;
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                var maxElementsCount = _rowCount - _position;
+                if (maxElementsCount <= 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+
                 int offset = 0;
                 int count = 0;
                 while (count < maxElementsCount)
@@ -160,15 +186,11 @@ namespace Octonica.ClickHouseClient.Types
                         break;
 
                     offset += totalLength;
-                    ++count;
+                    ++count;                    
                 }
 
+                _position += count;
                 return new SequenceSize(offset, count);
-            }
-
-            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
-            {
-                return new StringTableColumn(settings?.StringEncoding ?? Encoding.UTF8, _layouts, _segments);
             }
         }
 
