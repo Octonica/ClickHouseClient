@@ -62,7 +62,7 @@ The tables and parameters are stored separately in `Octonica.ClickHouseClient.Cl
 
 The basic interface for client-defined table is `Octonica.ClickHouseClient.IClickHouseTableProvider`. A class implementing this interface should provide
 a table in a columnar format. There is a default implementation of this interface: `Octonica.ClickHouseClient.ClickHouseTableProvider`. This class allows
-to pass a table in a way similar to [ClickHouseColumnWriter](docs/ClickHouseColumnWriter.md).
+to pass a table in a way similar to [ClickHouseColumnWriter](ClickHouseColumnWriter.md).
 
 Here is a simple example demonstrating how to pass a client-defined table to a query:
 ```C#
