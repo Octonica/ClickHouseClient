@@ -146,6 +146,20 @@ namespace Octonica.ClickHouseClient
 
         public sealed override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length)
         {
+            var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<byte>;
+            if (arrayColumn == null)
+            {
+                arrayColumn = _currentTable.Columns[ordinal].TryReinterpretAsArray<byte>();
+                if (arrayColumn != null)
+                    _reinterpretedColumnsCache[ordinal] = arrayColumn;
+            }
+
+            if (arrayColumn != null)
+            {
+                CheckRowIndex();
+                return arrayColumn.CopyTo(_rowIndex, new Span<byte>(buffer, bufferOffset, Math.Min(buffer?.Length ?? 0, length)), checked((int)dataOffset));
+            }
+
             var value = GetFieldValue<byte[]>(ordinal, null);
             if (value == null)
             {
@@ -169,6 +183,20 @@ namespace Octonica.ClickHouseClient
 
         public sealed override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
         {
+            var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<char>;
+            if (arrayColumn == null)
+            {
+                arrayColumn = _currentTable.Columns[ordinal].TryReinterpretAsArray<char>();
+                if (arrayColumn != null)
+                    _reinterpretedColumnsCache[ordinal] = arrayColumn;
+            }
+
+            if (arrayColumn != null)
+            {
+                CheckRowIndex();
+                return arrayColumn.CopyTo(_rowIndex, new Span<char>(buffer, bufferOffset, Math.Min(buffer?.Length ?? 0, length)), checked((int)dataOffset));
+            }
+
             var value = GetFieldValue<string>(ordinal, null);
             if (value == null)
             {

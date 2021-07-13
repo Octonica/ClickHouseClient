@@ -54,7 +54,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            return (_reinterpretationRoot ?? _sourceColumn).TryReinterpret<T>();
+            var reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
+            return (reinterpretationRoot as IClickHouseTableColumn<T>) ?? reinterpretationRoot.TryReinterpret<T>();
+        }
+
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            var reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
+            return (reinterpretationRoot as IClickHouseArrayTableColumn<T>) ?? reinterpretationRoot.TryReinterpretAsArray<T>();
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -98,7 +105,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            return _reinterpretationRoot.TryReinterpret<T>();
+            return (_reinterpretationRoot as IClickHouseTableColumn<T>) ?? _reinterpretationRoot.TryReinterpret<T>();
+        }
+
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return (_reinterpretationRoot as IClickHouseArrayTableColumn<T>) ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
         }
     }
 
@@ -128,7 +140,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            return _column.TryReinterpret<T>();
+            return (_column as IClickHouseTableColumn<T>) ?? _column.TryReinterpret<T>();
+        }
+
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return (_column as IClickHouseArrayTableColumn<T>) ?? _column.TryReinterpretAsArray<T>();
         }
 
         public static IClickHouseTableColumn GetReinterpetedTableColumn(IClickHouseTableColumn column, Type targetType, Func<object, object> fallbackConvertValue)

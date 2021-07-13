@@ -16,24 +16,36 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class StringTableColumn : StringTableColumnBase<string>
+    internal sealed class FixedStringDecodedTableColumn : FixedStringTableColumnBase<string>
     {
-        public StringTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments)
-            : base(encoding, layouts, segments)
+        public FixedStringDecodedTableColumn(Memory<byte> buffer, int rowSize, Encoding encoding)
+            : base(buffer, rowSize, encoding)
         {
         }
 
         protected override string GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
-            if (span.IsEmpty)
+            var charCount = encoding.GetCharCount(span);
+            var charSpan = new Span<char>(new char[charCount]);
+
+            encoding.GetChars(span, charSpan);
+
+            int pos;
+            for (pos = charSpan.Length - 1; pos >= 0; pos--)
+            {
+                if (charSpan[pos] != 0)
+                    break;
+            }
+
+            charSpan = charSpan.Slice(0, pos + 1);
+            if (charSpan.IsEmpty)
                 return string.Empty;
 
-            return encoding.GetString(span);
+            return new string(charSpan);
         }
     }
 }

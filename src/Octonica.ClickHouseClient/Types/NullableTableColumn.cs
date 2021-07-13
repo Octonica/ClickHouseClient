@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -93,6 +93,20 @@ namespace Octonica.ClickHouseClient.Types
         public static IClickHouseTableColumn<T>? TryMakeNullableColumn<T>(BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
         {
             return (IClickHouseTableColumn<T>?) TryMakeNullableColumn(typeof(T), nullFlags, notNullableColumn);
+        }
+
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
+        public static IClickHouseArrayTableColumn<T>? TryMakeNullableArrayColumn<T>(IClickHouseTableColumn reinterpretationRoot, BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
+        {
+            var notNullableArrayColumn = notNullableColumn as IClickHouseArrayTableColumn<T> ?? notNullableColumn.TryReinterpretAsArray<T>();
+            if (notNullableArrayColumn == null)
+                return null;
+
+            return new NullableArrayTableColumn<T>(reinterpretationRoot, nullFlags, notNullableArrayColumn);
         }
 
         private static IClickHouseTableColumn? TryMakeNullableColumn(Type underlyingType, BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
@@ -204,6 +218,11 @@ namespace Octonica.ClickHouseClient.Types
             return NullableTableColumn.TryMakeNullableColumn<T>(_nullFlags, _baseColumn);
         }
 
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             return (object?) GetValue(index) ?? DBNull.Value;
@@ -250,6 +269,11 @@ namespace Octonica.ClickHouseClient.Types
             return NullableTableColumn.TryMakeNullableColumn<T>(_nullFlags, _baseColumn);
         }
 
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             if (_nullFlags != null && _nullFlags[index])
@@ -291,9 +315,61 @@ namespace Octonica.ClickHouseClient.Types
             return NullableTableColumn.TryMakeNullableColumn<T>(_nullFlags, _baseColumn);
         }
 
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             return (object?) GetValue(index) ?? DBNull.Value;
+        }
+    }
+
+    internal sealed class NullableArrayTableColumn<TElement> : IClickHouseArrayTableColumn<TElement>
+    {
+        private readonly IClickHouseTableColumn _reinterpretationRoot;
+        private readonly BitArray? _nullFlags;
+        private readonly IClickHouseArrayTableColumn<TElement> _arrayColumn;
+
+        public int RowCount => throw new NotImplementedException();
+
+        public NullableArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, BitArray? nullFlags, IClickHouseArrayTableColumn<TElement> arrayColumn)
+        {
+            _reinterpretationRoot = reinterpretationRoot;
+            _nullFlags = nullFlags;
+            _arrayColumn = arrayColumn;
+        }
+
+        public object GetValue(int index)
+        {
+            if (_nullFlags != null && _nullFlags[index])
+                return DBNull.Value;
+
+            return _arrayColumn.GetValue(index);
+        }
+
+        public bool IsNull(int index)
+        {
+            return (_nullFlags != null && _nullFlags[index]) || _arrayColumn.IsNull(index);
+        }
+
+        public IClickHouseTableColumn<T>? TryReinterpret<T>()
+        {
+            return _reinterpretationRoot as IClickHouseTableColumn<T> ?? _reinterpretationRoot.TryReinterpret<T>();
+        }
+
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            return _reinterpretationRoot as IClickHouseArrayTableColumn<T> ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
+        }
+
+        public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
+        {
+            if (_nullFlags != null && _nullFlags[index])
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.");
+
+            return _arrayColumn.CopyTo(index, buffer, dataOffset);
         }
     }
 }

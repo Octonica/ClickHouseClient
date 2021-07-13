@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,23 +15,19 @@
  */
 #endregion
 
+using System;
+
 namespace Octonica.ClickHouseClient
 {
-    public interface IClickHouseTableColumn
+    public interface IClickHouseArrayTableColumn<TElement> : IClickHouseTableColumn
     {
-        int RowCount { get; }
-
-        bool IsNull(int index);
-
-        object GetValue(int index);
-
-        IClickHouseTableColumn<T>? TryReinterpret<T>();
-
-        IClickHouseArrayTableColumn<T>? TryReinterpretAsArray<T>() => null;
-    }
-
-    public interface IClickHouseTableColumn<out T> : IClickHouseTableColumn
-    {
-        new T GetValue(int index);
+        /// <summary>
+        /// Copies elements from the array to the specified buffer.
+        /// </summary>
+        /// <param name="index">The zero-based index of the row.</param>
+        /// <param name="buffer">The buffer into which to copy data.</param>
+        /// <param name="dataOffset">The index within the row from which to begin the copy operation.</param>
+        /// <returns>The actual number of copied elements.</returns>
+        int CopyTo(int index, Span<TElement> buffer, int dataOffset);
     }
 }

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
-    internal sealed class ArrayTableColumn<TElement> : IClickHouseTableColumn<TElement[]>
+    internal sealed class ArrayTableColumn<TElement> : IClickHouseTableColumn<TElement[]>, IClickHouseArrayTableColumn<TElement>
     {
         private readonly IClickHouseTableColumn<TElement> _column;
         private readonly List<(int offset, int length)> _ranges;
@@ -89,10 +89,10 @@ namespace Octonica.ClickHouseClient.Types
         public TElement[] GetValue(int index)
         {
             var range = _ranges[index];
-            var result = new TElement[range.length];
-            if (result.Length == 0)
-                return result;
+            if (range.length == 0)
+                return Array.Empty<TElement>();
 
+            var result = new TElement[range.length];
             for (int i = 0; i < result.Length; i++)
                 result[i] = _column.GetValue(range.offset + i);
 
@@ -109,9 +109,31 @@ namespace Octonica.ClickHouseClient.Types
             return (IClickHouseTableColumn<T>?) TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
         }
 
+        IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
+        {
+            var reinterpretedColumn = _column as IClickHouseTableColumn<T> ?? _column.TryReinterpret<T>();
+            if (reinterpretedColumn == null)
+                return null;
+
+            return new ReinterpretedArrayTableColumn<T>(this, new ArrayTableColumn<T>(reinterpretedColumn, _ranges));
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             return GetValue(index);
+        }
+
+        public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
+        {
+            var range = _ranges[index];
+            if (dataOffset < 0 || dataOffset > range.length)
+                throw new ArgumentOutOfRangeException(nameof(dataOffset));
+
+            var length = Math.Min(range.length - dataOffset, buffer.Length);
+            for (int i = 0; i < length; i++)
+                buffer[dataOffset + i] = _column.GetValue(range.offset + i);
+
+            return length;
         }
     }
 

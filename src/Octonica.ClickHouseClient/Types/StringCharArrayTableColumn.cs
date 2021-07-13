@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,23 +17,29 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class StringTableColumn : StringTableColumnBase<string>
+    internal sealed class StringCharArrayTableColumn : StringTableColumnBase<char[]>
     {
-        public StringTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments)
+        public StringCharArrayTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments) 
             : base(encoding, layouts, segments)
         {
         }
 
-        protected override string GetValue(Encoding encoding, ReadOnlySpan<byte> span)
+        protected override char[] GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
             if (span.IsEmpty)
-                return string.Empty;
+                return Array.Empty<char>();
 
-            return encoding.GetString(span);
+            var charCount = encoding.GetCharCount(span);
+            var result = new char[charCount];
+
+            var length = encoding.GetChars(span, result);
+            Debug.Assert(length == charCount);
+            return result;            
         }
     }
 }

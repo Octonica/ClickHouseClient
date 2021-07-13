@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,19 +21,21 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class StringTableColumn : StringTableColumnBase<string>
+    internal sealed class StringByteArrayTableColumn : StringTableColumnBase<byte[]>
     {
-        public StringTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments)
+        public StringByteArrayTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments)
             : base(encoding, layouts, segments)
         {
         }
 
-        protected override string GetValue(Encoding encoding, ReadOnlySpan<byte> span)
+        protected override byte[] GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
             if (span.IsEmpty)
-                return string.Empty;
+                return Array.Empty<byte>();
 
-            return encoding.GetString(span);
+            var result = new byte[span.Length];
+            span.CopyTo(result);
+            return result;
         }
     }
 }
