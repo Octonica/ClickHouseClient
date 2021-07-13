@@ -28,8 +28,8 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Date | System.DateTime | | `GetDateTime` |
 | DateTime | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | DateTime64 | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
-| String | string | | `GetString` |
-| FixedString | byte[] | string | |
+| String | string | char[], byte[] | `GetString` |
+| FixedString | byte[] | string, char[] | |
 | UUID | System.Guid | | `GetGuid` |
 | IPv4 | System.Net.IPAddress | string, int, uint | |
 | IPv6 | System.Net.IPAddress | string | |

@@ -1,3 +1,15 @@
+### Octonica.ClickHouseClient release v1.3.1, 2021-07-13
+
+#### New Feature
+
+* Values of the type `FixedString` can be converted to the type `char[]`.
+* Values of the type `String` can be converted to types `char[]` and `byte[]`.
+
+#### Miscellaneous
+
+* Basic interfaces of the column reader were modified. Despite these interfaces are public,
+  they are supposedly used only by an internal part of ClickHouseClient.
+
 ### Octonica.ClickHouseClient release v1.2.1, 2021-06-25
 
 ### New Feature
