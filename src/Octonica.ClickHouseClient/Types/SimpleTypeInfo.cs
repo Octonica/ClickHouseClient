@@ -43,7 +43,7 @@ namespace Octonica.ClickHouseClient.Types
         /// Initializes a new instance of <see cref="SimpleTypeInfo"/> with the specified name.
         /// </summary>
         /// <param name="typeName">The name of the type</param>
-        public SimpleTypeInfo(string typeName)
+        protected SimpleTypeInfo(string typeName)
         {
             TypeName = typeName ?? throw new ArgumentNullException(nameof(typeName));
         }

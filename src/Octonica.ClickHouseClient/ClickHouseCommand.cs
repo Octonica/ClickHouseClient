@@ -34,9 +34,9 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents an SQL statement to execute against a ClickHouse database.
+    /// Represents an SQL statement to execute against a ClickHouse database. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseCommand : DbCommand
+    public sealed class ClickHouseCommand : DbCommand
     {
         private string? _commandText;
         private TimeSpan? _commandTimeout;

@@ -21,9 +21,9 @@ using System;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents a collection of table providers associated with a <see cref="ClickHouseCommand"/>.
+    /// Represents a collection of table providers associated with a <see cref="ClickHouseCommand"/>. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseTableProviderCollection : IndexedCollectionBase<string, IClickHouseTableProvider>
+    public sealed class ClickHouseTableProviderCollection : IndexedCollectionBase<string, IClickHouseTableProvider>
     {
         /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseTableProviderCollection"/> with the default capacity.

@@ -21,9 +21,9 @@ using System.Collections.Generic;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// The default implementation of <see cref="IClickHouseTableProvider"/>.
+    /// The default implementation of <see cref="IClickHouseTableProvider"/>. This class can't be inherited.
     /// </summary>
-    public class ClickHouseTableProvider : IClickHouseTableProvider
+    public sealed class ClickHouseTableProvider : IClickHouseTableProvider
     {
         /// <inheritdoc/>
         public string TableName { get; }

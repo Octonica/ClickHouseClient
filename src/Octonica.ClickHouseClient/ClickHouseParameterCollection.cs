@@ -27,9 +27,9 @@ using System.Linq;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents a collection of parameters associated with a <see cref="ClickHouseCommand"/>.
+    /// Represents a collection of parameters associated with a <see cref="ClickHouseCommand"/>. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseParameterCollection : DbParameterCollection, IList<ClickHouseParameter>, IReadOnlyList<ClickHouseParameter>
+    public sealed class ClickHouseParameterCollection : DbParameterCollection, IList<ClickHouseParameter>, IReadOnlyList<ClickHouseParameter>
     {
         private readonly List<string> _parameterNames = new List<string>();
 

@@ -52,7 +52,7 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         /// <param name="elementSize">The size of a single element in bytes.</param>
         /// <param name="rowCount">The number of rows that the reader should read.</param>
-        public StructureReaderBase(int elementSize, int rowCount)
+        protected StructureReaderBase(int elementSize, int rowCount)
         {
             ElementSize = elementSize;
             _rowCount = rowCount;

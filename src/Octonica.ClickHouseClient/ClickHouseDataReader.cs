@@ -29,9 +29,9 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Provides a way of reading a forward-only stream of rows from a ClickHouse database.
+    /// Provides a way of reading a forward-only stream of rows from a ClickHouse database. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseDataReader : ClickHouseDataReaderBase
+    public sealed class ClickHouseDataReader : ClickHouseDataReaderBase
     {
         private readonly BlockHeader _blockHeader;
         private readonly ClickHouseTcpClient.Session _session;

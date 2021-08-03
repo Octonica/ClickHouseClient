@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ namespace Octonica.ClickHouseClient.Protocol
     /// <summary>
     /// https://github.com/ClickHouse/ClickHouse/blob/master/src/Core/BlockInfo.h
     /// </summary>
-    public static class BlockFieldCodes
+    internal static class BlockFieldCodes
     {
         public const int End = 0;
 

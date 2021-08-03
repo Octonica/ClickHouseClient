@@ -183,7 +183,7 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
-    public sealed class NullableStructTableColumn<TStruct> : IClickHouseTableColumn<TStruct?>
+    internal sealed class NullableStructTableColumn<TStruct> : IClickHouseTableColumn<TStruct?>
         where TStruct : struct
     {
         private readonly BitArray? _nullFlags;
@@ -283,7 +283,7 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
-    public sealed class NullableObjTableColumn<TObj> : IClickHouseTableColumn<TObj?>
+    internal sealed class NullableObjTableColumn<TObj> : IClickHouseTableColumn<TObj?>
         where TObj : class
     {
         private readonly BitArray _nullFlags;

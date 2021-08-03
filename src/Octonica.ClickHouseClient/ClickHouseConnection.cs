@@ -34,9 +34,9 @@ using TimeZoneConverter;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents a connection to a ClickHouse database.
+    /// Represents a connection to a ClickHouse database. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseConnection : DbConnection
+    public sealed class ClickHouseConnection : DbConnection
     {
         private const int MinBufferSize = 32;
 

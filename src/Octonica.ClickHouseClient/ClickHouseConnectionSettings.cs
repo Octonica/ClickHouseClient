@@ -20,9 +20,9 @@ using System;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents an immutable set of properties applied to the connection.
+    /// Represents an immutable set of properties applied to the connection. This class can't be inherited.
     /// </summary>
-    public class ClickHouseConnectionSettings
+    public sealed class ClickHouseConnectionSettings
     {
         /// <summary>
         /// Gets the name or the IP address of the host.

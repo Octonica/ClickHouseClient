@@ -32,9 +32,9 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents a parameter to a <see cref="ClickHouseCommand"/>.
+    /// Represents a parameter to a <see cref="ClickHouseCommand"/>. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseParameter : DbParameter, ICloneable
+    public sealed class ClickHouseParameter : DbParameter, ICloneable
     {
         // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
         private static readonly Regex ParameterNameRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*$");

@@ -26,9 +26,9 @@ using System.Globalization;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Represents a collection of columns associated with a <see cref="ClickHouseTableProvider"/>.
+    /// Represents a collection of columns associated with a <see cref="ClickHouseTableProvider"/>. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseTableColumnCollection : IndexedCollectionBase<string, ClickHouseTableColumn>
+    public sealed class ClickHouseTableColumnCollection : IndexedCollectionBase<string, ClickHouseTableColumn>
     {
         /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseTableColumnCollection"/> with the default capacity.

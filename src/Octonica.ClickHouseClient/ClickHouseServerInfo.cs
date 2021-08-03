@@ -20,9 +20,9 @@ using System;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Describes a ClickHouse server.
+    /// Describes a ClickHouse server. This class can't be inherited.
     /// </summary>
-    public class ClickHouseServerInfo
+    public sealed class ClickHouseServerInfo
     {
         /// <summary>
         /// Gets the name of the server provided by the server when opening a connection.

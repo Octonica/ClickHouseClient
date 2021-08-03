@@ -33,9 +33,9 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
-    /// Provides a way of writing set of columns to a ClickHouse database.
+    /// Provides a way of writing set of columns to a ClickHouse database. This class cannot be inherited.
     /// </summary>
-    public class ClickHouseColumnWriter : IDisposable, IAsyncDisposable
+    public sealed class ClickHouseColumnWriter : IDisposable, IAsyncDisposable
     {
         private readonly ClickHouseTcpClient.Session _session;
 
