@@ -1,5 +1,5 @@
-﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+#region License Apache 2.0
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +19,47 @@ using System;
 
 namespace Octonica.ClickHouseClient.Exceptions
 {
+    /// <summary>
+    /// Represents an exception specific to ClickHouse client or server.
+    /// </summary>
     public class ClickHouseException : Exception
     {
+        /// <summary>
+        /// The numeric code of the error. For the full list of errors see <see cref="ClickHouseErrorCodes"/>.
+        /// </summary>
         public int ErrorCode { get; }
 
+        /// <summary>
+        /// Initializes a new instance of the exception with the specified error code.
+        /// </summary>
+        /// <param name="errorCode">The code of the error. It should be one of the values from <see cref="ClickHouseErrorCodes"/>.</param>
         public ClickHouseException(int errorCode)
         {
             ErrorCode = errorCode;
         }
 
-        public ClickHouseException(int errorCode, string message)
+        /// <summary>
+        /// Initializes a new instance of the exception with specified error code and message.
+        /// </summary>
+        /// <param name="errorCode">The code of the error. It should be one of the values from <see cref="ClickHouseErrorCodes"/>.</param>
+        /// <param name="message">The error message that explains the reason for the exception.</param>
+        public ClickHouseException(int errorCode, string? message)
             : base(message)
         {
             ErrorCode = errorCode;
         }
 
-        public ClickHouseException(int errorCode, string message, Exception innerException)
+        /// <summary>
+        /// Initializes a new instance of the exception with specified error code, message, and inner exception.
+        /// </summary>
+        /// <param name="errorCode">The code of the error. It should be one of the values from <see cref="ClickHouseErrorCodes"/>.</param>
+        /// <param name="message">The error message that explains the reason for the exception.</param>
+        /// <param name="innerException">The exception that is the cause of the current exception.</param>
+        public ClickHouseException(int errorCode, string? message, Exception? innerException)
             : base(message, innerException)
         {
             ErrorCode = errorCode;
         }
     }
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

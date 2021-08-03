@@ -32,6 +32,9 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Provides a way of writing set of columns to a ClickHouse database.
+    /// </summary>
     public class ClickHouseColumnWriter : IDisposable, IAsyncDisposable
     {
         private readonly ClickHouseTcpClient.Session _session;
@@ -42,14 +45,21 @@ namespace Octonica.ClickHouseClient
 
         private int? _rowsPerBlock;
 
+        /// <summary>
+        /// Gets the number of fields (columns) in the table.
+        /// </summary>
         public int FieldCount => _columns.Count;
 
+        /// <summary>
+        /// Gets the value indicating whether the writer is closed.
+        /// </summary>
+        /// <returns><see langword="true"/> if the reader is closed; otherwise <see langword="false"/>.</returns>
         public bool IsClosed => _session.IsDisposed || _session.IsFailed;
 
         /// <summary>
-        /// The maximal number of rows in a single block of data. 
-        /// <b>null</b> if the size of block is not limited.
+        /// Gets or sets the maximal number of rows in a single block of data.
         /// </summary>
+        /// <returns>The maximal number of rows in a single block of data. <see langword="null"/> if the size of the block is not limited.</returns>
         public int? MaxBlockSize
         {
             get => _rowsPerBlock;
@@ -75,6 +85,7 @@ namespace Octonica.ClickHouseClient
                 MaxBlockSize = 8800 - 8 * columns.Count;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.ConfigureColumn(string, ClickHouseColumnSettings)"/>
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
         {
             var index = GetOrdinal(name);
@@ -84,6 +95,7 @@ namespace Octonica.ClickHouseClient
             ConfigureColumn(index, columnSettings);
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.ConfigureColumn(int, ClickHouseColumnSettings)"/>
         public void ConfigureColumn(int ordinal, ClickHouseColumnSettings columnSettings)
         {
             if (_columnSettings == null)
@@ -92,6 +104,7 @@ namespace Octonica.ClickHouseClient
             _columnSettings[ordinal] = columnSettings;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.ConfigureDataReader(ClickHouseColumnSettings)"/>
         public void ConfigureColumnWriter(ClickHouseColumnSettings columnSettings)
         {
             if (_columnSettings == null)
@@ -101,21 +114,25 @@ namespace Octonica.ClickHouseClient
                 _columnSettings[i] = columnSettings;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.GetFieldTypeInfo(int)"/>
         public IClickHouseTypeInfo GetFieldTypeInfo(int ordinal)
         {
             return _columns[ordinal].TypeInfo;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.GetName(int)"/>
         public string GetName(int ordinal)
         {
             return _columns[ordinal].Name;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.GetDataTypeName(int)"/>
         public string GetDataTypeName(int ordinal)
         {
             return _columns[ordinal].TypeInfo.ComplexTypeName;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.GetFieldType(int)"/>
         public Type GetFieldType(int ordinal)
         {
             // This method should implement the same logic as ClickHouseDataReader.GetFieldType
@@ -125,6 +142,7 @@ namespace Octonica.ClickHouseClient
             return Nullable.GetUnderlyingType(type) ?? type;
         }
 
+        /// <inheritdoc cref="ClickHouseDataReader.GetOrdinal(string)"/>
         public int GetOrdinal(string name)
         {
             if (name == null)
@@ -133,21 +151,40 @@ namespace Octonica.ClickHouseClient
             return CommonUtils.GetColumnIndex(_columns, name);
         }
 
+        /// <summary>
+        /// Writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param> 
         public void WriteRow(params object?[] values)
         {
             TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>        
         public void WriteRow(IReadOnlyCollection<object?> values)
         {
             TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Asyncronously writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values)
         {
             await WriteRow(values, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Asyncronously writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values, CancellationToken cancellationToken)
         {
             await WriteRow(values, true, cancellationToken);
@@ -243,21 +280,71 @@ namespace Octonica.ClickHouseClient
             await SendTable(table, async, cancellationToken);
         }
 
+        /// <summary>
+        /// Writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The <see cref="IReadOnlyDictionary{TKey, TValue}"/> object that provides access to columns by their names.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
         public void WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount)
         {
             TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The list of columns.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
         public void WriteTable(IReadOnlyList<object?> columns, int rowCount)
         {
             TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Asyncronously writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The <see cref="IReadOnlyDictionary{TKey, TValue}"/> object that provides access to columns by their names.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteTableAsync(IReadOnlyDictionary<string, object?> columns, int rowCount, CancellationToken cancellationToken)
         {
             await WriteTable(columns, rowCount, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Asyncronously writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The list of columns.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteTableAsync(IReadOnlyList<object?> columns, int rowCount, CancellationToken cancellationToken)
         {
             await WriteTable(columns, rowCount, true, cancellationToken);
@@ -334,11 +421,19 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Closes the writer and releases all resources associated with it.
+        /// </summary>
         public void EndWrite()
         {
             TaskHelper.WaitNonAsyncTask(EndWrite(false, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Asyncronously closes the writer and releases all resources associated with it.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task EndWriteAsync(CancellationToken cancellationToken)
         {
             await EndWrite(false, true, cancellationToken);
@@ -398,11 +493,18 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Closes the writer and releases all resources associated with it.
+        /// </summary>
         public void Dispose()
         {
             TaskHelper.WaitNonAsyncTask(Dispose(false));
         }
 
+        /// <summary>
+        /// Asyncronously closes the writer and releases all resources associated with it.
+        /// </summary>
+        /// <returns>A <see cref="ValueTask"/> representing asyncronous operation.</returns>
         public ValueTask DisposeAsync()
         {
             return Dispose(true);

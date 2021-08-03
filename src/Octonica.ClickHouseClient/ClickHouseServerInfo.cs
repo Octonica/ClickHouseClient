@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +19,44 @@ using System;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Describes a ClickHouse server.
+    /// </summary>
     public class ClickHouseServerInfo
     {
+        /// <summary>
+        /// Gets the name of the server provided by the server when opening a connection.
+        /// </summary>
         public string Name { get; }
 
+        /// <summary>
+        /// Gets the version of the server.
+        /// </summary>
         public ClickHouseVersion Version { get; }
 
+        /// <summary>
+        /// Gets the revision of the ClickHouse binary protocol negotiated between the client and the server.
+        /// </summary>
         public int Revision { get; }
 
+        /// <summary>
+        /// Gets the default timezone of the server.
+        /// </summary>
         public string Timezone { get; }
 
+        /// <summary>
+        /// Gets the display name of the server provided by the server when opening a connection.
+        /// </summary>
         public string DisplayName { get; }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseServerInfo"/> with specified arguments.
+        /// </summary>
+        /// <param name="name">The name of the server provided by the server when opening a connection.</param>
+        /// <param name="version">The version of the server.</param>
+        /// <param name="revision">The revision of the ClickHouse binary protocol negotiated between the client and the server.</param>
+        /// <param name="timezone">The default timezone of the server.</param>
+        /// <param name="displayName">The display name of the server provided by the server when opening a connection.</param>
         public ClickHouseServerInfo(string name, ClickHouseVersion version, int revision, string timezone, string displayName)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));

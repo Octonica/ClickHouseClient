@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,29 @@
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// The static class that provides access to the ClickHouse's binary protocol revision numbers.
+    /// </summary>
     public static class Revisions
     {
+        /// <summary>
+        /// The number of the current revision. It is the latest revision supported by the client.
+        /// </summary>
         public const int CurrentRevision = 54441;
+
+        /// <summary>
+        /// The number of the protocol's revision that supports interserver secret.
+        /// </summary>
         public const int MinRevisionWithInterserverSecret = 54441;
+
+        /// <summary>
+        /// The number of the protocol's revision with settings serialized as strings.
+        /// </summary>
         public const int MinRevisionWithSettingsSerializedAsStrings = 54429;
+
+        /// <summary>
+        /// The minimal number of the revision supported by the client.
+        /// </summary>
         public const int MinSupportedRevision = 54423;
     }
 }

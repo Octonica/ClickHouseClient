@@ -17,21 +17,58 @@
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// The basic interface for <see cref="ClickHouseDataReader"/>'s internal columns.
+    /// </summary>
     public interface IClickHouseTableColumn
     {
+        /// <summary>
+        /// Gets the number of rows in the column.
+        /// </summary>
         int RowCount { get; }
 
+        /// <summary>
+        /// Gets the value indicating whether an actual value at the specified index is NULL.
+        /// </summary>
+        /// <param name="index">The zero-based index of row.</param>
+        /// <returns><see langword="true"/> if an actual value at the specified index is NULL; otherwise <see langword="false"/>.</returns>
         bool IsNull(int index);
 
+        /// <summary>
+        /// Gets the value at the specified index.
+        /// </summary>
+        /// <param name="index">The zero-based index of row.</param>
+        /// <returns>The value at the specified index or <see cref="System.DBNull.Value"/> if the value is NULL.</returns>
         object GetValue(int index);
 
+        /// <summary>
+        /// Makes an attempt to convert this column to a column with the values of the type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The desired type of column's values.</typeparam>
+        /// <returns>The column converted to the type <see cref="IClickHouseTableColumn{T}"/> or <see langword="null"/> if such conversion is not supported.</returns>
+        /// <remarks>This method may or may not return <see langword="null"/> when the column itself implements the interface <see cref="IClickHouseTableColumn{T}"/>.</remarks>
         IClickHouseTableColumn<T>? TryReinterpret<T>();
 
+        /// <summary>
+        /// Makes an attempt to convert this column to an array column with the type of array's element <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The desired type of array elements.</typeparam>
+        /// <returns>The column converted to the type <see cref="IClickHouseArrayTableColumn{T}"/> or <see langword="null"/> if such conversion is not supported.</returns>
+        /// <remarks>This method may or may not return <see langword="null"/> when the column itself implements the interface <see cref="IClickHouseArrayTableColumn{T}"/>.</remarks>
         IClickHouseArrayTableColumn<T>? TryReinterpretAsArray<T>() => null;
     }
 
+    /// <summary>
+    /// The generic interface for <see cref="ClickHouseDataReader"/>'s internal columns.
+    /// </summary>
     public interface IClickHouseTableColumn<out T> : IClickHouseTableColumn
     {
+        /// <summary>
+        /// Gets the value at the specified index.
+        /// </summary>
+        /// <param name="index">The zero-based index of row.</param>
+        /// <returns>The value at the specified index.</returns>
+        /// <remarks>This method should never return <see langword="null"/>.</remarks>
         new T GetValue(int index);
     }
 }

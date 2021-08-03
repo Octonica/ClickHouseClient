@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,26 @@ using System;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// The base interface for an object capable of sequential writing column's data to a binary buffer.
+    /// </summary>
     public interface IClickHouseColumnWriter
     {
+        /// <summary>
+        /// The name of the column to write data to.
+        /// </summary>
         string ColumnName { get; }
 
+        /// <summary>
+        /// The full name of the ClickHouse type of the column.
+        /// </summary>
         string ColumnType { get; }
 
+        /// <summary>
+        /// Writes next block of data to the target span.
+        /// </summary>
+        /// <param name="writeTo">The buffer to write data to.</param>
+        /// <returns>The length of written data or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.</returns>
         SequenceSize WriteNext(Span<byte> writeTo);
     }
 }

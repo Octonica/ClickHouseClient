@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,17 @@
 
 namespace Octonica.ClickHouseClient.Types
 {
+    /// <summary>
+    /// Represents basic information about the ClickHouse type that depends on the server's settings.
+    /// Provides access to factory methods for creating column readers and writers.
+    /// </summary>
     public interface IClickHouseConfigurableTypeInfo : IClickHouseColumnTypeInfo
     {
+        /// <summary>
+        /// Returns the <see cref="IClickHouseColumnTypeInfo"/> that represents the type with the specified settings.
+        /// </summary>
+        /// <param name="serverInfo">Information about the server.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that represents the type with the specified settings.</returns>
         IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo);
     }
 }

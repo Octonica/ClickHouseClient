@@ -28,6 +28,9 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Provides a way of reading a forward-only stream of rows from a ClickHouse database.
+    /// </summary>
     public class ClickHouseDataReader : ClickHouseDataReaderBase
     {
         private readonly BlockHeader _blockHeader;
@@ -44,8 +47,17 @@ namespace Octonica.ClickHouseClient
         private IClickHouseTableColumn[] _reinterpretedColumnsCache;
         private ClickHouseColumnSettings?[]? _columnSettings;
 
+        /// <summary>
+        /// Gets the current state of the reader.
+        /// </summary>
         public ClickHouseDataReaderState State { get; private set; }
 
+        /// <summary>
+        /// Gets the number of affected rows.
+        /// </summary>
+        /// <returns>A non-negative number of rows affected by the query.</returns>
+        /// <exception cref="OverflowException">The number of affected rows is greater than <see cref="int.MaxValue"/>.</exception>
+        /// <remarks>Use the property <see cref="RecordsAffectedLong"/> if the query can affect more than <see cref="int.MaxValue"/> rows .</remarks>
         public override int RecordsAffected
         {
             get
@@ -57,14 +69,33 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets the number of affected rows.
+        /// </summary>
+        /// <returns>A number of rows affected by the query.</returns>
         public ulong RecordsAffectedLong => _recordsAffected;
 
+        /// <summary>
+        /// Gets a value that indicates whether the reader contains one or more rows.
+        /// </summary>
+        /// /// <returns><see langword="true"/> if the reader contains one or more rows; otherwise <see langword="false"/>.</returns>
         public override bool HasRows => _rowIndex < 0 || _recordsAffected > 0;
 
+        /// <summary>
+        /// Gets the value indicating whether the reader is closed.
+        /// </summary>
+        /// <returns><see langword="true"/> if the reader is closed; otherwise <see langword="false"/>.</returns>
         public override bool IsClosed => State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken;
 
+        /// <summary>
+        /// Gets the number of columns.
+        /// </summary>
         public override int FieldCount => _blockHeader.Columns.Count;
 
+        /// <summary>
+        /// Gets a value that indicates the depth of nesting for the current row.
+        /// </summary>
+        /// <returns>Always returns 0.</returns>
         public override int Depth => 0;
 
         internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseDataReaderRowLimit rowLimit)
@@ -78,6 +109,12 @@ namespace Octonica.ClickHouseClient
             State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumn
+        /// <summary>
+        /// Applies the settings to the specified column.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="columnSettings">The settings.</param>
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
         {
             var index = GetOrdinal(name);
@@ -87,6 +124,12 @@ namespace Octonica.ClickHouseClient
             ConfigureColumn(index, columnSettings);
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumn
+        /// <summary>
+        /// Applies the settings to the specified column.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="columnSettings">The settings.</param>
         public void ConfigureColumn(int ordinal, ClickHouseColumnSettings columnSettings)
         {
             if (_rowIndex >= 0)
@@ -98,6 +141,11 @@ namespace Octonica.ClickHouseClient
             _columnSettings[ordinal] = columnSettings;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumnWriter
+        /// <summary>
+        /// Applies the settings to all columns. All previously applied settings are discarded.
+        /// </summary>
+        /// <param name="columnSettings">The settings.</param>
         public void ConfigureDataReader(ClickHouseColumnSettings columnSettings)
         {
             if (_rowIndex >= 0)
@@ -110,21 +158,45 @@ namespace Octonica.ClickHouseClient
                 _columnSettings[i] = columnSettings;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.GetFieldTypeInfo
+        /// <summary>
+        /// Gets the <see cref="IClickHouseTypeInfo"/> which represents information about the type of the column.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The <see cref="IClickHouseTypeInfo"/> which represents information about the type of the column.</returns>
         public IClickHouseTypeInfo GetFieldTypeInfo(int ordinal)
         {
             return _blockHeader.Columns[ordinal].TypeInfo;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.GetName
+        /// <summary>
+        /// Gets the name of the specified column.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The name of the specified column.</returns>
         public sealed override string GetName(int ordinal)
         {
             return _blockHeader.Columns[ordinal].Name;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.GetDataTypeName
+        /// <summary>
+        /// Gets the name of the data type of the specified column.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The string representing the data type of the specified column.</returns>
         public sealed override string GetDataTypeName(int ordinal)
         {
             return _blockHeader.Columns[ordinal].TypeInfo.ComplexTypeName;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.GetFieldType
+        /// <summary>
+        /// Gets the <see cref="Type"/> that is the data type of the object.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The <see cref="Type"/> that is the data type of the object.</returns>
         public override Type GetFieldType(int ordinal)
         {
             // This method must return the type of a value returned by GetValue.
@@ -136,6 +208,12 @@ namespace Octonica.ClickHouseClient
             return Nullable.GetUnderlyingType(type) ?? type;
         }
 
+        // Note that this xml comment is inherited by ClickHouseColumnWriter.GetOrdinal
+        /// <summary>
+        /// Gets the column ordinal, given the name of the column.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <returns>The zero-based column ordinal.</returns>
         public sealed override int GetOrdinal(string name)
         {
             if (name == null)
@@ -144,6 +222,15 @@ namespace Octonica.ClickHouseClient
             return CommonUtils.GetColumnIndex(_blockHeader.Columns, name);
         }
 
+        /// <summary>
+        /// Reads the value as an array of <see cref="byte"/> and copies values from it to the buffer.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="dataOffset">The index within the field from which to begin the read operation.</param>
+        /// <param name="buffer">The buffer into which to copy bytes.</param>
+        /// <param name="bufferOffset">The index within the <paramref name="buffer"/> where the write operation is to start.</param>
+        /// <param name="length">The maximum length to copy into the buffer.</param>
+        /// <returns>The actual number of bytes copied.</returns>
         public sealed override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length)
         {
             var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<byte>;
@@ -181,6 +268,15 @@ namespace Octonica.ClickHouseClient
             return resultLength;
         }
 
+        /// <summary>
+        /// Reads the value as a <see cref="string"/> and copies characters from it to the buffer.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="dataOffset">The index within the field from which to begin the read operation.</param>
+        /// <param name="buffer">The buffer into which to copy characters of the string.</param>
+        /// <param name="bufferOffset">The index within the <paramref name="buffer"/> where the write operation is to start.</param>
+        /// <param name="length">The maximum length to copy into the buffer.</param>
+        /// <returns>The actual number of characters copied.</returns>
         public sealed override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
         {
             var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<char>;
@@ -218,77 +314,155 @@ namespace Octonica.ClickHouseClient
             return resultLength;
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="bool"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override bool GetBoolean(int ordinal)
         {
             return GetFieldValue<bool>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="byte"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override byte GetByte(int ordinal)
         {
             return GetFieldValue<byte>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="char"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override char GetChar(int ordinal)
         {
             return GetFieldValue<char>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="DateTime"/> object.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override DateTime GetDateTime(int ordinal)
         {
             return GetFieldValue<DateTime>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="decimal"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override decimal GetDecimal(int ordinal)
         {
             return GetFieldValue<decimal>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="double"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override double GetDouble(int ordinal)
         {
             return GetFieldValue<double>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="float"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override float GetFloat(int ordinal)
         {
             return GetFieldValue<float>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a globally unique identifier (<see cref="Guid"/>).
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override Guid GetGuid(int ordinal)
         {
             return GetFieldValue<Guid>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="short"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override short GetInt16(int ordinal)
         {
             return GetFieldValue<short>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an <see cref="int"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override int GetInt32(int ordinal)
         {
             return GetFieldValue<int>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="long"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override long GetInt64(int ordinal)
         {
             return GetFieldValue<long>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an instance of <see cref="string"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override string GetString(int ordinal)
         {
             return GetFieldValue<string>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an instance of <see cref="string"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="nullValue">The default value which should be returned if the value of the specified column is <see cref="DBNull.Value"/>.</param>
+        /// <returns>The value of the specified column or <paramref name="nullValue"/> if the value of the column is <see cref="DBNull.Value"/>.</returns>
         [return: NotNullIfNotNull("nullValue")]
         public string? GetString(int ordinal, string? nullValue)
         {
             return GetFieldValue(ordinal, nullValue);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="DateTimeOffset"/> object.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public DateTimeOffset GetDateTimeOffset(int ordinal)
         {
             return GetFieldValue<DateTimeOffset>(ordinal);
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an object of the type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the column's value.</typeparam>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="nullValue">The default value which should be returned if the value of the specified column is <see cref="DBNull.Value"/>.</param>
+        /// <returns>The value of the specified column or <paramref name="nullValue"/> if the value of the column is <see cref="DBNull.Value"/>.</returns>
         [return: NotNullIfNotNull("nullValue")]
         public T? GetFieldValue<T>(int ordinal, T? nullValue)
             where T : class
@@ -315,6 +489,7 @@ namespace Octonica.ClickHouseClient
             return (T) value;
         }
 
+        /// <inheritdoc cref="GetFieldValue{T}(int, T)"/>
         [return: NotNullIfNotNull("nullValue")]
         public T? GetFieldValue<T>(int ordinal, T? nullValue)
             where T : struct
@@ -352,6 +527,12 @@ namespace Octonica.ClickHouseClient
             return (T) value;
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an object of the type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the column's value.</typeparam>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
         public sealed override T GetFieldValue<T>(int ordinal)
         {
             CheckRowIndex();
@@ -376,6 +557,11 @@ namespace Octonica.ClickHouseClient
             return (T) value;
         }
 
+        /// <summary>
+        /// Gets the value of the specified column as an <see cref="object"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column or <see cref="DBNull.Value"/>.</returns>
         public sealed override object GetValue(int ordinal)
         {
             CheckRowIndex();
@@ -383,6 +569,11 @@ namespace Octonica.ClickHouseClient
             return column.IsNull(_rowIndex) ? DBNull.Value : column.GetValue(_rowIndex);
         }
 
+        /// <summary>
+        /// Populates an array of objects with the column values of the current row.
+        /// </summary>
+        /// <param name="values">An array of <see cref="object"/> into which to copy the attribute columns.</param>
+        /// <returns>The number of instances of <see cref="object"/> in the array.</returns>
         public sealed override int GetValues(object[] values)
         {
             CheckRowIndex();
@@ -399,6 +590,11 @@ namespace Octonica.ClickHouseClient
             return count;
         }
 
+        /// <summary>
+        /// Gets a value that indicates whether the column contains non-existent or missing values.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns><see langword="true"/> if the specified column is equivalent to <see cref="DBNull.Value"/>. Otherwise <see langword="false"/>.</returns>
         public sealed override bool IsDBNull(int ordinal)
         {
             CheckRowIndex();
@@ -406,8 +602,14 @@ namespace Octonica.ClickHouseClient
             return column.IsNull(_rowIndex);
         }
 
+        /// <inheritdoc cref="GetValue(int)"/>
         public sealed override object this[int ordinal] => GetValue(ordinal);
 
+        /// <summary>
+        /// Gets the value of the specified column as an <see cref="object"/>.
+        /// </summary>
+        /// <param name="name">The name of the column.</param>
+        /// <returns>The value of the specified column or <see cref="DBNull.Value"/>.</returns>
         public sealed override object this[string name]
         {
             get
@@ -420,21 +622,41 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Advances the reader to the next record in a result set.
+        /// </summary>
+        /// <returns><see langword="true"/> if there are more rows or <see langword="false"/> if there aren't.</returns>
         public sealed override bool Read()
         {
             return TaskHelper.WaitNonAsyncTask(Read(false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Asyncronously advances the reader to the next record in a result set.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="ValueTask{TResult}"/> whose <see cref="ValueTask{TResult}.Result"/> is
+        /// <see langword="true"/> if there are more rows or <see langword="false"/> if there aren't.
+        /// </returns>
         public new ValueTask<bool> ReadAsync()
         {
             return Read(true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Asyncronously advances the reader to the next record in a result set.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="ValueTask{TResult}"/> whose <see cref="ValueTask{TResult}.Result"/> is
+        /// <see langword="true"/> if there are more rows or <see langword="false"/> if there aren't.
+        /// </returns>
         public new ValueTask<bool> ReadAsync(CancellationToken cancellationToken)
         {
             return Read(true, cancellationToken);
         }
 
+        /// <inheritdoc cref="ClickHouseDataReaderBase.ReadAsync(CancellationToken)"/>
         protected sealed override async Task<bool> ReadAsyncInternal(CancellationToken cancellationToken)
         {
             return await Read(true, cancellationToken);
@@ -625,11 +847,21 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Asyncronously advances the reader to the next result set. The ClickHouse server can send totals or extremes as additional result sets.
+        /// </summary>
+        /// <returns>A <see cref="Task{T}"/> representing asyncronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// <see langword="true"/> if there are more result sets; otherwise <see langword="false"/>
+        /// </returns>
         public override async Task<bool> NextResultAsync(CancellationToken cancellationToken)
         {
             return await NextResult(true, cancellationToken);
         }
 
+        /// <summary>
+        /// Advances the reader to the next result set. The ClickHouse server can send totals or extremes as additional result sets.
+        /// </summary>
+        /// <returns><see langword="true"/> if there are more result sets; otherwise <see langword="false"/></returns>
         public override bool NextResult()
         {
             return TaskHelper.WaitNonAsyncTask(NextResult(false, CancellationToken.None));
@@ -674,11 +906,18 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Closes the reader.
+        /// </summary>
         public override void Close()
         {
             TaskHelper.WaitNonAsyncTask(Close(false, false));
         }
 
+        /// <summary>
+        /// Asyncronously closes the reader.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asyncronous operation.</returns>
         public override async Task CloseAsync()
         {
             await Close(false, true);
@@ -768,6 +1007,7 @@ namespace Octonica.ClickHouseClient
             await _session.Dispose(async);
         }
 
+        /// <inheritdoc/>
         protected override void Dispose(bool disposing)
         {
             if (!disposing)
@@ -776,6 +1016,7 @@ namespace Octonica.ClickHouseClient
             TaskHelper.WaitNonAsyncTask(Close(true, false));
         }
 
+        /// <inheritdoc/>
         public override ValueTask DisposeAsync()
         {
             return Close(true, true);
@@ -790,6 +1031,10 @@ namespace Octonica.ClickHouseClient
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"There are no rows to read. The call of the method {nameof(Read)} is required.");
         }
 
+        /// <summary>
+        /// Not supported. An enumerator iterating through the rows of the reader is not implemented.
+        /// </summary>
+        /// <exception cref="NotImplementedException">Always throws <see cref="NotImplementedException"/>.</exception>
         public override IEnumerator GetEnumerator()
         {
             throw new NotImplementedException();

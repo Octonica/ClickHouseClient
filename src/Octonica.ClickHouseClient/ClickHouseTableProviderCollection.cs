@@ -20,18 +20,29 @@ using System;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents a collection of table providers associated with a <see cref="ClickHouseCommand"/>.
+    /// </summary>
     public class ClickHouseTableProviderCollection : IndexedCollectionBase<string, IClickHouseTableProvider>
     {
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseTableProviderCollection"/> with the default capacity.
+        /// </summary>
         public ClickHouseTableProviderCollection()
             : base(StringComparer.OrdinalIgnoreCase)
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseTableProviderCollection"/> with the specified capacity capacity.
+        /// </summary>
+        /// <param name="capacity">The initial number of elements that the collection can contain.</param>
         public ClickHouseTableProviderCollection(int capacity)
             : base(capacity, StringComparer.OrdinalIgnoreCase)
         {
         }
 
+        /// <inheritdoc/>
         protected sealed override string GetKey(IClickHouseTableProvider item)
         {
             return item.TableName;

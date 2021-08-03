@@ -31,6 +31,9 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents a parameter to a <see cref="ClickHouseCommand"/>.
+    /// </summary>
     public class ClickHouseParameter : DbParameter, ICloneable
     {
         // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
@@ -54,14 +57,28 @@ namespace Octonica.ClickHouseClient
 
         internal string Id { get; private set; }
 
+        /// <summary>
+        /// Gets the collection to which this parameter is attached.
+        /// </summary>
         public ClickHouseParameterCollection? Collection { get; internal set; }
 
+        /// <summary>
+        /// Gets or sets the <see cref="ClickHouseDbType"/> of the parameter.
+        /// </summary>
+        /// <returns>One of the <see cref="ClickHouseDbType"/> values. The default value is defined based on the type of the parameter's value.</returns>
         public ClickHouseDbType ClickHouseDbType
         {
             get => _forcedType ?? GetTypeFromValue().DbType;
             set => _forcedType = value;
         }
 
+        /// <summary>
+        /// Gets or sets the <see cref="DbType"/> of the parameter.
+        /// </summary>
+        /// <returns>
+        /// One of the <see cref="DbType"/> values. The default value is defined based on the type of the parameter's value.
+        /// For ClickHouse-specific types returns <see cref="DbType.Object"/>.
+        /// </returns>        
         public override DbType DbType
         {
             get
@@ -75,6 +92,11 @@ namespace Octonica.ClickHouseClient
             set => ClickHouseDbType = (ClickHouseDbType) value;
         }
 
+        /// <summary>
+        /// Gets the direction of the parameter. Always returns <see cref="ParameterDirection.Input"/>.
+        /// </summary>
+        /// <returns>Always returns <see cref="ParameterDirection.Input"/>.</returns>
+        /// <exception cref="NotSupportedException">Throws <see cref="NotSupportedException"/> on attempt to set the value different from <see cref="ParameterDirection.Input"/>.</exception>
         public override ParameterDirection Direction
         {
             get => ParameterDirection.Input;
@@ -85,12 +107,19 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets or sets the value indicating whether the type of the parameter is nullable.
+        /// </summary>
+        /// <returns><see langword="true"/> if the parameter's value can be NULL; otherwise <see langword="false"/>. The default value is defined based on the type of the parameter's value.</returns>
         public override bool IsNullable
         {
             get => _forcedNullable ?? GetTypeFromValue().IsNullable;
             set => _forcedNullable = value;
         }
 
+        /// <summary>
+        /// Gets or sets the name of the parameter.
+        /// </summary>
         [AllowNull]
         public sealed override string ParameterName
         {
@@ -131,6 +160,8 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <inheritdoc/>
+        /// <remarks>This property is ignored by ClickHouseClient.</remarks>
         [AllowNull]
         public override string SourceColumn
         {
@@ -138,6 +169,7 @@ namespace Octonica.ClickHouseClient
             set => _sourceColumn = value;
         }
 
+        /// <inheritdoc/>
         public override object? Value
         {
             get => _value;
@@ -148,8 +180,13 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <inheritdoc/>
+        /// <remarks>This property is ignored by ClickHouseClient.</remarks>
         public override bool SourceColumnNullMapping { get; set; }
 
+        /// <summary>
+        /// Gets or sets the size. This value is applied to the ClickHouse type FixedString.
+        /// </summary>
         public override int Size
         {
             get => _size;
@@ -160,18 +197,27 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets or sets the precision. This value is applied to ClickHouse types Decimal and DateTime64.
+        /// </summary>
         public override byte Precision
         {
             get => _forcedPrecision ?? (ClickHouseDbType == ClickHouseDbType.DateTime64 ? (byte) DateTime64TypeInfo.DefaultPrecision : DecimalTypeInfoBase.DefaultPrecision);
             set => _forcedPrecision = value;
         }
 
+        /// <summary>
+        /// Gets or sets the scale. This value is applied to the ClickHouse type Decimal.
+        /// </summary>
         public override byte Scale
         {
             get => _forcedScale ?? DecimalTypeInfoBase.DefaultScale;
             set => _forcedScale = value;
         }
 
+        /// <summary>
+        /// Gets or sets the encoding that will be used when writing a string value to the database.
+        /// </summary>
         public Encoding? StringEncoding { get; set; }
 
         /// <summary>
@@ -189,6 +235,10 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets or sets the value indicating whether the type is an array.
+        /// </summary>
+        /// <returns><see langword="true"/> if the value is an array; otherwise <see langword="false"/>. The default value is defined based on the <see cref="ArrayRank"/>.</returns>
         public bool IsArray
         {
             get => ArrayRank > 0;
@@ -207,6 +257,10 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets or sets the rank (a number of dimensions) of an array.
+        /// </summary>
+        /// <returns>The rank of an array. 0 if the type is not an array. The default value is defined based on the type of the parameter's value.</returns>
         public int ArrayRank
         {
             get
@@ -229,11 +283,18 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseParameter"/> with the default name.
+        /// </summary>
         public ClickHouseParameter()
             : this("parameter")
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseParameter"/> with the specified name.
+        /// </summary>
+        /// <param name="parameterName">The name of the parameter.</param>
         public ClickHouseParameter(string parameterName)
         {
             if (parameterName == null)
@@ -243,6 +304,7 @@ namespace Octonica.ClickHouseClient
             _parameterName = parameterName;
         }
 
+        /// <inheritdoc/>
         public override void ResetDbType()
         {
             _forcedType = null;
@@ -262,7 +324,11 @@ namespace Octonica.ClickHouseClient
             return Clone();
         }
 
-        public virtual ClickHouseParameter Clone()
+        /// <summary>
+        /// Creates a new <see cref="ClickHouseParameter"/> that is a copy of this instance. The new parameter is not attached to any <see cref="ClickHouseParameterCollection"/>.
+        /// </summary>
+        /// <returns>A new <see cref="ClickHouseParameter"/> that is a copy of this instance.</returns>
+        public ClickHouseParameter Clone()
         {
             var result = new ClickHouseParameter(ParameterName);
             CopyTo(result);
@@ -270,8 +336,9 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
-        /// Copy all properties except <see cref="ParameterName"/> of this parameter to the target parameter.
+        /// Copies all properties except <see cref="ParameterName"/> of this parameter to the target parameter.
         /// </summary>
+        /// <param name="parameter">The parameter to which the properties of this parameters should be copied.</param>
         public void CopyTo(ClickHouseParameter parameter)
         {
             parameter._forcedType = _forcedType;
@@ -397,6 +464,11 @@ namespace Octonica.ClickHouseClient
             return null;
         }
 
+        /// <summary>
+        /// Checks if the provided string is a valid name for a parameter.
+        /// </summary>
+        /// <param name="parameterName">The string to check.</param>
+        /// <returns><see langword="true"/> if the string is a valid parameter name; otherwise <see langword="false"/>.</returns>
         public static bool IsValidParameterName(string? parameterName)
         {
             return ValidateParameterName(parameterName, out _);

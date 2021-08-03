@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ using System;
 namespace Octonica.ClickHouseClient.Exceptions
 {
     /// <summary>
-    /// An exception which doesn't break the connection. It always has <see cref="Exception.InnerException"/>.
+    /// An exception which doesn't break the connection. It always has <see cref="Exception.InnerException"/>. This class can't be inherited.
     /// </summary>
     public sealed class ClickHouseHandledException : ClickHouseException
     {

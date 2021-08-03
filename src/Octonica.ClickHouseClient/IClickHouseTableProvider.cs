@@ -15,18 +15,48 @@
  */
 #endregion
 
+using System.Collections;
+using System.Collections.Generic;
+
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// The basic interface for an object that provides access to a table along with metadata.
+    /// </summary>
     public interface IClickHouseTableProvider
     {
+        /// <summary>
+        /// Gets the name of the table.
+        /// </summary>
         public string TableName { get; }
 
+        /// <summary>
+        /// Gets the number of columns in the table.
+        /// </summary>
         public int ColumnCount { get; }
 
+        /// <summary>
+        /// Gets the number of rows in the table.
+        /// </summary>
         public int RowCount { get; }
 
+        /// <summary>
+        /// Gets the descriptor of the column at the specified index.
+        /// </summary>
+        /// <param name="index">The zero-based index of the column.</param>
+        /// <returns>The descriptor of the column.</returns>
         IClickHouseColumnDescriptor GetColumnDescriptor(int index);
 
+        /// <summary>
+        /// Returns the object that represents the column at the specified index. It must implement one of interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="index">The zero-based index of the column.</param>
+        /// <returns>The object that represents the column at the specified index.</returns>
         object GetColumn(int index);
     }
 }

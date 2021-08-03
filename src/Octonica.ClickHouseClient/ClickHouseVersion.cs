@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,14 +20,32 @@ using System.Globalization;
 
 namespace Octonica.ClickHouseClient
 {
-    public struct ClickHouseVersion : IEquatable<ClickHouseVersion>
+    /// <summary>
+    /// Represents a version of the ClickHouse client or of the ClickHouse server.
+    /// </summary>
+    public readonly struct ClickHouseVersion : IEquatable<ClickHouseVersion>
     {
+        /// <summary>
+        /// Gets the value of the major component of the version.
+        /// </summary>
         public int Major { get; }
 
+        /// <summary>
+        /// Gets the value of the minor component of the version.
+        /// </summary>
         public int Minor { get; }
 
+        /// <summary>
+        /// Gets the value of the build component of the version.
+        /// </summary>
         public int Build { get; }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseVersion"/> with the specified components.
+        /// </summary>
+        /// <param name="major">The value of the major component of the version.</param>
+        /// <param name="minor">the value of the minor component of the version.</param>
+        /// <param name="build">the value of the build component of the version.</param>
         public ClickHouseVersion(int major, int minor, int build)
         {
             Major = major;
@@ -35,21 +53,28 @@ namespace Octonica.ClickHouseClient
             Build = build;
         }
 
+        /// <summary>
+        /// Returns the string representation of the version in the format {Major}.{Minor}.{Build}.
+        /// </summary>
+        /// <returns>The string representation of the version.</returns>
         public override string ToString()
         {
             return string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}", Major, Minor, Build);
         }
 
+        /// <inheritdoc/>
         public bool Equals(ClickHouseVersion other)
         {
             return Major == other.Major && Minor == other.Minor && Build == other.Build;
         }
 
+        /// <inheritdoc/>
         public override bool Equals(object? obj)
         {
             return obj is ClickHouseVersion other && Equals(other);
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode()
         {
             unchecked
@@ -61,6 +86,13 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Parses the string in the format "{Major}.{Minor}.{Build}".
+        /// </summary>
+        /// <param name="value">The string to parse.</param>
+        /// <returns>The parsed <see cref="ClickHouseVersion"/>.</returns>
+        /// <exception cref="ArgumentNullException">Throws an <see cref="ArgumentNullException"/> when the value is null.</exception>
+        /// <exception cref="ArgumentException">Throws an <see cref="ArgumentException"/> when the value is not a valid string representation of the <see cref="ClickHouseVersion"/>.</exception>
         public static ClickHouseVersion Parse(string value)
         {
             if (value == null)
@@ -100,11 +132,23 @@ namespace Octonica.ClickHouseClient
             throw new ArgumentException("The value is not a valid version number.", nameof(value));
         }
 
+        /// <summary>
+        /// Compares two objects of type <see cref="ClickHouseVersion"/>.
+        /// </summary>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns><see langword="true"/> if the two objects are equal; oterwise <see langword="false"/>.</returns>
         public static bool operator ==(ClickHouseVersion left, ClickHouseVersion right)
         {
             return left.Equals(right);
         }
 
+        /// <summary>
+        /// Compares two objects of type <see cref="ClickHouseVersion"/>.
+        /// </summary>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns><see langword="false"/> if the two objects are equal; oterwise <see langword="true"/>.</returns>
         public static bool operator !=(ClickHouseVersion left, ClickHouseVersion right)
         {
             return !left.Equals(right);

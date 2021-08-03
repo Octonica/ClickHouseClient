@@ -22,39 +22,71 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// Represents additional column settings that affect the behavior of <see cref="ClickHouseDataReader"/> and <see cref="ClickHouseColumnWriter"/>.
+    /// </summary>
     public class ClickHouseColumnSettings
     {
         private ITypeDispatcher? _columnTypeDispatcher;
 
+        /// <summary>
+        /// Gets encoding applied to strings when reading from the database or writing to the database.
+        /// </summary>
         public Encoding? StringEncoding { get; }
 
+        /// <summary>
+        /// Gets the converter applied to enums.
+        /// </summary>
         public IClickHouseEnumConverter? EnumConverter { get; }
 
         /// <summary>
-        /// Overrides the type of the field for <see cref="ClickHouseDataReader"/> and <see cref="ClickHouseColumnWriter"/>.
-        /// <see cref="ClickHouseDataReader"/> will try to convert a column's value to this type. <see cref="ClickHouseColumnWriter"/> will expect a collection of
-        /// items of this type as input.
+        /// Gets the explicitly defined type of the column. This value overrides the type of the field for <see cref="ClickHouseDataReader"/>
+        /// and <see cref="ClickHouseColumnWriter"/>. <see cref="ClickHouseDataReader"/> will try to convert a column's value to this type.
+        /// <see cref="ClickHouseColumnWriter"/> will expect a collection of items of this type as input.
         /// </summary>
         public Type? ColumnType { get; }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnectionSettings"/> class with the specified encoding.
+        /// </summary>
+        /// <param name="stringEncoding">The encoding applied to strings when reading from the database or writing to the database.</param>
         public ClickHouseColumnSettings(Encoding stringEncoding)
         {
             StringEncoding = stringEncoding ?? throw new ArgumentNullException(nameof(stringEncoding));
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnectionSettings"/> class with the specified enum converter.
+        /// </summary>
+        /// <param name="enumConverter">The converter applied to enums.</param>
         public ClickHouseColumnSettings(IClickHouseEnumConverter enumConverter)
         {
             EnumConverter = enumConverter ?? throw new ArgumentNullException(nameof(enumConverter));
         }
 
         /// <summary>
-        /// <inheritdoc cref="ColumnType"/>
+        /// Initializes a new instance of <see cref="ClickHouseConnectionSettings"/> class with the specified column type.
         /// </summary>
+        /// <param name="columnType">
+        /// The explicitly defined type of the column. This value overrides the type of the field for <see cref="ClickHouseDataReader"/>
+        /// and <see cref="ClickHouseColumnWriter"/>. <see cref="ClickHouseDataReader"/> will try to convert a column's value to this type.
+        /// <see cref="ClickHouseColumnWriter"/> will expect a collection of items of this type as input.
+        /// </param>
         public ClickHouseColumnSettings(Type columnType)
         {
             ColumnType = columnType ?? throw new ArgumentException(nameof(columnType));
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnectionSettings"/> class with multiple specified parameters.
+        /// </summary>
+        /// <param name="stringEncoding">The encoding applied to strings when reading from the database or writing to the database.</param>
+        /// <param name="enumConverter">The converter applied to enums.</param>
+        /// <param name="columnType">
+        /// The explicitly defined type of the column. This value overrides the type of the field for <see cref="ClickHouseDataReader"/>
+        /// and <see cref="ClickHouseColumnWriter"/>. <see cref="ClickHouseDataReader"/> will try to convert a column's value to this type.
+        /// <see cref="ClickHouseColumnWriter"/> will expect a collection of items of this type as input.
+        /// </param>
         public ClickHouseColumnSettings(Encoding? stringEncoding = null, IClickHouseEnumConverter? enumConverter = null, Type? columnType = null)
         {
             StringEncoding = stringEncoding;

@@ -29,8 +29,15 @@ using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient.Types
 {
+    /// <summary>
+    /// The default implementation of the interface <see cref="IClickHouseColumnTypeInfo"/>. This class provides access to
+    /// all types supported by ClickHouseClient.
+    /// </summary>
     public class DefaultTypeInfoProvider : IClickHouseTypeInfoProvider
     {
+        /// <summary>
+        /// The instance of <see cref="DefaultTypeInfoProvider"/> provides access to all types supported by ClickHouseClient.
+        /// </summary>
         public static readonly DefaultTypeInfoProvider Instance = new DefaultTypeInfoProvider();
 
         private readonly Dictionary<string, IClickHouseColumnTypeInfo> _types;
@@ -40,6 +47,11 @@ namespace Octonica.ClickHouseClient.Types
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="DefaultTypeInfoProvider"/> with a collection of supported types.
+        /// </summary>
+        /// <param name="types">The collection of supported types.</param>
+        /// <remarks>It is possible to get types supported by default with the method <see cref="GetDefaultTypes()"/>.</remarks>
         protected DefaultTypeInfoProvider(IEnumerable<IClickHouseColumnTypeInfo> types)
         {
             if (types == null)
@@ -48,6 +60,7 @@ namespace Octonica.ClickHouseClient.Types
             _types = types.ToDictionary(t => t.TypeName);
         }
 
+        /// <inheritdoc/>
         public IClickHouseColumnTypeInfo GetTypeInfo(string typeName)
         {
             var typeNameMem = typeName.AsMemory();
@@ -58,6 +71,7 @@ namespace Octonica.ClickHouseClient.Types
             return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName}\" is not supported.");
         }
 
+        /// <inheritdoc/>
         public IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName)
         {
             var (baseTypeName, options) = ParseTypeName(typeName);
@@ -166,6 +180,7 @@ namespace Octonica.ClickHouseClient.Types
             return (baseTypeName, options);
         }
 
+        /// <inheritdoc/>
         public IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnDescriptor columnDescriptor)
         {
             string? tzCode;
@@ -487,14 +502,19 @@ namespace Octonica.ClickHouseClient.Types
             return tzCode;
         }
 
+        /// <inheritdoc/>
         public IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo)
         {
             if (serverInfo == null)
                 throw new ArgumentNullException(nameof(serverInfo));
 
             return new DefaultTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
-        }        
+        }
 
+        /// <summary>
+        /// Returns all types supported by the ClickHouseClient.
+        /// </summary>
+        /// <returns>All types supported by the ClickHouseClient.</returns>
         protected static IEnumerable<IClickHouseColumnTypeInfo> GetDefaultTypes()
         {
             return new IClickHouseColumnTypeInfo[]

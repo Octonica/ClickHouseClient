@@ -24,6 +24,11 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
+    /// <summary>
+    /// Represents a base class capable of reading columns of value types.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the column that must be a value type (struct).</typeparam>
+    /// <typeparam name="TOut">The type of the output column.</typeparam>
     public abstract class StructureReaderBase<TIn, TOut> : IClickHouseColumnReader
         where TIn : struct
     {
@@ -32,10 +37,21 @@ namespace Octonica.ClickHouseClient.Types
         private int _position;
         private readonly TIn[]? _buffer;
 
+        /// <summary>
+        /// Gets the size of a single element in bytes.
+        /// </summary>
         protected int ElementSize { get; }
 
+        /// <summary>
+        /// Gets the value indicating whether bytes from an input buffer can be copied to the column's buffer bitwise. The default is <see langword="false"/>.
+        /// </summary>
         protected virtual bool BitwiseCopyAllowed => false;
 
+        /// <summary>
+        /// Initializes <see cref="StructureWriterBase{TIn, TOut}"/> with specified parameters.
+        /// </summary>
+        /// <param name="elementSize">The size of a single element in bytes.</param>
+        /// <param name="rowCount">The number of rows that the reader should read.</param>
         public StructureReaderBase(int elementSize, int rowCount)
         {
             ElementSize = elementSize;
@@ -45,6 +61,11 @@ namespace Octonica.ClickHouseClient.Types
                 _buffer = new TIn[rowCount];
         }
 
+        /// <summary>
+        /// Reads as much elements as possible from the provided binary buffer.
+        /// </summary>
+        /// <param name="sequence">The binary buffer.</param>
+        /// <returns>The <see cref="SequenceSize"/> that contains the number of bytes and the number of elements which were read.</returns>
         public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
         {
             if (_position >= _rowCount)
@@ -91,10 +112,22 @@ namespace Octonica.ClickHouseClient.Types
             return count;
         }
 
+        /// <summary>
+        /// When overriden in a derived class reads a single element from the provided binary buffer.
+        /// </summary>
+        /// <param name="source">The binary buffer.</param>
+        /// <returns>The decoded value.</returns>
         protected abstract TIn ReadElement(ReadOnlySpan<byte> source);
 
+        /// <summary>
+        /// When overriden in a derived class creates a column for <see cref="ClickHouseDataReader"/> with the specified settings.
+        /// </summary>
+        /// <param name="settings">The settings of the column.</param>
+        /// <param name="buffer">The buffer that contains the column's rows.</param>
+        /// <returns>A column for <see cref="ClickHouseDataReader"/>.</returns>
         protected abstract IClickHouseTableColumn<TOut> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<TIn> buffer);
 
+        /// <inheritdoc/>
         public IClickHouseTableColumn<TOut> EndRead(ClickHouseColumnSettings? settings)
         {
             return EndRead(settings, ((ReadOnlyMemory<TIn>)_buffer).Slice(0, _position));
@@ -106,14 +139,29 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
+    /// <summary>
+    /// Represents a base class capable of reading columns of value types.
+    /// </summary>
+    /// <typeparam name="T">The type of the column that must be a value type (struct).</typeparam>
     public abstract class StructureReaderBase<T> : StructureReaderBase<T, T>
         where T : struct
     {
+        /// <summary>
+        /// Initializes <see cref="StructureWriterBase{TIn, TOut}"/> with specified parameters.
+        /// </summary>
+        /// <param name="elementSize">The size of a single element in bytes.</param>
+        /// <param name="rowCount">The number of rows that the reader should read.</param>
         public StructureReaderBase(int elementSize, int rowCount)
             : base(elementSize, rowCount)
         {
         }
 
+        /// <summary>
+        /// Creates a column for <see cref="ClickHouseDataReader"/> from the provided buffer. The column settings are ignored.
+        /// </summary>
+        /// <param name="settings">The settings of the column. This argument is ignored by this method.</param>
+        /// <param name="buffer">The buffer that contains the column's rows.</param>
+        /// <returns>A column for <see cref="ClickHouseDataReader"/>.</returns>
         protected override IClickHouseTableColumn<T> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<T> buffer)
         {
             return new StructureTableColumn<T>(buffer);

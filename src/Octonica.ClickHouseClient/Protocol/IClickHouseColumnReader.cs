@@ -17,8 +17,16 @@
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// The interfaces for object capable of creating an internal column for <see cref="ClickHouseDataReader"/>.
+    /// </summary>
     public interface IClickHouseColumnReader : IClickHouseColumnReaderBase
     {
+        /// <summary>
+        /// Creates a column for <see cref="ClickHouseDataReader"/> with the specified settings.
+        /// </summary>
+        /// <param name="settings">The settings of the column.</param>
+        /// <returns>A column for <see cref="ClickHouseDataReader"/>.</returns>
         IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings);
     }
 }

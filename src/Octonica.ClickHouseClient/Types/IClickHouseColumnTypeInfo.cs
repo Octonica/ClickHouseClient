@@ -21,14 +21,41 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
+    /// <summary>
+    /// Represents basic information about the ClickHouse type. Provides access to factory methods for creating column readers and writers.
+    /// </summary>    
     public interface IClickHouseColumnTypeInfo : IClickHouseTypeInfo
     {
+        /// <summary>
+        /// Creates and returns a new instance of <see cref="IClickHouseColumnReader"/> configured to read the specified number of rows.
+        /// </summary>
+        /// <param name="rowCount">The number of rows that the reader should read.</param>
+        /// <returns>The <see cref="IClickHouseColumnReader"/> that should read the specified number of rows.</returns>
         IClickHouseColumnReader CreateColumnReader(int rowCount);
 
+        /// <summary>
+        /// Creates and returns a new instance of <see cref="IClickHouseColumnReaderBase"/> configured to skip the specified number of rows.
+        /// </summary>
+        /// <param name="rowCount">The number of rows that the reader should skip.</param>
+        /// <returns>The <see cref="IClickHouseColumnReaderBase"/> that should skip the specified number of rows.</returns>
         IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount);
 
+        /// <summary>
+        /// Creates and returns a new instance of <see cref="IClickHouseColumnWriter"/> that can write specified rows to a binary stream.
+        /// </summary>
+        /// <typeparam name="T">The type of the list of rows.</typeparam>
+        /// <param name="columnName">The name of the column.</param>
+        /// <param name="rows">The list of rows.</param>
+        /// <param name="columnSettings">Optional argument. Additional settings for the column writer.</param>
+        /// <returns>The <see cref="IClickHouseColumnWriter"/> that can write specified rows to a binary stream</returns>
         IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings);
 
+        /// <summary>
+        /// Returns an instance of <see cref="IClickHouseColumnTypeInfo"/> based on this type but with the specified list of type arguments.
+        /// </summary>
+        /// <param name="options">The list of strings. Each string in the list describes an argument of the type.</param>
+        /// <param name="typeInfoProvider">The type provider that can be used to get other types.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> with the same <see cref="IClickHouseTypeInfo.TypeName"/> as this type and with the specified list of type arguments</returns>
         IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider);
     }
 }

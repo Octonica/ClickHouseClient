@@ -19,8 +19,16 @@ using System.Buffers;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
+    /// <summary>
+    /// The basic interface for objects capable of reading columnar data from a binary buffer.
+    /// </summary>
     public interface IClickHouseColumnReaderBase
     {
+        /// <summary>
+        /// When implemented reads as much bytes as possible from the binary buffer.
+        /// </summary>
+        /// <param name="sequence">The binary buffer.</param>
+        /// <returns>The length of data that were read or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.</returns>
         SequenceSize ReadNext(ReadOnlySequence<byte> sequence);
     }
 }

@@ -19,23 +19,35 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents a collection of columns associated with a <see cref="ClickHouseTableProvider"/>.
+    /// </summary>
     public class ClickHouseTableColumnCollection : IndexedCollectionBase<string, ClickHouseTableColumn>
     {
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseTableColumnCollection"/> with the default capacity.
+        /// </summary>
         public ClickHouseTableColumnCollection()
             : base(StringComparer.OrdinalIgnoreCase)
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseTableColumnCollection"/> with the specified capacity capacity.
+        /// </summary>
+        /// <param name="capacity">The initial number of elements that the collection can contain.</param>
         public ClickHouseTableColumnCollection(int capacity)
             : base(capacity, StringComparer.OrdinalIgnoreCase)
         {
         }
 
+        /// <inheritdoc/>
         protected sealed override string GetKey(ClickHouseTableColumn item)
         {
             return item.ColumnName;
@@ -53,11 +65,24 @@ namespace Octonica.ClickHouseClient
             return name;
         }
 
+        /// <summary>
+        /// Creates a new column with the default name and adds it to the collection.
+        /// </summary>
+        /// <typeparam name="T">The type of the column's values.</typeparam>
+        /// <param name="column">The list of column's values.</param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn<T>(IReadOnlyList<T> column)
         {
             return AddColumn(GetUniqueColumnName("column"), column);
         }
 
+        /// <summary>
+        /// Creates a new column with the specified name and adds it to the collection.
+        /// </summary>
+        /// <typeparam name="T">The type of the column's values.</typeparam>
+        /// <param name="columnName">The name of the column.</param>
+        /// <param name="column">The list of column's values.</param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn<T>(string columnName, IReadOnlyList<T> column)
         {
             var result = AddColumn(columnName, column, typeof(T));
@@ -67,11 +92,36 @@ namespace Octonica.ClickHouseClient
             return result;
         }
 
+        /// <summary>
+        /// Creates a new column with the default name and adds it to the collection.
+        /// </summary>
+        /// <param name="column">
+        /// The object representing a column. It must implement one of interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn(object column)
         {
             return AddColumn(GetUniqueColumnName("column"), column);
         }
 
+        /// <summary>
+        /// Creates a new column with the specified name and adds it to the collection.
+        /// </summary>
+        /// <param name="columnName">The name of the column.</param>
+        /// <param name="column">
+        /// The object representing a column. It must implement one of interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn(string columnName, object column)
         {
             if (column == null)
@@ -157,11 +207,38 @@ namespace Octonica.ClickHouseClient
             return result;
         }
 
+        /// <summary>
+        /// Creates a new column with the default name and adds it to the collection.
+        /// </summary>
+        /// <param name="column">
+        /// The object representing a column. It must implement one of interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </param>
+        /// <param name="columnType">The type of the column's values.</param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn(object column, Type columnType)
         {
             return AddColumn(GetUniqueColumnName("column"), column, columnType);
         }
 
+        /// <summary>
+        /// Creates a new column with the specified name and adds it to the collection.
+        /// </summary>
+        /// <param name="columnName">The name of the column.</param>
+        /// <param name="column">
+        /// The object representing a column. It must implement one of interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </param>
+        /// <param name="columnType">The type of the column's values.</param>
+        /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn(string columnName, object column, Type columnType)
         {
             var result = new ClickHouseTableColumn(columnName, column, columnType);

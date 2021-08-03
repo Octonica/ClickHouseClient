@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,28 +19,66 @@ using System;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents an immutable set of properties applied to the connection.
+    /// </summary>
     public class ClickHouseConnectionSettings
     {
+        /// <summary>
+        /// Gets the name or the IP address of the host.
+        /// </summary>
         public string Host { get; }
 
+        /// <summary>
+        /// Gets the IP port of the server.
+        /// </summary>
         public ushort Port { get; }
 
+        /// <summary>
+        /// Gets the name of the user.
+        /// </summary>
         public string User { get; }
 
+        /// <summary>
+        /// Gets the password.
+        /// </summary>
         public string? Password { get; }
 
+        /// <summary>
+        /// Get the name of the default database.
+        /// </summary>
         public string? Database { get; }
 
+        /// <summary>
+        /// Gets the network socket timeout in <b>milliseconds</b>. This timeout will be used to initialize properties <see cref= "System.Net.Sockets.TcpClient.SendTimeout"/> and 
+        /// <see cref= "System.Net.Sockets.TcpClient.ReceiveTimeout"/>.
+        /// </summary>
         public int ReadWriteTimeout { get; }
 
+        /// <summary>
+        /// Gets the name of the client. The name of the client is passed to the ClickHouse server as a part of the client's identifier.
+        /// </summary>
         public string ClientName { get; }
 
+        /// <summary>
+        /// Gets the version of the client. The first two parts of the version (<see cref="ClickHouseVersion.Major"/> and <see cref="ClickHouseVersion.Minor"/>)
+        /// are passed to the ClickHouse server as a part of the client's identifier.
+        /// </summary>
         public ClickHouseVersion ClientVersion { get; }
 
+        /// <summary>
+        /// Gets the preferred size of the internal buffer in bytes.
+        /// </summary>
         public int BufferSize { get; }
 
+        /// <summary>
+        /// Gets the value indicating whether the compression (LZ4) of data is enabled.
+        /// </summary>
         public bool Compress { get; }
 
+        /// <summary>
+        /// Gets the command timeout in <b>seconds</b>. This timeout will be used to initialize the property <see cref= "ClickHouseCommand.CommandTimeout"/> of the command.
+        /// </summary>
         public int CommandTimeout { get; }
 
         internal readonly int CompressionBlockSize = 1024 * 8; // Maybe it should be configurable

@@ -19,14 +19,33 @@ using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
+    /// <summary>
+    /// The base interface for an object that provides information about supported types.
+    /// </summary>
     public interface IClickHouseTypeInfoProvider
     {
+        /// <summary>
+        /// Gets the type by its name.
+        /// </summary>
+        /// <param name="typeName">The name of the type.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that provides information about the type.</returns>
         IClickHouseColumnTypeInfo GetTypeInfo(string typeName);
 
+        /// <inheritdoc cref="GetTypeInfo(string)"/>
         IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName);
 
+        /// <summary>
+        /// Gets the type based on the <see cref="IClickHouseColumnDescriptor"/>.
+        /// </summary>
+        /// <param name="columnDescriptor">The descriptor of a column.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that provides information about the type.</returns>
         IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnDescriptor columnDescriptor);
 
+        /// <summary>
+        /// Returns the <see cref="IClickHouseColumnTypeInfo"/> that provides access to types configured with the specified settings.
+        /// </summary>
+        /// <param name="serverInfo">Information about the server.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that provides access to types configured with the specified settings.</returns>
         IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);        
     }
 }

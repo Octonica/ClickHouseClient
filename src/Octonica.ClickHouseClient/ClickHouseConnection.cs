@@ -33,6 +33,9 @@ using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents a connection to a ClickHouse database.
+    /// </summary>
     public class ClickHouseConnection : DbConnection
     {
         private const int MinBufferSize = 32;
@@ -41,6 +44,9 @@ namespace Octonica.ClickHouseClient
 
         private ClickHouseConnectionState _connectionState;
 
+        /// <summary>
+        /// Gets or sets the string used to open a connection to a ClickHouse database server.
+        /// </summary>
         [AllowNull]
         public override string ConnectionString
         {
@@ -71,10 +77,24 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// The connection doesn't support a timeout. This property always returns <see cref="Timeout.Infinite"/>.
+        /// </summary>
+        /// <returns><see cref="Timeout.Infinite"/>.</returns>
         public override int ConnectionTimeout => Timeout.Infinite;
 
+        /// <summary>
+        /// Gets the name of the database specified in the connection settings.
+        /// </summary>
+        /// <returns>The name of the database specified in the connection settings. The default value is an empty string.</returns>
         public override string Database => _connectionState.Settings?.Database ?? string.Empty;
 
+        /// <summary>
+        /// Gets the name of the database server specified in the connection settings.
+        /// The name of the server contains the hostname and the port. If the port is equal to the default ClickHouse server port (9000) the
+        /// name of the server will conatin only hostname.
+        /// </summary>
+        /// <returns>The name of the database server specified in the connection settings. The default value is an empty string.</returns>
         public override string DataSource
         {
             get
@@ -87,8 +107,16 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// When the connection is open gets the version of the ClickHouse database server.
+        /// </summary>
+        /// <returns>The version of the ClickHouse database server.  The default value is an empty string.</returns>
         public override string ServerVersion => _connectionState.TcpClient?.ServerInfo.Version.ToString() ?? string.Empty;
 
+        /// <summary>
+        /// Gets the state of the connection.
+        /// </summary>
+        /// <returns>The state of the connection.</returns>
         public override ConnectionState State => _connectionState.State;
 
         internal TimeSpan? CommandTimeSpan
@@ -103,16 +131,29 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> class.
+        /// </summary>
         public ClickHouseConnection()
         {
             _connectionState = new ClickHouseConnectionState();
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings.
+        /// </summary>
+        /// <param name="connectionString">The connection string.</param>
+        /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
         public ClickHouseConnection(string connectionString, IClickHouseTypeInfoProvider? typeInfoProvider = null)
             : this(new ClickHouseConnectionStringBuilder(connectionString), typeInfoProvider)
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings.
+        /// </summary>
+        /// <param name="stringBuilder">The connection string builder which will be used for building the connection settings.</param>
+        /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
         public ClickHouseConnection(ClickHouseConnectionStringBuilder stringBuilder, IClickHouseTypeInfoProvider? typeInfoProvider = null)
         {
             if (stringBuilder == null)
@@ -124,6 +165,11 @@ namespace Octonica.ClickHouseClient
             _typeInfoProvider = typeInfoProvider;
         }
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings.
+        /// </summary>
+        /// <param name="connectionSettings">The connection settings.</param>
+        /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
         public ClickHouseConnection(ClickHouseConnectionSettings connectionSettings, IClickHouseTypeInfoProvider? typeInfoProvider = null)
         {
             if (connectionSettings == null)
@@ -133,86 +179,150 @@ namespace Octonica.ClickHouseClient
             _typeInfoProvider = typeInfoProvider;
         }
 
+        /// <summary>
+        /// Not supported. The database cannot be changed while the connection is open.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always throws <see cref="NotSupportedException"/>.</exception>
         public override void ChangeDatabase(string databaseName)
         {
             throw new NotSupportedException();
         }
 
+        /// <inheritdoc cref="ChangeDatabase(string)"/>
         public override Task ChangeDatabaseAsync(string databaseName, CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        /// Closes the connection to the database.
+        /// </summary>
         public override void Close()
         {
             TaskHelper.WaitNonAsyncTask(Close(false));
         }
 
+        /// <inheritdoc/>
         public override async Task CloseAsync()
         {
             await Close(true);
         }
 
+        /// <summary>
+        /// Not supported. Transactions are not supported by the ClickHouse server.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always throws <see cref="NotSupportedException"/>.</exception>
         public override void EnlistTransaction(Transaction? transaction)
         {
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        /// Not supported. Schema information is not implemented.
+        /// </summary>
+        /// <exception cref="NotImplementedException">Always throws <see cref="NotImplementedException"/>.</exception>
         public override DataTable GetSchema()
         {
-            throw new NotSupportedException();
+            throw new NotImplementedException();
         }
 
+        /// <inheritdoc cref="GetSchema()"/>
         public override DataTable GetSchema(string collectionName)
         {
-            throw new NotSupportedException();
+            throw new NotImplementedException();
         }
 
+        /// <inheritdoc cref="GetSchema()"/>
         public override DataTable GetSchema(string collectionName, string?[] restrictionValues)
         {
-            throw new NotSupportedException();
+            throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Opens a database connection.
+        /// </summary>
         public override void Open()
         {
             TaskHelper.WaitNonAsyncTask(Open(false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Opens a database connection asyncronously.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public override async Task OpenAsync(CancellationToken cancellationToken)
         {
             await Open(true, cancellationToken);
         }
 
+        /// <summary>
+        /// Not supported. Transactions are not supported by the ClickHouse server.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always throws <see cref="NotSupportedException"/>.</exception>
         protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
         {
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        /// Not supported. Transactions are not supported by the ClickHouse server.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always throws <see cref="NotSupportedException"/>.</exception>
         protected override ValueTask<DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        /// Creates and returns a <see cref="ClickHouseCommand"/> object associated with the connection.
+        /// </summary>
+        /// <returns>A <see cref="ClickHouseCommand"/> object.</returns>
         public new ClickHouseCommand CreateCommand()
         {
             return new ClickHouseCommand(this);
         }
 
+        /// <summary>
+        /// Creates and returns a <see cref="ClickHouseCommand"/> object associated with the connection.
+        /// </summary>
+        /// <param name="commandText">The text for a new command.</param>
+        /// <returns>A <see cref="ClickHouseCommand"/> object.</returns>
         public ClickHouseCommand CreateCommand(string commandText)
         {
             return new ClickHouseCommand(this) {CommandText = commandText};
         }
 
+        /// <inheritdoc cref="CreateCommand()"/>
         protected override DbCommand CreateDbCommand()
         {
             return CreateCommand();
         }
 
+        /// <summary>
+        /// Creates and returns a <see cref="ClickHouseColumnWriter"/> object.
+        /// </summary>
+        /// <param name="insertFormatCommand">The INSERT statement.</param>
+        /// <returns>A <see cref="ClickHouseColumnWriter"/> object.</returns>
+        /// <remarks>
+        /// The command (<paramref name="insertFormatCommand"/>) must be a valid INSERT statement ending with VALUES. For example,
+        /// <code>INSERT INTO table(field1, ... fieldN) VALUES</code>
+        /// </remarks>
         public ClickHouseColumnWriter CreateColumnWriter(string insertFormatCommand)
         {
             return TaskHelper.WaitNonAsyncTask(CreateColumnWriter(insertFormatCommand, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Asyncronously creates and returns a <see cref="ClickHouseColumnWriter"/> object.
+        /// </summary>
+        /// <param name="insertFormatCommand">The INSERT statement.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task{ClickHouseColumnWriter}"/> representing asyncronous operation.</returns>
+        /// <remarks>
+        /// The command (<paramref name="insertFormatCommand"/>) must be a valid INSERT statement ending with VALUES. For example,
+        /// <code>INSERT INTO table(field1, ... fieldN) VALUES</code>
+        /// </remarks>
         public async Task<ClickHouseColumnWriter> CreateColumnWriterAsync(string insertFormatCommand, CancellationToken cancellationToken)
         {
             return await CreateColumnWriter(insertFormatCommand, true, cancellationToken);
@@ -294,6 +404,11 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// For an open connection gets the default timezone of the ClickHouse server.
+        /// </summary>
+        /// <returns>The default timezone of the ClickHouse server.</returns>
+        /// <exception cref="ClickHouseException">Throws <see cref="ClickHouseException"/> if the connection is not open.</exception>
         public TimeZoneInfo GetServerTimeZone()
         {
             var connectionState = _connectionState;
@@ -304,6 +419,9 @@ namespace Octonica.ClickHouseClient
             return TZConvert.GetTimeZoneInfo(serverInfo.Timezone);
         }
 
+        /// <summary>
+        /// Closes the connection and releases resources associated with it.
+        /// </summary>
         protected override void Dispose(bool disposing)
         {
             var connectionState = _connectionState;

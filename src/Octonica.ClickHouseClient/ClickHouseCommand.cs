@@ -33,11 +33,17 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents an SQL statement to execute against a ClickHouse database.
+    /// </summary>
     public class ClickHouseCommand : DbCommand
     {
         private string? _commandText;
         private TimeSpan? _commandTimeout;
 
+        /// <summary>
+        /// Gets or sets the SQL statement to exeucute at the data source.
+        /// </summary>
         [AllowNull]
         public override string CommandText
         {
@@ -45,49 +51,104 @@ namespace Octonica.ClickHouseClient
             set => _commandText = value;
         }
 
+        /// <summary>
+        /// Gets or sets the wait time (in seconds) before terminating the attempt to execute a command and generating an error.
+        /// </summary>
         public override int CommandTimeout
         {
             get => (int)CommandTimeoutSpan.TotalSeconds;
             set => CommandTimeoutSpan = TimeSpan.FromSeconds(value);
         }
 
+        /// <summary>
+        /// Gets or sets the wait time before terminating the attempt to execute a command and generating an error.
+        /// </summary>
         public TimeSpan CommandTimeoutSpan
         {
             get => GetCommandTimeout(Connection);
             set => _commandTimeout = value;
         }
 
-        public override CommandType CommandType { get; set; }
+        /// <summary>
+        /// Gets the sets type of the command. The only supported type is <see cref="CommandType.Text"/>.
+        /// </summary>
+        /// <returns>The value <see cref="CommandType.Text"/>.</returns>
+        /// <exception cref="NotSupportedException">The type set is not <see cref="CommandType.Text"/>.</exception>
+        public override CommandType CommandType
+        {
+            get => CommandType.Text;
+            set
+            {
+                if (value != CommandType.Text)
+                    throw new NotSupportedException($"The type of the command \"{value}\" is not supported.");                
+            }
+        }
 
+        /// <summary>
+        /// Gets or sets how command results are applied to the <see cref="DataRow"/> when used by the Update method of the <see cref="DbDataAdapter"/>.
+        /// The value of this property is ignored by the command and therefore doesn't affect it's behavior.
+        /// </summary>
+        /// <returns>One of enumeration values that indicates how command results are applied. The default value is <see cref="UpdateRowSource.None"/>.</returns>
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
+        /// <summary>
+        /// Gets or sets the <see cref="ClickHouseConnection"/> used by this command.
+        /// </summary>
         public new ClickHouseConnection? Connection { get; set; }
 
+        /// <inheritdoc cref="Connection"/>    
         protected override DbConnection? DbConnection
         {
             get => Connection;
             set => Connection = (ClickHouseConnection?) value;
         }
 
+        /// <summary>
+        /// Gets the <see cref="ClickHouseParameterCollection"/>.
+        /// </summary>
+        /// <returns>The parameters of the SQL statement. The default is an empty collection.</returns>
         public new ClickHouseParameterCollection Parameters { get; } = new ClickHouseParameterCollection();
 
+        /// <inheritdoc cref="Parameters"/>    
         protected sealed override DbParameterCollection DbParameterCollection => Parameters;
 
+        /// <summary>
+        /// Gets the <see cref="ClickHouseTableProviderCollection"/>.
+        /// </summary>
+        /// <returns>
+        /// The tables which should be sent along with the query. The default is an empty collection.
+        /// </returns>
         public ClickHouseTableProviderCollection TableProviders { get; } = new ClickHouseTableProviderCollection();
 
+        /// <summary>
+        /// Gets or sets the transaction within which the command executes. Always returns <b>null</b>.
+        /// </summary>
+        /// <returns><b>null</b></returns>
+        /// <exception cref="NotSupportedException">The value set is not <b>null</b>.</exception>
         protected override DbTransaction? DbTransaction
         {
             get => null;
-            set => throw new NotSupportedException($"{nameof(DbTransaction)} is read only.'");
+            set
+            {
+                if (value != null)
+                    throw new NotSupportedException($"{nameof(DbTransaction)} is read only.'");
+            }
         }
 
-        public override bool DesignTimeVisible { get; set; }
+        /// <summary>
+        /// Gets or sets a value indicating whether the command object should be visible in a customized interface control.
+        /// </summary>
+        /// <returns><see langword="true"/>, if the command object should be visible in a control; otherwise <see langword="false"/>. The default is <see langword="true"/>.</returns>
+        public override bool DesignTimeVisible { get; set; } = true;
 
         /// <summary>
-        /// Overrides the 'extremes' setting for the query
+        /// Gets or sets value indicating whether the query should be executed with an explicitly defined values of the property 'extremes'.
         /// </summary>
         public bool? Extremes { get; set; }
 
+        /// <summary>
+        /// Creates a new instance of <see cref="ClickHouseCommand"/>.
+        /// </summary>
         public ClickHouseCommand()
         {
         }
@@ -97,11 +158,19 @@ namespace Octonica.ClickHouseClient
             Connection = connection ?? throw new ArgumentNullException(nameof(connection));
         }
 
+        /// <summary>
+        /// Not supported. To cancel a command execute it asyncronously with an appropriate cancellation token.
+        /// </summary>
+        /// <exception cref="NotImplementedException">Always throws <see cref="NotImplementedException"/>.</exception>
         public override void Cancel()
         {
             throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Executes a SQL statement against a connection object.
+        /// </summary>
+        /// <returns>The number of rows affected. The returned value is negative when the actual number of rows is greater than <see cref="int.MaxValue"/>.</returns>
         public override int ExecuteNonQuery()
         {
             var result = TaskHelper.WaitNonAsyncTask(ExecuteNonQuery(false, CancellationToken.None));
@@ -112,6 +181,14 @@ namespace Octonica.ClickHouseClient
             return (int) result;
         }
 
+        /// <summary>
+        /// Executes a SQL statement against a connection object asyncronously.
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is the 
+        /// number of affected rows. The result is negative when the actual number of rows is greater than <see cref="int.MaxValue"/>.
+        /// </returns>
         public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
         {
             var result = await ExecuteNonQuery(true, cancellationToken);
@@ -214,56 +291,156 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Executes the query and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <returns>
+        /// The first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// </returns>
         public override object ExecuteScalar()
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar(null, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Executes the query and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <returns>
+        /// The first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// </returns>
         public object ExecuteScalar(ClickHouseColumnSettings? columnSettings)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar(columnSettings, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Executes the query and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <returns>
+        /// The first row of the first columns in the result set.
+        /// </returns>
         public T ExecuteScalar<T>()
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(null, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Executes the query and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <returns>
+        /// The first row of the first columns in the result set.
+        /// </returns>
         public T ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(columnSettings, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// </returns>
         public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
         {
             return await ExecuteScalar(null, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// </returns>
         public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings)
         {
             return await ExecuteScalar(columnSettings, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// </returns>
         public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
         {
             return await ExecuteScalar(columnSettings, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set.
+        /// </returns>
         public async Task<T> ExecuteScalarAsync<T>()
         {
             return await ExecuteScalar<T>(null, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set.
+        /// </returns>
         public async Task<T> ExecuteScalarAsync<T>(CancellationToken cancellationToken)
         {
             return await ExecuteScalar<T>(null, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set.
+        /// </returns>
         public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings)
         {
             return await ExecuteScalar<T>(columnSettings, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and returns the first column of the first row in the result set returned by the query.
+        /// All other columns and rows are ignored.
+        /// </summary>
+        /// <typeparam name="T">The expected type of the first column in the result set.</typeparam>
+        /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
+        /// the first row of the first columns in the result set.
+        /// </returns>
         public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
         {
             return await ExecuteScalar<T>(columnSettings, true, cancellationToken);
@@ -323,16 +500,25 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Not supported. A preparation of the command is not implemented.
+        /// </summary>
+        /// <exception cref="NotImplementedException">Always throws <see cref="NotImplementedException"/>.</exception>
         public override void Prepare()
         {
             throw new NotImplementedException();
         }
 
+        /// <inheritdoc cref="Prepare"/>
         public override Task PrepareAsync(CancellationToken cancellationToken = new CancellationToken())
         {
-            return base.PrepareAsync(cancellationToken);
+            throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Creates a new <see cref="ClickHouseParameter"/> object with the default name and adds it to the collection of parameters (<see cref="Parameters"/>).
+        /// </summary>
+        /// <returns>A new <see cref="ClickHouseParameter"/> object.</returns>
         protected override DbParameter CreateDbParameter()
         {
             const string baseParamName = "param";
@@ -346,41 +532,84 @@ namespace Octonica.ClickHouseClient
             return new ClickHouseParameter(paramName);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and builds a <see cref="ClickHouseDataReader"/> with the default command behavior.
+        /// </summary>
+        /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync()
         {
             return await ExecuteDbDataReader(CommandBehavior.Default, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and builds a <see cref="ClickHouseDataReader"/> with the default command behavior.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CancellationToken cancellationToken)
         {
             return await ExecuteDbDataReader(CommandBehavior.Default, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and builds a <see cref="ClickHouseDataReader"/>.
+        /// </summary>
+        /// <param name="behavior">
+        /// The set of flags determining the behavior of the command.
+        /// The flag <see cref="CommandBehavior.KeyInfo"/> is not supported.
+        /// The flag <see cref="CommandBehavior.SequentialAccess"/> is ignored.
+        /// </param>
+        /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CommandBehavior behavior)
         {
             return await ExecuteDbDataReader(behavior, true, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes the query asyncronously and builds a <see cref="ClickHouseDataReader"/>.
+        /// </summary>
+        /// <param name="behavior">
+        /// The set of flags determining the behavior of the command.
+        /// The flag <see cref="CommandBehavior.KeyInfo"/> is not supported.
+        /// The flag <see cref="CommandBehavior.SequentialAccess"/> is ignored.
+        /// </param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
         {
             return await ExecuteDbDataReader(behavior, true, cancellationToken);
         }
 
+        /// <inheritdoc cref="ExecuteReaderAsync(CommandBehavior, CancellationToken)"/>
         protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
         {
             return await ExecuteDbDataReader(behavior, true, cancellationToken);
         }
 
+        /// <summary>
+        /// Executes the query and builds a <see cref="ClickHouseDataReader"/> with the default command behavior.
+        /// </summary>
+        /// <returns>A <see cref="ClickHouseDataReader"/> object.</returns>
         public new ClickHouseDataReader ExecuteReader()
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(CommandBehavior.Default, false, CancellationToken.None));
         }
 
+        /// <summary>
+        /// Executes the query and builds a <see cref="ClickHouseDataReader"/>.
+        /// </summary>
+        /// <param name="behavior">
+        /// The set of flags determining the behavior of the command.
+        /// The flag <see cref="CommandBehavior.KeyInfo"/> is not supported.
+        /// The flag <see cref="CommandBehavior.SequentialAccess"/> is ignored.
+        /// </param>
+        /// <returns>A <see cref="ClickHouseDataReader"/> object.</returns>
         public new ClickHouseDataReader ExecuteReader(CommandBehavior behavior)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, false, CancellationToken.None));
         }
 
+        /// <inheritdoc cref="ExecuteReader(CommandBehavior)"/>
         protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, false, CancellationToken.None));
@@ -781,11 +1010,13 @@ namespace Octonica.ClickHouseClient
             return parameterPositions;
         }
 
+        /// <inheritdoc/>
         public override ValueTask DisposeAsync()
         {
             return base.DisposeAsync();
         }
 
+        /// <inheritdoc/>
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);

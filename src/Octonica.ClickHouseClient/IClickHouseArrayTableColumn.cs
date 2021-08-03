@@ -19,6 +19,10 @@ using System;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// The interface for an object representing a column with arrays.
+    /// </summary>
+    /// <typeparam name="TElement">The type of the array's element.</typeparam>
     public interface IClickHouseArrayTableColumn<TElement> : IClickHouseTableColumn
     {
         /// <summary>

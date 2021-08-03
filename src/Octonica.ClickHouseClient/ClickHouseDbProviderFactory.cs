@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,23 +19,42 @@ using System.Data.Common;
 
 namespace Octonica.ClickHouseClient
 {
+    /// <summary>
+    /// Represents a set of methods for creating instances of ClickHouseClient's implementation of the data source classes.
+    /// </summary>
     public class ClickHouseDbProviderFactory : DbProviderFactory
     {
+        /// <summary>
+        /// Returns a new instance of <see cref="ClickHouseConnectionStringBuilder"/>.
+        /// </summary>
+        /// <returns>A new instance of <see cref="ClickHouseConnectionStringBuilder"/>.</returns>
         public override DbConnectionStringBuilder CreateConnectionStringBuilder()
         {
             return new ClickHouseConnectionStringBuilder();
         }
 
+        /// <summary>
+        /// Returns a new instance of <see cref="ClickHouseConnection"/>.
+        /// </summary>
+        /// <returns>A new instance of <see cref="ClickHouseConnection"/>.</returns>
         public override DbConnection CreateConnection()
         {
             return new ClickHouseConnection();
         }
 
+        /// <summary>
+        /// Returns a new instance of <see cref="ClickHouseCommand"/>.
+        /// </summary>
+        /// <returns>A new instance of <see cref="ClickHouseCommand"/>.</returns>
         public override DbCommand CreateCommand()
         {
             return new ClickHouseCommand();
         }
 
+        /// <summary>
+        /// Returns a new instance of <see cref="ClickHouseParameter"/>.
+        /// </summary>
+        /// <returns>A new instance of <see cref="ClickHouseParameter"/>.</returns>
         public override DbParameter CreateParameter()
         {
             return new ClickHouseParameter();

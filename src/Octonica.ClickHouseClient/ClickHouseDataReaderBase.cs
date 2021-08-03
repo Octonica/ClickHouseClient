@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,14 +21,29 @@ using System.Threading.Tasks;
 
 namespace Octonica.ClickHouseClient
 {
-    // The class allows overloading of ReadAsync for it's descendant. 
+    /// <summary>
+    /// This is an infrastracture class. It allows it's descendants to overload the method <see cref="ReadAsync(CancellationToken)"/>.    
+    /// </summary>
     public abstract class ClickHouseDataReaderBase : DbDataReader
     {
+        private protected ClickHouseDataReaderBase()
+        {
+        }
+
+        /// <inheritdoc /> 
         public sealed override Task<bool> ReadAsync(CancellationToken cancellationToken)
         {
             return ReadAsyncInternal(cancellationToken);
         }
 
+        /// <summary>
+        /// When overriden in a derived class should asyncronously advance the reader to the next record in a result set.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>
+        /// A <see cref="Task{T}"/> representing asyncronous operation. The result (<see cref="Task{TResult}.Result"/>) is <see langword="true"/>
+        /// if there are more rows or <see langword="false"/> if there aren't.
+        /// </returns>
         protected abstract Task<bool> ReadAsyncInternal(CancellationToken cancellationToken);
     }
 }
