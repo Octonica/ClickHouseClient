@@ -111,7 +111,7 @@ namespace Octonica.ClickHouseClient.Exceptions
         public const int NetworkError = 16;
         
         /// <summary>
-        /// The code for an error caused by invalid settings (<see cref="Protocol.ClickHouseColumnSettings"/>).
+        /// The code for an error caused by invalid settings (<see cref="ClickHouseColumnSettings"/>).
         /// </summary>
         public const int InvalidColumnSettings = 17;
 

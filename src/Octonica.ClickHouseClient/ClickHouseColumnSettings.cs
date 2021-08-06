@@ -20,7 +20,7 @@ using System.Text;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
 
-namespace Octonica.ClickHouseClient.Protocol
+namespace Octonica.ClickHouseClient
 {
     /// <summary>
     /// Represents additional column settings that affect the behavior of <see cref="ClickHouseDataReader"/> and <see cref="ClickHouseColumnWriter"/>.

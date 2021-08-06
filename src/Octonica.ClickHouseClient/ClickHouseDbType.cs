@@ -26,7 +26,7 @@ namespace Octonica.ClickHouseClient
     {
         /// <summary>
         /// The type is not supported by the client. An encoding should be defined explicitly via <see cref="ClickHouseParameter.StringEncoding"/>
-        /// or <see cref="Protocol.ClickHouseColumnSettings.StringEncoding"/>.
+        /// or <see cref="ClickHouseColumnSettings.StringEncoding"/>.
         /// </summary>
         /// <remarks>This value corresponds to <see cref="DbType.AnsiString"/>.</remarks>
         AnsiString = DbType.AnsiString,

@@ -15,7 +15,6 @@
  */
 #endregion
 
-using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections;
 using System.Collections.Generic;
