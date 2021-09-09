@@ -30,6 +30,9 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class ArrayTypeInfo : IClickHouseColumnTypeInfo
     {
         private readonly IClickHouseColumnTypeInfo? _elementTypeInfo;
+        
+        // Part of the header of the element's column may be located before the beginning of the array
+        private readonly int _exposedElementHeaderSize;
 
         public string ComplexTypeName { get; }
 
@@ -45,6 +48,7 @@ namespace Octonica.ClickHouseClient.Types
         private ArrayTypeInfo(IClickHouseColumnTypeInfo elementTypeInfo)
         {
             _elementTypeInfo = elementTypeInfo ?? throw new ArgumentNullException(nameof(elementTypeInfo));
+            _exposedElementHeaderSize = GetExposedElementHeaderSize(elementTypeInfo);
             ComplexTypeName = $"{TypeName}({_elementTypeInfo.ComplexTypeName})";
         }
 
@@ -53,7 +57,7 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new ArrayColumnReader(rowCount, _elementTypeInfo);
+            return new ArrayColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -61,7 +65,7 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new ArraySkippingColumnReader(rowCount, _elementTypeInfo);
+            return new ArraySkippingColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -82,7 +86,6 @@ namespace Octonica.ClickHouseClient.Types
                     var listAdapterInfo = MultiDimensionalArrayReadOnlyListAdapter.Dispatch(elementType, rowType.GetArrayRank());
                     var mdaDispatcher = new MultiDimensionalArrayColumnWriterDispatcher(
                         columnName,
-                        ComplexTypeName,
                         (IReadOnlyList<Array>) rows,
                         columnSettings,
                         _elementTypeInfo,
@@ -121,12 +124,12 @@ namespace Octonica.ClickHouseClient.Types
                 if (rowGenericTypeDef == typeof(ReadOnlyMemory<>))
                 {
                     elementType = rowType.GetGenericArguments()[0]!;
-                    dispatcher = new ReadOnlyColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+                    dispatcher = new ReadOnlyColumnWriterDispatcher(columnName, rows, columnSettings, _elementTypeInfo);
                 }
                 else if (rowGenericTypeDef == typeof(Memory<>))
                 {
                     elementType = rowType.GetGenericArguments()[0]!;
-                    dispatcher = new MemoryColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+                    dispatcher = new MemoryColumnWriterDispatcher(columnName, rows, columnSettings, _elementTypeInfo);
                 }
                 else
                 {
@@ -137,7 +140,7 @@ namespace Octonica.ClickHouseClient.Types
             }
             else
             {
-                dispatcher = new ArrayColumnWriterDispatcher(columnName, ComplexTypeName, rows, columnSettings, _elementTypeInfo);
+                dispatcher = new ArrayColumnWriterDispatcher(columnName, rows, columnSettings, _elementTypeInfo);
             }
 
             try
@@ -180,21 +183,40 @@ namespace Octonica.ClickHouseClient.Types
             return _elementTypeInfo;
         }
 
+        private static int GetExposedElementHeaderSize(IClickHouseTypeInfo elementType)
+        {
+            var type = elementType;
+            while (type.TypeName == "Array")
+                type = type.GetGenericArgument(0);
+
+            if (type.TypeName == "LowCardinality")
+                return sizeof(ulong);
+
+            return 0;
+        }
+
         private sealed class ArrayColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
             private readonly IClickHouseColumnTypeInfo _elementType;
             private readonly List<(int offset, int length)> _ranges;
 
+            // A part of the inner column's header exposed outside of the beginning of the current column
+            private readonly byte[]? _exposedHeader;
+
             private IClickHouseColumnReader? _elementColumnReader;
 
             private int _position;
             private int _elementPosition;
+            private int _exposedHeaderPosition;
 
-            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
+            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
             {
                 _rowCount = rowCount;
                 _elementType = elementType;
+
+                if (exposedElementHeaderSize > 0)
+                    _exposedHeader = new byte[exposedElementHeaderSize];
 
                 _ranges = new List<(int offset, int length)>(_rowCount);
             }
@@ -209,6 +231,14 @@ namespace Octonica.ClickHouseClient.Types
 
                 if (_elementColumnReader == null)
                 {
+                    if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
+                    {
+                        bytesCount = (int)Math.Min(slice.Length, _exposedHeader.Length - _exposedHeaderPosition);
+                        slice.Slice(0, bytesCount).CopyTo(((Span<byte>)_exposedHeader).Slice(_exposedHeaderPosition, bytesCount));
+                        _exposedHeaderPosition += bytesCount;
+                        slice = slice.Slice(bytesCount);
+                    }
+
                     var totalLength = _ranges.Aggregate((ulong) 0, (acc, r) => acc + (ulong) r.length);
 
                     Span<byte> sizeSpan = stackalloc byte[sizeof(ulong)];
@@ -239,6 +269,7 @@ namespace Octonica.ClickHouseClient.Types
                     }
 
                     _elementColumnReader = _elementType.CreateColumnReader(checked((int) totalLength));
+                    _exposedHeaderPosition = 0;
 
                     if (totalLength == 0)
                     {
@@ -249,7 +280,20 @@ namespace Octonica.ClickHouseClient.Types
                     }
                 }
 
-                var elementsSize = _elementColumnReader.ReadNext(slice);
+                SequenceSize elementsSize;
+                if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
+                {
+                    var segment = new SimpleReadOnlySequenceSegment<byte>(((ReadOnlyMemory<byte>)_exposedHeader).Slice(_exposedHeaderPosition), slice);
+                    elementsSize = _elementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
+
+                    var exposedHeaderByteCount = Math.Min(elementsSize.Bytes, _exposedHeader.Length - _exposedHeaderPosition);
+                    _exposedHeaderPosition += exposedHeaderByteCount;
+                    elementsSize = elementsSize.AddBytes(-exposedHeaderByteCount);
+                }
+                else
+                {
+                    elementsSize = _elementColumnReader.ReadNext(slice);
+                }
 
                 _elementPosition += elementsSize.Elements;
                 var elementsCount = 0;
@@ -308,15 +352,23 @@ namespace Octonica.ClickHouseClient.Types
             private readonly List<(int offset, int length)> _ranges;
             private readonly int _rowCount;
 
+            // A part of the inner column's header exposed outside of the beginning of the current column
+            private readonly byte[]? _exposedHeader;
+
             private IClickHouseColumnReaderBase? _elementColumnReader;            
 
             private int _position;
             private int _elementPosition;
+            private int _exposedHeaderPosition;
 
-            public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
+            public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
             {
                 _elementType = elementType;
                 _rowCount = rowCount;
+
+                if (exposedElementHeaderSize > 0)
+                    _exposedHeader = new byte[exposedElementHeaderSize];
+
                 _ranges = new List<(int offset, int length)>(rowCount);
             }
 
@@ -331,6 +383,14 @@ namespace Octonica.ClickHouseClient.Types
 
                 if (_elementColumnReader == null)
                 {
+                    if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
+                    {
+                        bytesCount = (int)Math.Min(slice.Length, _exposedHeader.Length - _exposedHeaderPosition);
+                        slice.Slice(0, bytesCount).CopyTo(((Span<byte>)_exposedHeader).Slice(_exposedHeaderPosition, bytesCount));
+                        _exposedHeaderPosition += bytesCount;
+                        slice = slice.Slice(bytesCount);
+                    }
+
                     var totalLength = _ranges.Aggregate((ulong) 0, (acc, r) => acc + (ulong) r.length);
 
                     Span<byte> sizeSpan = stackalloc byte[sizeof(ulong)];
@@ -361,14 +421,28 @@ namespace Octonica.ClickHouseClient.Types
                     }
 
                     _elementColumnReader = _elementType.CreateSkippingColumnReader(checked((int) totalLength));
+                    _exposedHeaderPosition = 0;
                 }
 
                 if (maxElementsCount > _ranges.Count - _position)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
-                var maxElementRange = _ranges[_position + maxElementsCount - 1];
-                var elementsSize = _elementColumnReader.ReadNext(slice);
+                SequenceSize elementsSize;
+                if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
+                {
+                    var segment = new SimpleReadOnlySequenceSegment<byte>(((ReadOnlyMemory<byte>)_exposedHeader).Slice(_exposedHeaderPosition), slice);
+                    elementsSize = _elementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
 
+                    var exposedHeaderByteCount = Math.Min(elementsSize.Bytes, _exposedHeader.Length - _exposedHeaderPosition);
+                    _exposedHeaderPosition += exposedHeaderByteCount;
+                    elementsSize = elementsSize.AddBytes(-exposedHeaderByteCount);
+                }
+                else
+                {
+                    elementsSize = _elementColumnReader.ReadNext(slice);
+                }
+
+                var maxElementRange = _ranges[_position + maxElementsCount - 1];
                 _elementPosition += elementsSize.Elements;
                 var elementsCount = 0;
                 while (_position < _ranges.Count)
@@ -387,8 +461,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ArrayColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
         {
-            public ArrayColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
-                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            public ArrayColumnWriterDispatcher(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, rows, columnSettings, elementTypeInfo)
             {
             }
 
@@ -400,8 +474,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class MemoryColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
         {
-            public MemoryColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
-                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            public MemoryColumnWriterDispatcher(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, rows, columnSettings, elementTypeInfo)
             {
             }
 
@@ -413,8 +487,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ReadOnlyColumnWriterDispatcher : ArrayColumnWriterDispatcherBase
         {
-            public ReadOnlyColumnWriterDispatcher(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
-                : base(columnName, columnType, rows, columnSettings, elementTypeInfo)
+            public ReadOnlyColumnWriterDispatcher(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+                : base(columnName, rows, columnSettings, elementTypeInfo)
             {
             }
 
@@ -426,16 +500,14 @@ namespace Octonica.ClickHouseClient.Types
 
         private abstract class ArrayColumnWriterDispatcherBase : ITypeDispatcher<IClickHouseColumnWriter>
         {
-            private readonly string _columnName;
-            private readonly string _columnType;
+            private readonly string _columnName;            
             private readonly object _rows;
             private readonly ClickHouseColumnSettings? _columnSettings;
             private readonly IClickHouseColumnTypeInfo _elementTypeInfo;
 
-            protected ArrayColumnWriterDispatcherBase(string columnName, string columnType, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
+            protected ArrayColumnWriterDispatcherBase(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo elementTypeInfo)
             {
                 _columnName = columnName;
-                _columnType = columnType;
                 _rows = rows;
                 _columnSettings = columnSettings;
                 _elementTypeInfo = elementTypeInfo;
@@ -445,7 +517,8 @@ namespace Octonica.ClickHouseClient.Types
             {
                 var linearizedList = ToList<T>(_rows);
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
-                return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);
+                var columnType = $"Array({elementColumnWriter.ColumnType})";
+                return new ArrayColumnWriter<T>(columnType, linearizedList, elementColumnWriter);
             }
 
             protected abstract ArrayLinearizedList<T> ToList<T>(object rows);
@@ -454,7 +527,6 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class MultiDimensionalArrayColumnWriterDispatcher : ITypeDispatcher<IClickHouseColumnWriter>
         {
             private readonly string _columnName;
-            private readonly string _columnType;
             private readonly IReadOnlyList<Array> _rows;
             private readonly ClickHouseColumnSettings? _columnSettings;
             private readonly IClickHouseColumnTypeInfo _elementTypeInfo;
@@ -462,14 +534,12 @@ namespace Octonica.ClickHouseClient.Types
 
             public MultiDimensionalArrayColumnWriterDispatcher(
                 string columnName,
-                string columnType,
                 IReadOnlyList<Array> rows,
                 ClickHouseColumnSettings? columnSettings,
                 IClickHouseColumnTypeInfo elementTypeInfo,
                 Func<Array, object> dispatchArray)
             {
                 _columnName = columnName;
-                _columnType = columnType;
                 _rows = rows;
                 _columnSettings = columnSettings;
                 _elementTypeInfo = elementTypeInfo;
@@ -481,7 +551,8 @@ namespace Octonica.ClickHouseClient.Types
                 var mappedRows = MappedReadOnlyList<Array, IReadOnlyList<T>>.Map(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
                 var linearizedList = new ArrayLinearizedList<T>(mappedRows);
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
-                return new ArrayColumnWriter<T>(_columnType, linearizedList, elementColumnWriter);
+                var columnType = $"Array({elementColumnWriter.ColumnType})";
+                return new ArrayColumnWriter<T>(columnType, linearizedList, elementColumnWriter);
             }
         }
 

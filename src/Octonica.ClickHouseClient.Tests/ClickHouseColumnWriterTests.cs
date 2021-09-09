@@ -1188,6 +1188,41 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public async Task InsertArrayLowCardinality()
+        {
+            var columns = new Dictionary<string, object?>()
+            {
+                ["id"] = Enumerable.Range(1, 10).ToList(),
+                ["data"] = Enumerable.Range(1, 10).Select(o => new[] { $"test{ 1 + o * 2 % 3}", $"test{ 1 + (1 + o * 2) % 3}" }),
+            };
+
+            await WithTemporaryTable("arrlc", "id Int32, data Array(LowCardinality(String))", Test);
+
+            async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, data) VALUES", CancellationToken.None))
+                {
+                    await writer.WriteTableAsync(columns, 10, CancellationToken.None);
+                }
+
+                var cmd = cn.CreateCommand($"SELECT id, data FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int count = 0;
+                while(await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    var data = reader.GetFieldValue<string[]>(1);
+
+                    Assert.Equal(((List<int>?)columns["id"])?[count], id);
+                    Assert.Equal(new[] { $"test{ 1 + (1 + count) * 2 % 3}", $"test{ 1 + (1 + (1 + count) * 2) % 3}" }, data);
+                    ++count;
+                }
+
+                Assert.Equal(10, count);
+            }
+        }
+
         protected override string GetTempTableName(string tableNameSuffix)
         {
             return $"{TestTableName}_{tableNameSuffix}";
