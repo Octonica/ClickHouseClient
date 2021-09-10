@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -203,6 +204,16 @@ namespace Octonica.ClickHouseClient.Types
             {
                 var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
                 
+                var recognizedElementType = ClickHouseTableColumnHelper.TryGetValueType(valuesColumn);
+                if (recognizedElementType != null)
+                {
+                    var dispatcher = _buffer == null
+                        ? new LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte>.Empty, 1, valuesColumn)
+                        : new LowCardinalityTableColumnDispatcher(new ReadOnlyMemory<byte>(_buffer, 0, _position * _keySize), _keySize, valuesColumn);
+
+                    return TypeDispatcher.Dispatch(recognizedElementType, dispatcher);
+                }
+
                 if (_buffer == null)
                     return new LowCardinalityTableColumn(ReadOnlyMemory<byte>.Empty, 1, valuesColumn);
 
@@ -336,6 +347,25 @@ namespace Octonica.ClickHouseClient.Types
                 result += new SequenceSize(elementCount * _keySize, elementCount);
 
                 return result;
+            }
+        }
+
+        private sealed class LowCardinalityTableColumnDispatcher : ITypeDispatcher<IClickHouseTableColumn>
+        {
+            private readonly ReadOnlyMemory<byte> _keys;
+            private readonly int _keySize;
+            private readonly IClickHouseTableColumn _values;
+
+            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values)
+            {
+                _keys = keys;
+                _keySize = keySize;
+                _values = values;
+            }
+
+            public IClickHouseTableColumn Dispatch<T>()
+            {
+                return new LowCardinalityTableColumn<T>(_keys, _keySize, (IClickHouseTableColumn<T>)_values);
             }
         }
     }

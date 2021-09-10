@@ -1345,6 +1345,12 @@ namespace Octonica.ClickHouseClient.Tests
                 cmd = connection.CreateCommand("CREATE TABLE low_cardinality_test(id Int32, str LowCardinality(String)) ENGINE=Memory");
                 await cmd.ExecuteNonQueryAsync();
 
+                cmd.CommandText = "SELECT * FROM low_cardinality_test";
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.False(await reader.ReadAsync());
+                }
+
                 cmd.CommandText = "INSERT INTO low_cardinality_test(id, str) VALUES (1,'foo')(2,'bar')(4,'bar')(6,'bar')(3,'foo')(7,'foo')(8,'bar')(5,'foobar')";
                 await cmd.ExecuteNonQueryAsync();
 
@@ -1385,6 +1391,12 @@ namespace Octonica.ClickHouseClient.Tests
 
                 cmd = connection.CreateCommand("CREATE TABLE low_cardinality_null_test(id Int32, str LowCardinality(Nullable(String))) ENGINE=Memory");
                 await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "SELECT * FROM low_cardinality_null_test";
+                await using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.False(await reader.ReadAsync());
+                }
 
                 cmd.CommandText = "INSERT INTO low_cardinality_null_test(id, str) SELECT number, number%50 == 0 ? NULL : toString(number%200) FROM system.numbers LIMIT 30000";
                 await cmd.ExecuteNonQueryAsync();
@@ -2568,6 +2580,142 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
                 var result = await cmd.ExecuteScalarAsync();
                 var bigIntResult = Assert.IsType<BigInteger>(result);
                 Assert.Equal(pair.expected, bigIntResult);
+            }
+        }
+
+        [Fact]
+        public async Task ReadArrayLowCardinality()
+        {
+            await WithTemporaryTable("arrlc", "id Int32, arr Array(LowCardinality(String))", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var cmd = cn.CreateCommand($"SELECT * FROM {tableName}");
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                    Assert.False(await reader.ReadAsync());
+
+                cmd.CommandText = $"INSERT INTO {tableName}(id, arr) VALUES (1, [])";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = $"SELECT arr FROM {tableName}";
+
+                await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly))
+                {
+                    // Skipping all rows
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    Assert.True(await reader.ReadAsync());
+                    Assert.Equal(Array.Empty<string>(), reader.GetValue(0));
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                cmd.CommandText = $"INSERT INTO {tableName}(id, arr) VALUES (2, ['abc', 'def'])(3, ['def', 'ghi'])(4, ['def'])(5, ['ghi', 'abc'])";
+                await cmd.ExecuteNonQueryAsync();
+
+                var expectedValues = new Dictionary<int, string[]>
+                {
+                    [1] = Array.Empty<string>(),
+                    [2] = new[] { "abc", "def" },
+                    [3] = new[] { "def", "ghi" },
+                    [4] = new[] { "def" },
+                    [5] = new[] { "ghi", "abc" }
+                };
+
+                cmd.CommandText = $"SELECT id, arr FROM {tableName}";
+                await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly))
+                {
+                    // Skipping all rows
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var id = reader.GetInt32(0);
+                        var value = reader.GetValue(1);
+                        var arr = Assert.IsType<string[]>(value);
+                        Assert.True(expectedValues.Remove(id, out var expectedArr));
+                        Assert.Equal(expectedArr, arr);
+                    }
+                }
+
+                Assert.Empty(expectedValues);
+            }
+        }
+
+        [Fact]
+        public async Task ReadMultidimensionalArrayLowCardinality()
+        {
+            await WithTemporaryTable("arrlc", "id Int32, arr Array(Array(Array(LowCardinality(Nullable(String)))))", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var cmd = cn.CreateCommand($"SELECT * FROM {tableName}");
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                    Assert.False(await reader.ReadAsync());
+
+                cmd.CommandText = $"INSERT INTO {tableName}(id, arr) VALUES (1, [[[]]])";
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = $"SELECT arr FROM {tableName}";
+                await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly))
+                {
+                    // Skipping all rows
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    Assert.True(await reader.ReadAsync());
+                    Assert.Equal(new[] { new[] { Array.Empty<string>() } }, reader.GetValue(0));
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                cmd.CommandText = $"INSERT INTO {tableName}(id, arr) VALUES " +
+                    "(2, [[['foo', 'bar'], [''], ['foo', 'bar', null, 'baz']]])" +
+                    "(3, [[['foo', 'bar'], ['bar']], []])" +
+                    "(4, [[['foo']], [[]], [['baz', null], ['bar', 'foo']]])" +
+                    "(5, [[[NULL]], [[], ['baz']]])" +
+                    "(6, [])" +
+                    "(7, [[]])";
+
+                await cmd.ExecuteNonQueryAsync();
+
+                var expectedValues = new Dictionary<int, string?[][][]>
+                {
+                    [1] = new[] { new[] { Array.Empty<string>() } },
+                    [2] = new[] { new[] { new[] { "foo", "bar" }, new[] { string.Empty }, new[] { "foo", "bar", null, "baz" } } },
+                    [3] = new[] { new[] { new[] { "foo", "bar" }, new[] { "bar" } }, Array.Empty<string?[]>() },
+                    [4] = new[] { new[] { new[] { "foo" } }, new[] { Array.Empty<string>() }, new[] { new[] { "baz", null }, new[] { "bar", "foo" } } },
+                    [5] = new[] { new[] { new[] { default(string) } }, new[] { Array.Empty<string>(), new[] { "baz" } } },
+                    [6] = Array.Empty<string?[][]>(),
+                    [7] = new[] { Array.Empty<string?[]>() }
+                };
+
+                cmd.CommandText = $"SELECT id, arr FROM {tableName}";
+                await using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SchemaOnly))
+                {
+                    // Skipping all rows
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                await using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while(await reader.ReadAsync())
+                    {
+                        var id = reader.GetInt32(0);
+                        var value = reader.GetValue(1);
+                        var arr = Assert.IsType<string?[][][]>(value);
+                        Assert.True(expectedValues.Remove(id, out var expectedArr));
+                        Assert.Equal(expectedArr, arr);
+                    }
+                }
+
+                Assert.Empty(expectedValues);                
             }
         }
 

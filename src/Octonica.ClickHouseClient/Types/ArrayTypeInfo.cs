@@ -316,25 +316,7 @@ namespace Octonica.ClickHouseClient.Types
                 var column = elementColumnReader.EndRead(settings);
                 var ranges = _position == _ranges.Count ? _ranges : _ranges.Take(_position).ToList();
 
-                var columnType = column.GetType();
-                Type? recognizedElementType = null;
-                foreach (var itf in columnType.GetInterfaces().Where(i => i.IsGenericType))
-                {
-                    var typeDef = itf.GetGenericTypeDefinition();
-                    if (typeDef != typeof(IClickHouseTableColumn<>))
-                        continue;
-
-                    if (recognizedElementType == null)
-                    {
-                        recognizedElementType = itf.GenericTypeArguments[0];
-                    }
-                    else
-                    {
-                        recognizedElementType = null;
-                        break;
-                    }
-                }
-
+                var recognizedElementType = ClickHouseTableColumnHelper.TryGetValueType(column);
                 if (recognizedElementType != null)
                 {
                     var reinterpretedColumn = TypeDispatcher.Dispatch(recognizedElementType, new ArrayTableColumnTypeDispatcher(column, ranges));
@@ -422,6 +404,14 @@ namespace Octonica.ClickHouseClient.Types
 
                     _elementColumnReader = _elementType.CreateSkippingColumnReader(checked((int) totalLength));
                     _exposedHeaderPosition = 0;
+
+                    if (totalLength == 0)
+                    {
+                        // Special case for an empty array
+                        var result = new SequenceSize(bytesCount, _rowCount - _position);
+                        _position = _rowCount;
+                        return result;
+                    }
                 }
 
                 if (maxElementsCount > _ranges.Count - _position)
