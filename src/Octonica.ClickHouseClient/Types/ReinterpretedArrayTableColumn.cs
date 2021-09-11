@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -24,7 +25,7 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn _reinterpretationRoot;
         private readonly IClickHouseArrayTableColumn<TElement> _arrayColumn;
 
-        public int RowCount => throw new NotImplementedException();
+        public int RowCount => _arrayColumn.RowCount;
 
         public ReinterpretedArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseArrayTableColumn<TElement> arrayColumn)
         {
@@ -55,6 +56,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return _reinterpretationRoot as IClickHouseArrayTableColumn<T> ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
     }
 }

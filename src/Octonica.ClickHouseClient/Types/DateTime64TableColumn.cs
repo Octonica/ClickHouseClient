@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -107,6 +107,12 @@ namespace Octonica.ClickHouseClient.Types
                 return new ReinterpretedTableColumn<T>(this, rawReinterpreted);
 
             return null;
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
         }
 
         object IClickHouseTableColumn.GetValue(int index)

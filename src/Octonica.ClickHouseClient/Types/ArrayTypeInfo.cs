@@ -316,15 +316,10 @@ namespace Octonica.ClickHouseClient.Types
                 var column = elementColumnReader.EndRead(settings);
                 var ranges = _position == _ranges.Count ? _ranges : _ranges.Take(_position).ToList();
 
-                var recognizedElementType = ClickHouseTableColumnHelper.TryGetValueType(column);
-                if (recognizedElementType != null)
-                {
-                    var reinterpretedColumn = TypeDispatcher.Dispatch(recognizedElementType, new ArrayTableColumnTypeDispatcher(column, ranges));
-                    if (reinterpretedColumn != null)
-                        return reinterpretedColumn;
-                }
+                if (!column.TryDipatch(new ArrayTableColumnDipatcher(ranges), out var result))
+                    result = new ArrayTableColumn(column, ranges);
 
-                return new ArrayTableColumn(column, ranges);
+                return result;
             }
         }
 
@@ -671,6 +666,21 @@ namespace Octonica.ClickHouseClient.Types
 
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: data structure is corrupted.");
                 }
+            }
+        }
+
+        private sealed class ArrayTableColumnDipatcher : IClickHouseTableColumnDispatcher<IClickHouseTableColumn>
+        {
+            private readonly List<(int offset, int length)> _ranges;
+
+            public ArrayTableColumnDipatcher(List<(int offset, int length)> ranges)
+            {
+                _ranges = ranges;
+            }
+
+            public IClickHouseTableColumn Dispatch<T>(IClickHouseTableColumn<T> column)
+            {
+                return new ArrayTableColumn<T>(column, _ranges);
             }
         }
     }

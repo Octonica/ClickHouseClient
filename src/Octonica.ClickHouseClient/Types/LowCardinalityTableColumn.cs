@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 
@@ -71,6 +72,12 @@ namespace Octonica.ClickHouseClient.Types
                 return null;
 
             return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues);
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
 
         private int GetValueIndex(int index)
@@ -153,6 +160,12 @@ namespace Octonica.ClickHouseClient.Types
             return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues);
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
+
         private int GetValueIndex(int index)
         {
             if (index < 0 || index > RowCount)
@@ -216,6 +229,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return _reinterpretationRoot as IClickHouseArrayTableColumn<T> ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
 
         private int GetValueIndex(int index)

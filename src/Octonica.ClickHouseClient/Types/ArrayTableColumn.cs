@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
@@ -65,6 +66,12 @@ namespace Octonica.ClickHouseClient.Types
                 return null;
 
             return (IClickHouseTableColumn<T>?) TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
     }
 
@@ -134,6 +141,12 @@ namespace Octonica.ClickHouseClient.Types
                 buffer[dataOffset + i] = _column.GetValue(range.offset + i);
 
             return length;
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;            
         }
     }
 

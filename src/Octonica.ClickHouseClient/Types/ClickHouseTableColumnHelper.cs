@@ -16,7 +16,6 @@
 #endregion
 
 using System;
-using System.Linq;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -24,21 +23,24 @@ namespace Octonica.ClickHouseClient.Types
     {
         public static Type? TryGetValueType(IClickHouseTableColumn column)
         {
-            var columnType = column.GetType();
-            Type? result = null;
-            foreach (var itf in columnType.GetInterfaces().Where(i => i.IsGenericType))
-            {
-                var typeDef = itf.GetGenericTypeDefinition();
-                if (typeDef != typeof(IClickHouseTableColumn<>))
-                    continue;
+            if (column.TryDipatch(ClickHouseTableColumnValueTypeDispatcher.Instance, out var type))
+                return type;
 
-                if (result == null)
-                    result = itf.GenericTypeArguments[0];
-                else
-                    return null;
+            return null;
+        }
+
+        private sealed class ClickHouseTableColumnValueTypeDispatcher : IClickHouseTableColumnDispatcher<Type>
+        {
+            public static readonly ClickHouseTableColumnValueTypeDispatcher Instance = new ClickHouseTableColumnValueTypeDispatcher();
+
+            private ClickHouseTableColumnValueTypeDispatcher()
+            {
             }
 
-            return result;
+            public Type Dispatch<T>(IClickHouseTableColumn<T> column)
+            {
+                return typeof(T);
+            }
         }
     }
 }

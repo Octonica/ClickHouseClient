@@ -202,22 +202,24 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
-                
-                var recognizedElementType = ClickHouseTableColumnHelper.TryGetValueType(valuesColumn);
-                if (recognizedElementType != null)
+                ReadOnlyMemory<byte> keys;
+                int keySize;
+                if (_buffer == null)
                 {
-                    var dispatcher = _buffer == null
-                        ? new LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte>.Empty, 1, valuesColumn)
-                        : new LowCardinalityTableColumnDispatcher(new ReadOnlyMemory<byte>(_buffer, 0, _position * _keySize), _keySize, valuesColumn);
-
-                    return TypeDispatcher.Dispatch(recognizedElementType, dispatcher);
+                    keys = ReadOnlyMemory<byte>.Empty;
+                    keySize = 1;
+                }
+                else
+                {
+                    keys = new ReadOnlyMemory<byte>(_buffer, 0, _position * _keySize);
+                    keySize = _keySize;
                 }
 
-                if (_buffer == null)
-                    return new LowCardinalityTableColumn(ReadOnlyMemory<byte>.Empty, 1, valuesColumn);
+                var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
+                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize), out var result))
+                    result = new LowCardinalityTableColumn(keys, keySize, valuesColumn);
 
-                return new LowCardinalityTableColumn(new ReadOnlyMemory<byte>(_buffer, 0, _position * _keySize), _keySize, valuesColumn);
+                return result;
             }
 
             public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
@@ -350,22 +352,20 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class LowCardinalityTableColumnDispatcher : ITypeDispatcher<IClickHouseTableColumn>
+        private sealed class LowCardinalityTableColumnDispatcher : IClickHouseTableColumnDispatcher<IClickHouseTableColumn>
         {
             private readonly ReadOnlyMemory<byte> _keys;
-            private readonly int _keySize;
-            private readonly IClickHouseTableColumn _values;
+            private readonly int _keySize;            
 
-            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values)
+            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize)
             {
                 _keys = keys;
                 _keySize = keySize;
-                _values = values;
             }
 
-            public IClickHouseTableColumn Dispatch<T>()
+            public IClickHouseTableColumn Dispatch<T>(IClickHouseTableColumn<T> column)
             {
-                return new LowCardinalityTableColumn<T>(_keys, _keySize, (IClickHouseTableColumn<T>)_values);
+                return new LowCardinalityTableColumn<T>(_keys, _keySize, column);
             }
         }
     }

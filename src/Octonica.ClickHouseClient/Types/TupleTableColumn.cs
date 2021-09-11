@@ -63,32 +63,20 @@ namespace Octonica.ClickHouseClient.Types
             return (IClickHouseTableColumn<T>?) TryMakeTupleColumn(typeof(T), RowCount, columnList);
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = Dispatch(dispatcher);
+            return true;
+        }
+
+        protected abstract T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher);
+
         public static TupleTableColumnBase MakeTupleColumn(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
         {
             var columnElementTypes = new Type[columns.Count];
 
             for (var i = 0; i < columns.Count; i++)
-            {
-                var column = columns[i];
-                var columnType = column.GetType();
-                Type? elementType = null;
-                foreach (var itf in columnType.GetInterfaces().Where(itf => itf.IsGenericType))
-                {
-                    var itfDef = itf.GetGenericTypeDefinition();
-                    if (itfDef != typeof(IClickHouseTableColumn<>))
-                        continue;
-
-                    if (elementType == null)
-                        elementType = itf.GetGenericArguments()[0];
-                    else
-                    {
-                        elementType = null;
-                        break;
-                    }
-                }
-
-                columnElementTypes[i] = elementType ?? typeof(object);
-            }
+                columnElementTypes[i] = ClickHouseTableColumnHelper.TryGetValueType(columns[i]) ?? typeof(object);
 
             var tupleType = TupleTypeInfo.MakeTupleType(columnElementTypes);
             var tupleColumn = TryMakeTupleColumn(tupleType, rowCount, columns);
@@ -240,6 +228,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column1;
         }
 
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
+        }
+
         internal class Reinterpreter : ReinterpreterBase
         {
             public override TupleTableColumnBase? TryReinterpret(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
@@ -283,6 +276,11 @@ namespace Octonica.ClickHouseClient.Types
         {
             yield return _column1;
             yield return _column2;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -335,6 +333,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column1;
             yield return _column2;
             yield return _column3;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -394,6 +397,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column2;
             yield return _column3;
             yield return _column4;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -466,6 +474,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column3;
             yield return _column4;
             yield return _column5;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -552,6 +565,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column4;
             yield return _column5;
             yield return _column6;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -647,6 +665,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column5;
             yield return _column6;
             yield return _column7;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -757,6 +780,11 @@ namespace Octonica.ClickHouseClient.Types
                 yield return extraColumn;
         }
 
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
+        }
+
         internal class Reinterpreter : ReinterpreterBase
         {
             public override TupleTableColumnBase? TryReinterpret(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
@@ -828,6 +856,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column1;
         }
 
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
+        }
+
         internal class Reinterpreter : ReinterpreterBase
         {
             public override TupleTableColumnBase? TryReinterpret(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
@@ -871,6 +904,11 @@ namespace Octonica.ClickHouseClient.Types
         {
             yield return _column1;
             yield return _column2;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -923,6 +961,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column1;
             yield return _column2;
             yield return _column3;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -982,6 +1025,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column2;
             yield return _column3;
             yield return _column4;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -1054,6 +1102,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column3;
             yield return _column4;
             yield return _column5;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -1140,6 +1193,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column4;
             yield return _column5;
             yield return _column6;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -1235,6 +1293,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column5;
             yield return _column6;
             yield return _column7;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase
@@ -1343,6 +1406,11 @@ namespace Octonica.ClickHouseClient.Types
 
             foreach (var extraColumn in _columnRest.GetColumns())
                 yield return extraColumn;
+        }
+
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
         }
 
         internal class Reinterpreter : ReinterpreterBase

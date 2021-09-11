@@ -15,6 +15,8 @@
  */
 #endregion
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
@@ -56,6 +58,15 @@ namespace Octonica.ClickHouseClient
         /// <returns>The column converted to the type <see cref="IClickHouseArrayTableColumn{T}"/> or <see langword="null"/> if such conversion is not supported.</returns>
         /// <remarks>This method may or may not return <see langword="null"/> when the column itself implements the interface <see cref="IClickHouseArrayTableColumn{T}"/>.</remarks>
         IClickHouseArrayTableColumn<T>? TryReinterpretAsArray<T>() => null;
+
+        /// <summary>
+        /// If possible, performs double dispatch and provides this object as an instance of <see cref="IClickHouseTableColumn{TValue}"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the dispatched value.</typeparam>
+        /// <param name="dispatcher">The dispatcher that receives an instance of <see cref="IClickHouseTableColumn{TValue}"/>.</param>
+        /// <param name="dispatchedValue">When this method returns, the result of the dispatch operation, if the dispatcher was called; otherwise the default value of <typeparamref name="T"/>.</param>
+        /// <returns><see langword="true"/> if this object is an instance of <see cref="IClickHouseTableColumn{TValue}"/> and the dispatch operation was performed; otherwise <see langword="false"/>.</returns>
+        bool TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue);
     }
 
     /// <summary>

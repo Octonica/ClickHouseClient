@@ -17,6 +17,7 @@
 
 using Octonica.ClickHouseClient.Utils;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -62,6 +63,12 @@ namespace Octonica.ClickHouseClient.Types
         {
             var reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
             return (reinterpretationRoot as IClickHouseArrayTableColumn<T>) ?? reinterpretationRoot.TryReinterpretAsArray<T>();
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -112,6 +119,12 @@ namespace Octonica.ClickHouseClient.Types
         {
             return (_reinterpretationRoot as IClickHouseArrayTableColumn<T>) ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
         }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
     }
 
     internal sealed class ReinterpretedTableColumn : IClickHouseTableColumn
@@ -146,6 +159,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return (_column as IClickHouseArrayTableColumn<T>) ?? _column.TryReinterpretAsArray<T>();
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
 
         public static IClickHouseTableColumn GetReinterpetedTableColumn(IClickHouseTableColumn column, Type targetType, Func<object, object> fallbackConvertValue)

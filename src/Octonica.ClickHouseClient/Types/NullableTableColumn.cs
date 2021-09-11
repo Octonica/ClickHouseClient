@@ -18,7 +18,7 @@
 using System;
 using System.Collections;
 using System.Diagnostics;
-using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Types
@@ -59,35 +59,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public static IClickHouseTableColumn MakeNullableColumn(BitArray? nullFlags, IClickHouseTableColumn baseColumn)
         {
-            var columnType = baseColumn.GetType();
-            Type? recognizedElementType = null;
-            foreach (var itf in columnType.GetInterfaces().Where(i => i.IsGenericType))
-            {
-                var typeDef = itf.GetGenericTypeDefinition();
-                if (typeDef != typeof(IClickHouseTableColumn<>))
-                    continue;
+            if (!baseColumn.TryDipatch(new NullableTableColumnDispatcher(nullFlags), out var result) || result == null)
+                result = new NullableTableColumn(nullFlags, baseColumn);
 
-                if (recognizedElementType == null)
-                {
-                    recognizedElementType = itf.GenericTypeArguments[0];
-                }
-                else
-                {
-                    recognizedElementType = null;
-                    break;
-                }
-            }
-
-            IClickHouseTableColumn? result = null;
-            if (recognizedElementType != null)
-            {
-                if (recognizedElementType.IsValueType && !(recognizedElementType.IsGenericType && recognizedElementType.GetGenericTypeDefinition() == typeof(Nullable<>)))
-                    recognizedElementType = typeof(Nullable<>).MakeGenericType(recognizedElementType);
-
-                result = TryMakeNullableColumn(recognizedElementType, nullFlags, baseColumn);
-            }
-
-            return result ?? new NullableTableColumn(nullFlags, baseColumn);
+            return result;
         }
 
         public static IClickHouseTableColumn<T>? TryMakeNullableColumn<T>(BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
@@ -98,6 +73,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
 
         public static IClickHouseArrayTableColumn<T>? TryMakeNullableArrayColumn<T>(IClickHouseTableColumn reinterpretationRoot, BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
@@ -115,15 +96,11 @@ namespace Octonica.ClickHouseClient.Types
             bool reinterpretAsNotNullable = false;
             if (underlyingType.IsValueType)
             {
-                Type columnType;
-                if (!underlyingType.IsGenericType || underlyingType.GetGenericTypeDefinition() != typeof(Nullable<>))
+                var columnType = Nullable.GetUnderlyingType(underlyingType);
+                if (columnType == null)
                 {
                     reinterpretAsNotNullable = true;
                     columnType = underlyingType;
-                }
-                else
-                {
-                    columnType = Nullable.GetUnderlyingType(underlyingType) ?? underlyingType;
                 }
 
                 dispatcherType = typeof(NullableStructTableColumnDispatcher<>).MakeGenericType(columnType);
@@ -181,6 +158,38 @@ namespace Octonica.ClickHouseClient.Types
                 return new NullableObjTableColumn<TObj>(nullFlags, reinterpretedColumn);
             }
         }
+
+        private sealed class NullableTableColumnDispatcher : IClickHouseTableColumnDispatcher<IClickHouseTableColumn?>
+        {
+            private readonly BitArray? _nullFlags;
+
+            public NullableTableColumnDispatcher(BitArray? nullFlags)
+            {
+                _nullFlags = nullFlags;
+            }
+
+            public IClickHouseTableColumn? Dispatch<T>(IClickHouseTableColumn<T> column)
+            {
+                Type type = typeof(T);
+                Type dispatcherType;
+                if (type.IsValueType)
+                {
+                    var columnType = Nullable.GetUnderlyingType(type) ?? type;
+                    dispatcherType = typeof(NullableStructTableColumnDispatcher<>).MakeGenericType(columnType);
+                }
+                else if (type.IsClass)
+                {
+                    dispatcherType = typeof(NullableObjTableColumnDispatcher<>).MakeGenericType(type);
+                }
+                else
+                {
+                    return null;
+                }
+
+                var dispatcher = (INullableColumnDispatcher)Activator.CreateInstance(dispatcherType)!;
+                return dispatcher.Dispatch(_nullFlags, column, false);
+            }
+        }
     }
 
     internal sealed class NullableStructTableColumn<TStruct> : IClickHouseTableColumn<TStruct?>
@@ -221,6 +230,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -274,6 +289,12 @@ namespace Octonica.ClickHouseClient.Types
             return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             if (_nullFlags != null && _nullFlags[index])
@@ -320,6 +341,12 @@ namespace Octonica.ClickHouseClient.Types
             return NullableTableColumn.TryMakeNullableArrayColumn<T>(this, _nullFlags, _baseColumn);
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
+
         object IClickHouseTableColumn.GetValue(int index)
         {
             return (object?) GetValue(index) ?? DBNull.Value;
@@ -362,6 +389,12 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
             return _reinterpretationRoot as IClickHouseArrayTableColumn<T> ?? _reinterpretationRoot.TryReinterpretAsArray<T>();
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)

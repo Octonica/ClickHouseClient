@@ -50,6 +50,11 @@ namespace Octonica.ClickHouseClient.Types
             yield return _valueColumn;
         }
 
+        protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
+        {
+            return dispatcher.Dispatch(this);
+        }
+
         internal class Reinterpreter : ReinterpreterBase
         {
             public override TupleTableColumnBase? TryReinterpret(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)

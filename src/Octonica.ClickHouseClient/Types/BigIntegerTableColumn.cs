@@ -62,5 +62,11 @@ namespace Octonica.ClickHouseClient.Types
 
             return null;
         }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
     }
 }

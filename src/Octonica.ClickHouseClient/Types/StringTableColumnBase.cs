@@ -73,6 +73,12 @@ namespace Octonica.ClickHouseClient.Types
             return null;
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
+
         public int CopyTo(int index, Span<byte> buffer, int dataOffset)
         {
             var (segmentIndex, offset, length) = _layouts[index];

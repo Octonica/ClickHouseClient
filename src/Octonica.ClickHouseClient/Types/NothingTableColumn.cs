@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -47,6 +48,12 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             return null;
+        }
+
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
+        {
+            dispatchedValue = default;
+            return false;
         }
     }
 }

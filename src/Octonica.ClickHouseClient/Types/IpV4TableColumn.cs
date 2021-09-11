@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,6 +83,12 @@ namespace Octonica.ClickHouseClient.Types
             return (IClickHouseTableColumn<T>?) result;
         }
 
+        bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+        {
+            dispatchedValue = dispatcher.Dispatch(this);
+            return true;
+        }
+
         private sealed class RawIpV4TableColumn<TStruct> : IClickHouseTableColumn<TStruct>
             where TStruct : struct
         {
@@ -115,6 +121,12 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseTableColumn<T>? TryReinterpret<T>()
             {
                 return this as IClickHouseTableColumn<T>;
+            }
+
+            bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
+            {
+                dispatchedValue = dispatcher.Dispatch(this);
+                return true;
             }
         }
     }
