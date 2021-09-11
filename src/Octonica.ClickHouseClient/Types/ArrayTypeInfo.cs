@@ -195,41 +195,45 @@ namespace Octonica.ClickHouseClient.Types
             return 0;
         }
 
-        private sealed class ArrayColumnReader : IClickHouseColumnReader
+        private abstract class ArrayColumnReaderBase<TElementColumnReader> : IClickHouseColumnReaderBase
+            where TElementColumnReader : class, IClickHouseColumnReaderBase
         {
             private readonly int _rowCount;
-            private readonly IClickHouseColumnTypeInfo _elementType;
-            private readonly List<(int offset, int length)> _ranges;
 
             // A part of the inner column's header exposed outside of the beginning of the current column
             private readonly byte[]? _exposedHeader;
 
-            private IClickHouseColumnReader? _elementColumnReader;
-
-            private int _position;
             private int _elementPosition;
             private int _exposedHeaderPosition;
 
-            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
+            protected IClickHouseColumnTypeInfo ElementType { get; }
+
+            protected List<(int offset, int length)> Ranges { get; }
+
+            protected TElementColumnReader? ElementColumnReader { get; private set; }
+
+            protected int Position { get; private set; }
+
+            public ArrayColumnReaderBase(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
             {
                 _rowCount = rowCount;
-                _elementType = elementType;
+                ElementType = elementType;
 
                 if (exposedElementHeaderSize > 0)
                     _exposedHeader = new byte[exposedElementHeaderSize];
 
-                _ranges = new List<(int offset, int length)>(_rowCount);
+                Ranges = new List<(int offset, int length)>(_rowCount);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                if (_position >= _rowCount)
+                if (Position >= _rowCount)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
                 int bytesCount = 0;
                 var slice = sequence;
 
-                if (_elementColumnReader == null)
+                if (ElementColumnReader == null)
                 {
                     if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
                     {
@@ -239,10 +243,10 @@ namespace Octonica.ClickHouseClient.Types
                         slice = slice.Slice(bytesCount);
                     }
 
-                    var totalLength = _ranges.Aggregate((ulong) 0, (acc, r) => acc + (ulong) r.length);
+                    var totalLength = Ranges.Aggregate((ulong)0, (acc, r) => acc + (ulong)r.length);
 
                     Span<byte> sizeSpan = stackalloc byte[sizeof(ulong)];
-                    for (int i = _ranges.Count; i < _rowCount; i++)
+                    for (int i = Ranges.Count; i < _rowCount; i++)
                     {
                         if (slice.Length < sizeSpan.Length)
                             return new SequenceSize(bytesCount, 0);
@@ -261,21 +265,21 @@ namespace Octonica.ClickHouseClient.Types
                         slice = slice.Slice(sizeSpan.Length);
                         bytesCount += sizeSpan.Length;
 
-                        var offset = checked((int) totalLength);
-                        var rangeLength = checked((int) (length - totalLength));
-                        _ranges.Add((offset, rangeLength));
+                        var offset = checked((int)totalLength);
+                        var rangeLength = checked((int)(length - totalLength));
+                        Ranges.Add((offset, rangeLength));
 
                         totalLength = length;
                     }
 
-                    _elementColumnReader = _elementType.CreateColumnReader(checked((int) totalLength));
+                    ElementColumnReader = CreateElementColumnReader(checked((int)totalLength));
                     _exposedHeaderPosition = 0;
 
                     if (totalLength == 0)
                     {
                         // Special case for an empty array
-                        var result = new SequenceSize(bytesCount, _rowCount - _position);
-                        _position = _rowCount;
+                        var result = new SequenceSize(bytesCount, _rowCount - Position);
+                        Position = _rowCount;
                         return result;
                     }
                 }
@@ -284,7 +288,7 @@ namespace Octonica.ClickHouseClient.Types
                 if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
                 {
                     var segment = new SimpleReadOnlySequenceSegment<byte>(((ReadOnlyMemory<byte>)_exposedHeader).Slice(_exposedHeaderPosition), slice);
-                    elementsSize = _elementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
+                    elementsSize = ElementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
 
                     var exposedHeaderByteCount = Math.Min(elementsSize.Bytes, _exposedHeader.Length - _exposedHeaderPosition);
                     _exposedHeaderPosition += exposedHeaderByteCount;
@@ -292,29 +296,44 @@ namespace Octonica.ClickHouseClient.Types
                 }
                 else
                 {
-                    elementsSize = _elementColumnReader.ReadNext(slice);
+                    elementsSize = ElementColumnReader.ReadNext(slice);
                 }
 
                 _elementPosition += elementsSize.Elements;
                 var elementsCount = 0;
-                while (_position < _rowCount)
+                while (Position < _rowCount)
                 {
-                    var currentRange = _ranges[_position];
+                    var currentRange = Ranges[Position];
                     if (currentRange.length + currentRange.offset > _elementPosition)
                         break;
 
                     ++elementsCount;
-                    ++_position;
+                    ++Position;
                 }
 
                 return new SequenceSize(bytesCount + elementsSize.Bytes, elementsCount);
             }
 
+            protected abstract TElementColumnReader CreateElementColumnReader(int totalLength);
+        }
+
+        private sealed class ArrayColumnReader : ArrayColumnReaderBase<IClickHouseColumnReader>, IClickHouseColumnReader
+        {
+            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
+                : base(rowCount, elementType, exposedElementHeaderSize)
+            {
+            }
+
+            protected override IClickHouseColumnReader CreateElementColumnReader(int totalLength)
+            {
+                return ElementType.CreateColumnReader(totalLength);
+            }
+
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var elementColumnReader = _elementColumnReader ?? _elementType.CreateColumnReader(0);
+                var elementColumnReader = ElementColumnReader ?? ElementType.CreateColumnReader(0);
                 var column = elementColumnReader.EndRead(settings);
-                var ranges = _position == _ranges.Count ? _ranges : _ranges.Take(_position).ToList();
+                var ranges = Position == Ranges.Count ? Ranges : Ranges.Take(Position).ToList();
 
                 if (!column.TryDipatch(new ArrayTableColumnDipatcher(ranges), out var result))
                     result = new ArrayTableColumn(column, ranges);
@@ -323,124 +342,16 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class ArraySkippingColumnReader : IClickHouseColumnReaderBase
+        private sealed class ArraySkippingColumnReader : ArrayColumnReaderBase<IClickHouseColumnReaderBase>
         {
-            private readonly IClickHouseColumnTypeInfo _elementType;
-            private readonly List<(int offset, int length)> _ranges;
-            private readonly int _rowCount;
-
-            // A part of the inner column's header exposed outside of the beginning of the current column
-            private readonly byte[]? _exposedHeader;
-
-            private IClickHouseColumnReaderBase? _elementColumnReader;            
-
-            private int _position;
-            private int _elementPosition;
-            private int _exposedHeaderPosition;
-
             public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
+                : base(rowCount, elementType, exposedElementHeaderSize)
             {
-                _elementType = elementType;
-                _rowCount = rowCount;
-
-                if (exposedElementHeaderSize > 0)
-                    _exposedHeader = new byte[exposedElementHeaderSize];
-
-                _ranges = new List<(int offset, int length)>(rowCount);
             }
 
-            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            protected override IClickHouseColumnReaderBase CreateElementColumnReader(int totalLength)
             {
-                var maxElementsCount = _rowCount - _position;
-                if (maxElementsCount <= 0)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
-
-                int bytesCount = 0;
-                var slice = sequence;
-
-                if (_elementColumnReader == null)
-                {
-                    if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
-                    {
-                        bytesCount = (int)Math.Min(slice.Length, _exposedHeader.Length - _exposedHeaderPosition);
-                        slice.Slice(0, bytesCount).CopyTo(((Span<byte>)_exposedHeader).Slice(_exposedHeaderPosition, bytesCount));
-                        _exposedHeaderPosition += bytesCount;
-                        slice = slice.Slice(bytesCount);
-                    }
-
-                    var totalLength = _ranges.Aggregate((ulong) 0, (acc, r) => acc + (ulong) r.length);
-
-                    Span<byte> sizeSpan = stackalloc byte[sizeof(ulong)];
-                    for (int i = _ranges.Count; i < maxElementsCount; i++)
-                    {
-                        if (slice.Length < sizeSpan.Length)
-                            return new SequenceSize(bytesCount, 0);
-
-                        ulong length;
-                        if (slice.FirstSpan.Length >= sizeSpan.Length)
-                        {
-                            length = BitConverter.ToUInt64(slice.FirstSpan);
-                        }
-                        else
-                        {
-                            slice.Slice(0, sizeSpan.Length).CopyTo(sizeSpan);
-                            length = BitConverter.ToUInt64(sizeSpan);
-                        }
-
-                        slice = slice.Slice(sizeSpan.Length);
-                        bytesCount += sizeSpan.Length;
-
-                        var offset = checked((int) totalLength);
-                        var rangeLength = checked((int) (length - totalLength));
-                        _ranges.Add((offset, rangeLength));
-
-                        totalLength = length;
-                    }
-
-                    _elementColumnReader = _elementType.CreateSkippingColumnReader(checked((int) totalLength));
-                    _exposedHeaderPosition = 0;
-
-                    if (totalLength == 0)
-                    {
-                        // Special case for an empty array
-                        var result = new SequenceSize(bytesCount, _rowCount - _position);
-                        _position = _rowCount;
-                        return result;
-                    }
-                }
-
-                if (maxElementsCount > _ranges.Count - _position)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
-
-                SequenceSize elementsSize;
-                if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
-                {
-                    var segment = new SimpleReadOnlySequenceSegment<byte>(((ReadOnlyMemory<byte>)_exposedHeader).Slice(_exposedHeaderPosition), slice);
-                    elementsSize = _elementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
-
-                    var exposedHeaderByteCount = Math.Min(elementsSize.Bytes, _exposedHeader.Length - _exposedHeaderPosition);
-                    _exposedHeaderPosition += exposedHeaderByteCount;
-                    elementsSize = elementsSize.AddBytes(-exposedHeaderByteCount);
-                }
-                else
-                {
-                    elementsSize = _elementColumnReader.ReadNext(slice);
-                }
-
-                var maxElementRange = _ranges[_position + maxElementsCount - 1];
-                _elementPosition += elementsSize.Elements;
-                var elementsCount = 0;
-                while (_position < _ranges.Count)
-                {
-                    var currentRange = _ranges[_position];
-                    if (currentRange.length + currentRange.offset > _elementPosition)
-                        break;
-
-                    ++elementsCount;
-                    ++_position;
-                }
-
-                return new SequenceSize(bytesCount + elementsSize.Bytes, elementsCount);
+                return ElementType.CreateSkippingColumnReader(totalLength);
             }
         }
 
