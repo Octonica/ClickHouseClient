@@ -70,7 +70,7 @@ namespace Octonica.ClickHouseClient.Types
             if (UnderlyingType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new NullableColumnWriter<T>(columnName, ComplexTypeName, rows, columnSettings, UnderlyingType);
+            return new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -230,13 +230,13 @@ namespace Octonica.ClickHouseClient.Types
 
             private int _position;
 
-            public NullableColumnWriter(string columnName, string columnType, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
+            public NullableColumnWriter(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
             {
                 if (underlyingTypeInfo == null)
                     throw new ArgumentNullException(nameof(underlyingTypeInfo));
+                
                 _rows = rows ?? throw new ArgumentNullException(nameof(rows));
                 ColumnName = columnName ?? throw new ArgumentNullException(nameof(columnName));
-                ColumnType = columnType ?? throw new ArgumentNullException(nameof(columnType));
 
                 if (typeof(T).IsValueType && typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Nullable<>))
                 {
@@ -249,6 +249,8 @@ namespace Octonica.ClickHouseClient.Types
                 {
                     _internalColumnWriter = underlyingTypeInfo.CreateColumnWriter(columnName, rows, columnSettings);
                 }
+
+                ColumnType = $"Nullable({_internalColumnWriter.ColumnType})";
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)

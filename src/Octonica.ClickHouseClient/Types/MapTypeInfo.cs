@@ -22,6 +22,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -99,7 +100,7 @@ namespace Octonica.ClickHouseClient.Types
                 underlyingWriter = _underlyingType.CreateColumnWriter(columnName, rows, columnSettings);
             }
 
-            return new MapColumnWriter(ComplexTypeName, underlyingWriter);
+            return new MapColumnWriter(underlyingWriter);
         }
 
         public ClickHouseDbType GetDbType()
@@ -206,9 +207,14 @@ namespace Octonica.ClickHouseClient.Types
 
             public string ColumnType { get; }
 
-            public MapColumnWriter(string columnType, IClickHouseColumnWriter underlyingWriter)
+            public MapColumnWriter(IClickHouseColumnWriter underlyingWriter)
             {
-                ColumnType = columnType;
+                const string typeNameStart = "Array(Tuple", typeNameEnd = ")";
+                var typeName = underlyingWriter.ColumnType;
+                if (!typeName.StartsWith(typeNameStart) || !typeName.EndsWith(typeNameEnd))
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The name of the type \"{typeName}\" doesn't match to the expected pattern \"{Regex.Escape(typeNameStart)}.*{Regex.Escape(typeNameEnd)}\".");
+
+                ColumnType = "Map" + typeName[typeNameStart.Length..^typeNameEnd.Length];
                 _underlyingWriter = underlyingWriter;
             }
 
