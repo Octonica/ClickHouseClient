@@ -459,21 +459,20 @@ namespace Octonica.ClickHouseClient
                         break;
 
                     case ServerMessageCode.Error:
-                        // An error is also indicates the end of the stream.
-                        await _session.Dispose(async);
+                        // Connection state can't be resotred if the server raised an exception.
+                        // This error is probably caused by the wrong formatted data.
+                        var exception = ((ServerErrorMessage)message).Exception;
                         if (disposing)
+                        {
+                            await _session.SetFailed(exception, false, async);
                             break;
-
-                        var exception = ((ServerErrorMessage) message).Exception;
+                        }
+                        
                         throw exception;
 
                     default:
                         throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
                 }
-            }
-            catch (ClickHouseServerException)
-            {
-                throw;
             }
             catch (ClickHouseHandledException ex)
             {
