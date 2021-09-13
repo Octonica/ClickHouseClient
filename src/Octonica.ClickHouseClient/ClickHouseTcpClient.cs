@@ -168,17 +168,17 @@ namespace Octonica.ClickHouseClient
                     messageBuilder.ClientVersion = settings.ClientVersion;
                     messageBuilder.Host = settings.Host;
                     messageBuilder.RemoteAddress = ((IPEndPoint?) _client._client.Client.RemoteEndPoint)?.ToString();
-                    messageBuilder.ProtocolRevision = Math.Min(Revisions.CurrentRevision, _client.ServerInfo.Revision);
+                    messageBuilder.ProtocolRevision = Math.Min(ClickHouseProtocolRevisions.CurrentRevision, _client.ServerInfo.Revision);
                     messageBuilder.CompressionEnabled = _client._settings.Compress;
 
                     var queryMessage = messageBuilder.Build();
                     if (queryMessage.Settings != null)
                     {
-                        if (_client.ServerInfo.Revision < Revisions.MinRevisionWithSettingsSerializedAsStrings)
+                        if (_client.ServerInfo.Revision < ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings)
                         {
                             throw new ClickHouseException(
                                 ClickHouseErrorCodes.ProtocolRevisionNotSupported,
-                                $"Query settings are not supported. Current protocol revision is {_client.ServerInfo.Revision}. Minimal required protocol revision is {Revisions.MinRevisionWithSettingsSerializedAsStrings}.");
+                                $"Query settings are not supported. Current protocol revision is {_client.ServerInfo.Revision}. Minimal required protocol revision is {ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings}.");
                         }
                     }
 

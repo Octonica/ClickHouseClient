@@ -20,7 +20,7 @@ namespace Octonica.ClickHouseClient.Protocol
     /// <summary>
     /// The static class that provides access to the ClickHouse's binary protocol revision numbers.
     /// </summary>
-    public static class Revisions
+    public static class ClickHouseProtocolRevisions
     {
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.

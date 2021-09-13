@@ -39,11 +39,11 @@ namespace Octonica.ClickHouseClient.Protocol
             var mj = await reader.Read7BitInt32(async, cancellationToken);
             var mr = await reader.Read7BitInt32(async, cancellationToken);
             var rv = await reader.Read7BitInt32(async, cancellationToken);
-            if (rv < Revisions.MinSupportedRevision)
+            if (rv < ClickHouseProtocolRevisions.MinSupportedRevision)
             {
                 throw new ClickHouseException(
                     ClickHouseErrorCodes.ProtocolRevisionNotSupported,
-                    $"The revision {rv} of ClickHouse server is not supported. Minimal supported revision is {Revisions.MinSupportedRevision}.");
+                    $"The revision {rv} of ClickHouse server is not supported. Minimal supported revision is {ClickHouseProtocolRevisions.MinSupportedRevision}.");
             }
 
             var tz = await reader.ReadString(async, cancellationToken);

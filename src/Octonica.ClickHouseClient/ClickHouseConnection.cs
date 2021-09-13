@@ -521,7 +521,7 @@ namespace Octonica.ClickHouseClient
                     User = connectionSettings.User,
                     Database = connectionSettings.Database,
                     Password = connectionSettings.Password,
-                    ProtocolRevision = Revisions.CurrentRevision
+                    ProtocolRevision = ClickHouseProtocolRevisions.CurrentRevision
                 }.Build();
 
                 clientHello.Write(writer);

@@ -17,7 +17,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -117,7 +116,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
             writer.WriteString(string.Empty); // empty string is a marker of the end of the settings
 
-            if (ProtocolRevision >= Revisions.MinRevisionWithInterserverSecret)
+            if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecret)
                 writer.WriteString(string.Empty);
 
             writer.Write7BitInt32(StateCodes.Complete);

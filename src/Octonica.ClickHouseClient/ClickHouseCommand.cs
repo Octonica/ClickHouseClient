@@ -755,7 +755,7 @@ namespace Octonica.ClickHouseClient
                 setting = new List<KeyValuePair<string, string>>(1) {new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")};
             }
 
-            if (session.ServerInfo.Revision >= Revisions.MinRevisionWithSettingsSerializedAsStrings)
+            if (session.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings)
             {
                 if (behavior.HasFlag(CommandBehavior.SchemaOnly) || behavior.HasFlag(CommandBehavior.SingleRow))
                 {
