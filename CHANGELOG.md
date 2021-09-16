@@ -1,3 +1,36 @@
+### Octonica.ClickHouseClient release v2.1.1, 2021-09-16
+
+#### Backward Incompatible Change
+
+* Classes from the namespace `Octonica.ClickHouseClient` that are now sealed and therefore can't be inherited:
+  * `ClickHouseColumnWriter`;
+  * `ClickHouseCommand`;
+  * `ClickHouseConnection`;
+  * `ClickHouseConnectionSettings`;
+  * `ClickHouseDataReader`;
+  * `ClickHouseParameter`;
+  * `ClickHouseParameterCollection`;
+  * `ClickHouseServerInfo`;
+  * `ClickHouseTableColumnCollection`;
+  * `ClickHouseTableProvider`;
+  * `ClickHouseTableProviderCollection`.
+* Classes, enums and interfaces from the namespace `Octonica.ClickHouseClient.Protocol` that are no longer public:
+  * `BlockFieldCodes`;
+  * `CompressionAlgorithm`;
+  * `IClickHouseTableWriter`;
+  * `NullableObjTableColumn<TObj>`.
+* The class `ClickHouseColumnSettings` was moved from the namespace `Octonica.ClickHouseClient.Protocol` to the namespace `Octonica.ClickHouseClient`.
+* The class `Revisions` from the namespace `Octonica.ClickHouseClient.Protocol` was renamed to `ClickHouseProtocolRevisions`.
+
+#### Improvement
+
+* Add XML documentation comments to the NuGet package.
+
+#### Bug Fix
+
+* Fix reading and writing values of the type `Array(LowCardinality(T))` ([#34](https://github.com/Octonica/ClickHouseClient/issues/34)).
+* Fix error handling for `ClickHouseColumnWriter`.
+
 ### Octonica.ClickHouseClient release v1.3.1, 2021-07-13
 
 #### New Feature
