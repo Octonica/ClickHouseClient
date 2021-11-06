@@ -28,7 +28,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
 using TimeZoneConverter;
 using Xunit;
@@ -385,16 +384,17 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public async Task ReadDateTime64ParameterScalar()
         {
+            await using var connection = await OpenConnectionAsync();
+            var timeZone = connection.GetServerTimeZone();
+            var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
+
             var values = new[]
             {
                 default,
-                DateTime.UnixEpoch.Add(TimeSpan.FromMilliseconds(1111.1111)),
+                DateTime.UnixEpoch.Add(TimeSpan.FromMilliseconds(1111.1111) + unixEpochOffset),
                 new DateTime(2531, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
                 new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567))
             };
-
-            await using var connection = await OpenConnectionAsync();
-            var timeZone = connection.GetServerTimeZone();
 
             await using var cmd = connection.CreateCommand("SELECT {v}");
             var parameter = new ClickHouseParameter("v") {ClickHouseDbType = ClickHouseDbType.DateTime64};
@@ -426,8 +426,6 @@ namespace Octonica.ClickHouseClient.Tests
                 }
 
                 // Min and max values must be adjusted to the server's timezone
-
-                var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
                 var unixEpochValue = new DateTime(DateTime.UnixEpoch.Ticks + unixEpochOffset.Ticks);
                 parameter.Value = unixEpochValue;
 
