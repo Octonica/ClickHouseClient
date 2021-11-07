@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,13 +32,13 @@ namespace Octonica.ClickHouseClient
         private readonly int _bufferSize;
 
         private readonly ReadWriteBuffer _buffer;
-        private readonly NetworkStream _stream;
+        private readonly Stream _stream;
 
         private CompressionAlgorithm _currentCompression;
 
         private CompressionEncoderBase? _compressionEncoder;
 
-        public ClickHouseBinaryProtocolWriter(NetworkStream stream, int bufferSize)
+        public ClickHouseBinaryProtocolWriter(Stream stream, int bufferSize)
         {
             _buffer = new ReadWriteBuffer(bufferSize);
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
@@ -212,7 +211,7 @@ namespace Octonica.ClickHouseClient
             Advance(1);
         }
 
-        private async Task WriteWithTimeoutAsync(Func<NetworkStream, CancellationToken, Task> writeAsync, CancellationToken cancellationToken)
+        private async Task WriteWithTimeoutAsync(Func<Stream, CancellationToken, Task> writeAsync, CancellationToken cancellationToken)
         {
             if (cancellationToken == CancellationToken.None && _stream.WriteTimeout >= 0)
             {

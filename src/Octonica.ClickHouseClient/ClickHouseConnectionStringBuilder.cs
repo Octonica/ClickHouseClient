@@ -71,6 +71,11 @@ namespace Octonica.ClickHouseClient
         public static readonly ClickHouseVersion DefaultClientVersion;
 
         /// <summary>
+        /// The default value for the TLS mode is <see cref="ClickHouseTlsMode.Disable"/>.
+        /// </summary>
+        public static readonly ClickHouseTlsMode DefaultTlsMode = ClickHouseTlsMode.Disable;
+
+        /// <summary>
         /// Gets or sets the name or the IP address of the host.
         /// </summary>
         /// <returns>The name or the IP address of the host.</returns>
@@ -189,6 +194,53 @@ namespace Octonica.ClickHouseClient
             set => this[nameof(ClientVersion)] = value.ToString();
         }
 
+        /// <summary>
+        /// Gets or sets the TLS mode for the connection. See <see cref="ClickHouseTlsMode"/> for details.
+        /// </summary>
+        /// <returns>The TLS mode for the connection. The default value is <see cref="DefaultTlsMode"/>.</returns>
+        public ClickHouseTlsMode TlsMode
+        {
+            get => GetEnumOrDefault(nameof(TlsMode), DefaultTlsMode);
+            set => this[nameof(TlsMode)] = value == DefaultTlsMode ? null : value.ToString("G");
+        }
+
+        /// <summary>
+        /// Gets or sets the path to the file that contains a certificate (*.crt) or a list of certificates (*.pem).
+        /// When performing TLS hanshake any of these certificates will be treated as a valid root for the certificate chain.
+        /// </summary>
+        /// <returns>The path to the file that contains a certificate (*.crt) or a list of certificates (*.pem). The default value is <see langword="null"/>.</returns>
+        public string? RootCertificate
+        {
+            get
+            {
+                var value = GetString(nameof(RootCertificate));
+                if (string.IsNullOrWhiteSpace(value))
+                    return null;
+
+                return value;
+            }
+            set => this[nameof(RootCertificate)] = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the hash of the server's certificate in the hexadecimal format.
+        /// When performing TLS handshake the remote certificate with the specified hash will be treated as a valid certificate
+        /// despite any other certificate chain validation errors (e.g. invalid hostname).
+        /// </summary>
+        /// <returns>The hash of the server's certificate in the hexadecimal format. The default value is <see langword="null"/>.</returns>
+        public string? ServerCertificateHash
+        {
+            get
+            {
+                var value = GetString(nameof(ServerCertificateHash));
+                if (string.IsNullOrWhiteSpace(value))
+                    return null;
+
+                return value;
+            }
+            set => this[nameof(ServerCertificateHash)] = value;
+        }
+
         static ClickHouseConnectionStringBuilder()
         {
             var asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
@@ -207,7 +259,10 @@ namespace Octonica.ClickHouseClient
                 nameof(Password),
                 nameof(ReadWriteTimeout),
                 nameof(Port),
-                nameof(User)
+                nameof(User),
+                nameof(TlsMode),
+                nameof(RootCertificate),
+                nameof(ServerCertificateHash)
             };
         }
 
@@ -245,6 +300,9 @@ namespace Octonica.ClickHouseClient
             BufferSize = settings.BufferSize;
             Compress = settings.Compress;
             CommandTimeout = settings.CommandTimeout;
+            TlsMode = settings.TlsMode;
+            RootCertificate = settings.RootCertificate;
+            ServerCertificateHash = HashToString(settings.ServerCertificateHash);
 
             if (settings.ClientName != DefaultClientName)
                 ClientName = settings.ClientName;
@@ -330,6 +388,49 @@ namespace Octonica.ClickHouseClient
             }
 
             return (bool?) value ?? defaultValue;
+        }
+
+        private TEnum GetEnumOrDefault<TEnum>(string key, TEnum defaultValue)
+            where TEnum : struct
+        {
+            if (!TryGetValue(key, out var value) || value == null)
+                return defaultValue;
+
+            if(value is string strValue)
+            {
+                if (string.IsNullOrWhiteSpace(strValue))
+                    return defaultValue;
+
+                // Enum.TryParse parses an integer value and casts it into enum without additional check.
+                // Check that the value is not an integer before performing an actual enum parsing.
+                if (int.TryParse(strValue.Trim(), out _) || !Enum.TryParse<TEnum>(strValue, true, out var result))
+                    throw new InvalidOperationException($"The value \"{strValue}\" is not a valid value for the property \"{key}\".");
+
+                return result;
+            }
+
+            return (TEnum)value;
+        }
+
+        private static string? HashToString(ReadOnlyMemory<byte> hashBytes)
+        {
+            if (hashBytes.Length == 0)
+                return null;
+
+            return string.Create(hashBytes.Length * 2, hashBytes, HashToString);
+        }
+
+        static void HashToString(Span<char> span, ReadOnlyMemory<byte> hashBytes)
+        {
+            var byteSpan = hashBytes.Span;
+            for (int i = 0; i < hashBytes.Length; i++)
+            {
+                var val = byteSpan[i] >> 4;
+                span[i * 2] = (char)(val + (val >= 0xA ? 'A' - 0xA : '0'));
+
+                val = byteSpan[i] & 0x0F;
+                span[i * 2 + 1] = (char)(val + (val >= 0xA ? 'A' - 0xA : '0'));
+            }
         }
     }
 }

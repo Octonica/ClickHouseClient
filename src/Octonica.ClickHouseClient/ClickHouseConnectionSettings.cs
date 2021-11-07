@@ -81,6 +81,23 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public int CommandTimeout { get; }
 
+        /// <summary>
+        /// Gets the TLS mode for the connection. See <see cref="ClickHouseTlsMode"/> for details.
+        /// </summary>
+        public ClickHouseTlsMode TlsMode { get; }
+
+        /// <summary>
+        /// Gets the path to the file that contains a certificate (*.crt) or a list of certificates (*.pem).
+        /// When performing TLS hanshake any of these certificates will be treated as a valid root for the certificate chain.
+        /// </summary>
+        public string? RootCertificate { get; }
+
+        /// <summary>
+        /// Gets the hash of the server's certificate. When performing TLS handshake the remote certificate with the specified
+        /// hash will be treated as a valid certificate despite any other certificate chain validation errors (e.g. invalid hostname).
+        /// </summary>
+        public ReadOnlyMemory<byte> ServerCertificateHash { get; }
+
         internal readonly int CompressionBlockSize = 1024 * 8; // Maybe it should be configurable
 
         internal ClickHouseConnectionSettings(ClickHouseConnectionStringBuilder builder)
@@ -102,6 +119,58 @@ namespace Octonica.ClickHouseClient
             ClientVersion = builder.ClientVersion;
             Compress = builder.Compress;
             CommandTimeout = builder.CommandTimeout;
+            TlsMode = builder.TlsMode;
+            RootCertificate = builder.RootCertificate;
+            ServerCertificateHash = ParseHashString(builder.ServerCertificateHash);
+        }
+
+        private static byte[]? ParseHashString(string? hashString)
+        {
+            if (string.IsNullOrEmpty(hashString))
+                return null;
+
+            int resultPos = 0;
+            var result = new byte[hashString.Length / 2];
+            for (int i = 0; i < hashString.Length; i++)
+            {
+                var ch = hashString[i];
+                if (char.IsWhiteSpace(ch) || ch == '-')
+                    continue;
+
+                if (i + 1 == hashString.Length)
+                    throw new ArgumentException("Unexpected end of the hash string. Expected at least one more significant character.", nameof(hashString));
+
+                byte byteVal;
+                if (ch >= '0' && ch <= '9')
+                    byteVal = (byte)(ch - '0');
+                else if (ch >= 'a' && ch <= 'f')
+                    byteVal = (byte)(ch - 'a' + 0xA);
+                else if (ch >= 'A' && ch <= 'F')
+                    byteVal = (byte)(ch - 'A' + 0xA);
+                else
+                    throw new ArgumentException($"Unexpected character '{ch}' at the position {i} in the hash string.", nameof(hashString));
+
+                byteVal <<= 4;
+                ch = hashString[++i];
+                if (ch >= '0' && ch <= '9')
+                    byteVal |= (byte)(ch - '0');
+                else if (ch >= 'a' && ch <= 'f')
+                    byteVal |= (byte)(ch - 'a' + 0xA);
+                else if (ch >= 'A' && ch <= 'F')
+                    byteVal |= (byte)(ch - 'A' + 0xA);
+                else
+                    throw new ArgumentException($"Unexpected character '{ch}' at the position {i} in the hash string.", nameof(hashString));
+
+                result[resultPos++] = byteVal;
+            }
+
+            if (resultPos == 0)
+                return null;
+
+            if (result.Length != resultPos)
+                Array.Resize(ref result, resultPos);
+
+            return result;
         }
     }
 }

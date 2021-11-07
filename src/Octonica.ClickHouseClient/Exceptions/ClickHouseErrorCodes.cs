@@ -134,5 +134,10 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an error caused by the callback to an external code.
         /// </summary>
         public const int CallbackError = 21;
+
+        /// <summary>
+        /// The code for an error caused by a violation of the TLS protocol.
+        /// </summary>
+        public const int TlsError = 22;
     }
 }

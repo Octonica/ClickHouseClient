@@ -21,7 +21,10 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Transactions;
@@ -118,6 +121,12 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <returns>The state of the connection.</returns>
         public override ConnectionState State => _connectionState.State;
+
+        /// <summary>
+        /// Gets or sets the callback for custom validation of the server's certificate. When the callback is set
+        /// other TLS certificate validation options are ignored.
+        /// </summary>
+        public RemoteCertificateValidationCallback? RemoteCertificateValidationCallback { get; set; }
 
         internal TimeSpan? CommandTimeSpan
         {
@@ -490,6 +499,7 @@ namespace Octonica.ClickHouseClient
 
             const int defaultHttpPort = 8123;
             TcpClient? client = null;
+            SslStream? sslStream = null;
             ClickHouseBinaryProtocolWriter? writer = null;
             ClickHouseBinaryProtocolReader? reader = null;
 
@@ -512,7 +522,29 @@ namespace Octonica.ClickHouseClient
                     throw;
                 }
 
-                writer = new ClickHouseBinaryProtocolWriter(client.GetStream(), Math.Max(connectionSettings.BufferSize, MinBufferSize));
+                if (connectionSettings.TlsMode == ClickHouseTlsMode.Require)
+                {
+                    var certValidationCallback = RemoteCertificateValidationCallback;
+                    if (certValidationCallback == null && (connectionSettings.RootCertificate != null || !connectionSettings.ServerCertificateHash.IsEmpty))
+                        certValidationCallback = (_, cert, chain, errors) => ValidateServerCertificate(connectionSettings, cert, chain, errors);
+
+                    sslStream = new SslStream(client.GetStream(), true, certValidationCallback);
+
+                    try
+                    {
+                        if (async)
+                            await sslStream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = connectionSettings.Host }, cancellationToken);
+                        else
+                            sslStream.AuthenticateAsClient(connectionSettings.Host);
+                    }
+                    catch(AuthenticationException authEx)
+                    {
+                        throw new ClickHouseException(ClickHouseErrorCodes.TlsError, $"TLS handshake error.", authEx);
+                    }
+                }
+
+                var stream = sslStream ?? (Stream)client.GetStream();
+                writer = new ClickHouseBinaryProtocolWriter(stream, Math.Max(connectionSettings.BufferSize, MinBufferSize));
 
                 var clientHello = new ClientHelloMessage.Builder
                 {
@@ -528,7 +560,7 @@ namespace Octonica.ClickHouseClient
 
                 await writer.Flush(async, cancellationToken);
 
-                reader = new ClickHouseBinaryProtocolReader(client.GetStream(), Math.Max(connectionSettings.BufferSize, MinBufferSize));
+                reader = new ClickHouseBinaryProtocolReader(stream, Math.Max(connectionSettings.BufferSize, MinBufferSize));
                 var message = await reader.ReadMessage(false, async, cancellationToken);
 
                 switch (message.MessageCode)
@@ -550,7 +582,7 @@ namespace Octonica.ClickHouseClient
 
                         var serverInfo = helloMessage.ServerInfo;
                         var configuredTypeInfoProvider = (_typeInfoProvider ?? DefaultTypeInfoProvider.Instance).Configure(serverInfo);
-                        var tcpClient = new ClickHouseTcpClient(client, reader, writer, connectionSettings, serverInfo, configuredTypeInfoProvider);
+                        var tcpClient = new ClickHouseTcpClient(client, reader, writer, connectionSettings, serverInfo, configuredTypeInfoProvider, sslStream);
                         
                         if (!TryChangeConnectionState(connectionState, ConnectionState.Open, tcpClient, out _, out onStateChanged))
                             throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The state of the connection was modified.");
@@ -573,7 +605,7 @@ namespace Octonica.ClickHouseClient
                             else
                             {
                                 httpDetectedMessage =
-                                    $"Internal error. Unexpected message code (0x{message.MessageCode:X}) received from the server." +
+                                    $"Internal error. Unexpected message code (0x{message.MessageCode:X}) received from the server. " +
                                     "This error may by caused by an attempt to connect with HTTP protocol. ";
                             }
 
@@ -584,6 +616,16 @@ namespace Octonica.ClickHouseClient
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, httpDetectedMessage);
                         }
 
+                        if ((int) message.MessageCode == 0x15)
+                        {
+                            // 0x15 stands for TLS alert message
+                            var sslAlertMessage =
+                                $"Unexpected message code (0x{message.MessageCode:X}) received from the server. " +
+                                "This code may indicate that the server requires establishing a connection over TLS.";
+
+                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, sslAlertMessage);
+                        }
+
                         throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected message code (0x{message.MessageCode:X}) received from the server.");
                 }
             }
@@ -591,6 +633,7 @@ namespace Octonica.ClickHouseClient
             {
                 reader?.Dispose();
                 writer?.Dispose();
+                sslStream?.Dispose();
                 client?.Client?.Close(0);
                 client?.Dispose();
 
@@ -861,6 +904,60 @@ namespace Octonica.ClickHouseClient
 
                 return null;
             }
+        }
+
+        private static bool ValidateServerCertificate(ClickHouseConnectionSettings connectionSettings, X509Certificate? cert, X509Chain? chain, SslPolicyErrors errors)
+        {
+            if (errors == SslPolicyErrors.None)
+                return true;
+
+            if (cert == null)
+                return false;
+
+            if (!connectionSettings.ServerCertificateHash.IsEmpty)
+            {
+                var certHash = cert.GetCertHash();
+                if (connectionSettings.ServerCertificateHash.Span.SequenceEqual(certHash))
+                    return true;
+            }
+
+            if (chain != null && connectionSettings.RootCertificate != null)
+            {
+                if ((errors & ~SslPolicyErrors.RemoteCertificateChainErrors) != SslPolicyErrors.None)
+                    return false;
+
+                var collection = CertificateHelper.LoadFromFile(connectionSettings.RootCertificate);
+#if NET5_0_OR_GREATER
+                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+                chain.ChainPolicy.CustomTrustStore.AddRange(collection);
+                var isValid = chain.Build(cert as X509Certificate2 ?? new X509Certificate2(cert));
+                return isValid;
+#else
+                foreach (var chainElement in chain.ChainElements)
+                {
+                    if (chainElement.ChainElementStatus.Length != 0)
+                    {
+                        bool ignoreError = true;
+                        foreach (var status in chainElement.ChainElementStatus)
+                        {
+                            if (status.Status == X509ChainStatusFlags.UntrustedRoot)
+                                continue;
+
+                            ignoreError = false;
+                            break;
+                        }
+
+                        if (!ignoreError)
+                            break;
+                    }
+
+                    if (collection.Contains(chainElement.Certificate))
+                        return true;
+                }
+#endif
+            }
+
+            return false;
         }
 
         private class ConnectionSession : IClickHouseSessionExternalResources

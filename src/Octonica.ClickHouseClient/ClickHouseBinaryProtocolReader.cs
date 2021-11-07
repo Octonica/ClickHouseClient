@@ -18,7 +18,6 @@
 using System;
 using System.Buffers;
 using System.IO;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,14 +30,14 @@ namespace Octonica.ClickHouseClient
     internal class ClickHouseBinaryProtocolReader: IDisposable
     {
         private readonly ReadWriteBuffer _buffer;
-        private readonly NetworkStream _stream;
+        private readonly Stream _stream;
         private readonly int _bufferSize;
 
         private CompressionAlgorithm _currentCompression;
 
         private CompressionDecoderBase? _compressionDecoder;
 
-        public ClickHouseBinaryProtocolReader(NetworkStream stream, int bufferSize)
+        public ClickHouseBinaryProtocolReader(Stream stream, int bufferSize)
         {
             _buffer = new ReadWriteBuffer(bufferSize);
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));

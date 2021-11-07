@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -122,6 +122,15 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(ClickHouseConnectionStringBuilder.DefaultCommandTimeout, settings.CommandTimeout);
             ++checkedPropertiesCount;
 
+            Assert.Equal(ClickHouseConnectionStringBuilder.DefaultTlsMode, settings.TlsMode);
+            ++checkedPropertiesCount;
+
+            Assert.Null(settings.RootCertificate);
+            ++checkedPropertiesCount;
+
+            Assert.True(settings.ServerCertificateHash.IsEmpty);
+            ++checkedPropertiesCount;
+
             Assert.Equal(checkedPropertiesCount, settings.GetType().GetProperties().Length);
         }
 
@@ -129,7 +138,20 @@ namespace Octonica.ClickHouseClient.Tests
         public void Clone()
         {
             var builder = new ClickHouseConnectionStringBuilder(
-                $"host=ClickHouse.example.com;port=65500;DataBase=\"don't; connect\";user=root; password=123456;\r\n bufferSize=1337; ReadWriteTimeout=42; clientname=ClickHouse.NetCore Tests;clientversion=3.2.1;COMPRESS={!ClickHouseConnectionStringBuilder.DefaultCompress};CommandTimeout=123");
+                "host=ClickHouse.example.com;" +
+                "port=65500;" +
+                "DataBase=\"don't; connect\";" +
+                "user=root; " +
+                "password=123456;\r\n " +
+                "bufferSize=1337; " +
+                "ReadWriteTimeout=42; " +
+                "clientname=ClickHouse.NetCore Tests;" +
+                "clientversion=3.2.1;" +
+                $"COMPRESS={!ClickHouseConnectionStringBuilder.DefaultCompress};" +
+                "CommandTimeout=123;" +
+                "TLSMode=rEqUIrE;" +
+                "RootCertificate=/usr/local/share/ca-certificates/Yandex/YandexInternalRootCA.pem;" +
+                "ServerCertificateHash=1234-5678 9abc-def0");
 
             var settings = builder.BuildSettings();
 
@@ -169,6 +191,15 @@ namespace Octonica.ClickHouseClient.Tests
             ++checkedPropertiesCount;
 
             Assert.Equal(123, settings.CommandTimeout);
+            ++checkedPropertiesCount;
+
+            Assert.Equal(ClickHouseTlsMode.Require, settings.TlsMode);
+            ++checkedPropertiesCount;
+
+            Assert.Equal("/usr/local/share/ca-certificates/Yandex/YandexInternalRootCA.pem", settings.RootCertificate);
+            ++checkedPropertiesCount;
+
+            Assert.Equal(new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0 }, settings.ServerCertificateHash.ToArray());
             ++checkedPropertiesCount;
 
             Assert.Equal(checkedPropertiesCount, settings.GetType().GetProperties().Length);

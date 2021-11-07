@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,6 +39,7 @@ namespace Octonica.ClickHouseClient
         private readonly IClickHouseTypeInfoProvider _typeInfoProvider;
         private readonly ClickHouseBinaryProtocolReader _reader;
         private readonly ClickHouseBinaryProtocolWriter _writer;
+        private readonly SslStream? _sslStream;
 
         private Exception? _unhandledException;
         private int _state;
@@ -52,7 +54,8 @@ namespace Octonica.ClickHouseClient
             ClickHouseBinaryProtocolWriter writer,
             ClickHouseConnectionSettings settings,
             ClickHouseServerInfo serverInfo,
-            IClickHouseTypeInfoProvider typeInfoProvider)
+            IClickHouseTypeInfoProvider typeInfoProvider,
+            SslStream? sslStream)
         {
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
             _writer = writer ?? throw new ArgumentNullException(nameof(writer));
@@ -60,6 +63,7 @@ namespace Octonica.ClickHouseClient
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             ServerInfo = serverInfo;
             _typeInfoProvider = typeInfoProvider;
+            _sslStream = sslStream;
         }
 
         public async ValueTask<Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
@@ -124,6 +128,7 @@ namespace Octonica.ClickHouseClient
             _semaphore.Dispose();
             _reader.Dispose();
             _writer.Dispose();
+            _sslStream?.Dispose();
 
             // The disposed TcpClient returns null for Client
             _client.Client?.Close(disposing ? 1 : 0);
