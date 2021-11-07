@@ -1,3 +1,9 @@
+### Octonica.ClickHouseClient release v2.1.2, 2021-11-07
+
+#### New Feature
+
+* Add support for Transport Layer Security (TLS) connection ([#35](https://github.com/Octonica/ClickHouseClient/issues/35)).
+
 ### Octonica.ClickHouseClient release v2.1.1, 2021-09-16
 
 #### Backward Incompatible Change
