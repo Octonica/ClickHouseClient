@@ -96,11 +96,6 @@ namespace Octonica.ClickHouseClient.Utils
             return length;
         }
 
-        IEnumerator<TOut> IEnumerable<TOut>.GetEnumerator()
-        {
-            throw new NotImplementedException();
-        }
-
         public TOut this[int index]
         {
             get
