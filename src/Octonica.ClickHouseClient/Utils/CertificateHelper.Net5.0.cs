@@ -15,30 +15,21 @@
  */
 #endregion
 
-using System.IO;
+#if NET5_0_OR_GREATER
+
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal static partial class CertificateHelper
+    partial class CertificateHelper
     {
-        public static X509Certificate2Collection LoadFromFile(string filePath)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static partial void ImportPemCertificates(string filePath, X509Certificate2Collection collection)
         {
-            var collection = new X509Certificate2Collection();
-            switch (Path.GetExtension(filePath).ToLowerInvariant())
-            {
-                case ".pem":
-                case ".crt":
-                    ImportPemCertificates(filePath, collection);
-                    break;
-                default:
-                    collection.Import(filePath);
-                    break;
-            }
-
-            return collection;
+            collection.ImportFromPemFile(filePath);
         }
-
-        static partial void ImportPemCertificates(string filePath, X509Certificate2Collection collection);
     }
 }
+
+#endif
