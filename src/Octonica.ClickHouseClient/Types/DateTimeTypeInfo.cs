@@ -19,7 +19,7 @@ using System;
 using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
-using TimeZoneConverter;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -75,7 +75,7 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
 
             var tzCode = options[0].Trim('\'').ToString();
-            var timezone = TZConvert.GetTimeZoneInfo(tzCode);
+            var timezone = TimeZoneHelper.GetTimeZoneInfo(tzCode);
             return new DateTimeTypeInfo(timezone, tzCode);
         }
 
@@ -107,7 +107,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)
         {
-            var timezone = TZConvert.GetTimeZoneInfo(serverInfo.Timezone);
+            var timezone = TimeZoneHelper.GetTimeZoneInfo(serverInfo.Timezone);
             return new DateTimeTypeInfo(timezone, null);
         }
 

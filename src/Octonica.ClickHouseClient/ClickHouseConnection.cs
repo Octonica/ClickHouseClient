@@ -32,7 +32,6 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
-using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient
 {
@@ -425,7 +424,7 @@ namespace Octonica.ClickHouseClient
             if (serverInfo == null || connectionState.State != ConnectionState.Open)
                 throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
 
-            return TZConvert.GetTimeZoneInfo(serverInfo.Timezone);
+            return TimeZoneHelper.GetTimeZoneInfo(serverInfo.Timezone);
         }
 
         /// <summary>

@@ -18,14 +18,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
-using TimeZoneConverter;
+using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -493,13 +493,13 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{valueType}\" is not supported.");
         }
 
+        [return: NotNullIfNotNull("timeZone")]
         private static string? GetTimeZoneCode(TimeZoneInfo? timeZone)
         {
-            var tzCode = timeZone?.Id;
-            if (tzCode != null && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                tzCode = TZConvert.WindowsToIana(tzCode);
+            if (timeZone == null)
+                return null;
 
-            return tzCode;
+            return TimeZoneHelper.GetTimeZoneId(timeZone);
         }
 
         /// <inheritdoc/>

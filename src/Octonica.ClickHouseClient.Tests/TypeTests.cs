@@ -23,13 +23,12 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Types;
-using TimeZoneConverter;
+using Octonica.ClickHouseClient.Utils;
 using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
@@ -339,9 +338,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var connection = await OpenConnectionAsync();
 
-            var tzName = TimeZoneInfo.Local.Id;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                tzName = TZConvert.WindowsToIana(TimeZoneInfo.Local.Id);
+            var tzName = TimeZoneHelper.GetTimeZoneId(TimeZoneInfo.Local);
 
             await using var cmd = connection.CreateCommand($"SELECT toDateTime('2015-04-21 14:59:44', '{tzName}')");
 
@@ -369,9 +366,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var connection = await OpenConnectionAsync();
 
-            var tzName = TimeZoneInfo.Local.Id;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                tzName = TZConvert.WindowsToIana(TimeZoneInfo.Local.Id);
+            var tzName = TimeZoneHelper.GetTimeZoneId(TimeZoneInfo.Local);
 
             await using var cmd = connection.CreateCommand($"SELECT cast('2015-04-21 14:59:44.123456789' AS DateTime64(9,'{tzName}'))");
 
@@ -477,11 +472,11 @@ namespace Octonica.ClickHouseClient.Tests
             var value = valueShort.Add(TimeSpan.FromMilliseconds(123.4567));
 
             const string targetTzCode = "Asia/Magadan";
-            var targetTz = TZConvert.GetTimeZoneInfo(targetTzCode);
+            var targetTz = TimeZoneHelper.GetTimeZoneInfo(targetTzCode);
             
             await using var connection = await OpenConnectionAsync();
             await using var cmd = connection.CreateCommand($"SELECT toTimeZone({{d}}, '{targetTzCode}')");
-            var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TZConvert.GetTimeZoneInfo("Pacific/Niue"), Precision = 4};
+            var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TimeZoneHelper.GetTimeZoneInfo("Pacific/Niue"), Precision = 4};
             cmd.Parameters.Add(parameter);
             var deltaOffset = targetTz.GetUtcOffset(valueShort) - parameter.TimeZone.GetUtcOffset(valueShort);
 
@@ -1152,7 +1147,7 @@ namespace Octonica.ClickHouseClient.Tests
                     case 2:
                         Assert.Equal(2, value.Item1);
                         Assert.Equal("two", value.Item2);
-                        var tz = TZConvert.GetTimeZoneInfo("Asia/Yekaterinburg");
+                        var tz = TimeZoneHelper.GetTimeZoneInfo("Asia/Yekaterinburg");
                         dt = TimeZoneInfo.ConvertTime(new DateTime(2019, 12, 11, 16, 55, 54), tz, connection.GetServerTimeZone());
                         Assert.Equal(dt, value.Item3);
                         break;
@@ -1208,7 +1203,7 @@ namespace Octonica.ClickHouseClient.Tests
                         Assert.Equal(2, value.number);
                         Assert.Equal("two", value.str);
                         dt = new DateTime(2019, 12, 11, 16, 55, 54);
-                        dt = TimeZoneInfo.ConvertTime(dt, TZConvert.GetTimeZoneInfo("Asia/Yekaterinburg"), connection.GetServerTimeZone());
+                        dt = TimeZoneInfo.ConvertTime(dt, TimeZoneHelper.GetTimeZoneInfo("Asia/Yekaterinburg"), connection.GetServerTimeZone());
                         Assert.Equal(dt, value.date);
                         break;
 
