@@ -25,7 +25,7 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Float32 | float | double | `GetFloat` |
 | Float64 | double | | `GetDouble` |
 | Decimal | decimal | | `GetDecimal` |
-| Date | System.DateTime | | `GetDateTime` |
+| Date\* | System.DateOnly | System.DateTime | `GetDate` |
 | DateTime | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | DateTime64 | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | String | string | char[], byte[] | `GetString` |
@@ -41,3 +41,5 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Tuple(T1, ... Tn) | System.Tuple<T1, ... Tn> | System.ValueTuple<T1, ... Tn> | |
 | LowCardinality<T> | T | | The method for `T` |
 | Map(TKey, TValue) | System.Collections.Generic.KeyValuePair<TKey, TValue>[] | System.Tuple<TKey, TValue>[], System.ValueTuple<TKey, TValue>[] | |
+
+\* The type `System.DateOnly` is available since .NET 6.0. For previous .NET versions dates are mapped to `System.DateTime`.

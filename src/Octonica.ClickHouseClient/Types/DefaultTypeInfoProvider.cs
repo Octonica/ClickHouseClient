@@ -397,6 +397,11 @@ namespace Octonica.ClickHouseClient.Types
             if (valueType == typeof(DBNull))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Nothing, "Nothing", true, 0);
 
+#if NET6_0_OR_GREATER
+            if (valueType == typeof(DateOnly))
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Date, "Date", false, 0);
+#endif
+
             if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
             {
                 var tzCode = GetTimeZoneCode(timeZone);

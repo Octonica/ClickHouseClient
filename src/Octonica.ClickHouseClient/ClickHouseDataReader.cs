@@ -344,6 +344,18 @@ namespace Octonica.ClickHouseClient
             return GetFieldValue<char>(ordinal);
         }
 
+#if NET6_0_OR_GREATER
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="DateOnly"/> object.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public DateOnly GetDate(int ordinal)
+        {
+            return GetFieldValue<DateOnly>(ordinal);
+        }
+#endif
+
         /// <summary>
         /// Gets the value of the specified column as a <see cref="DateTime"/> object.
         /// </summary>
