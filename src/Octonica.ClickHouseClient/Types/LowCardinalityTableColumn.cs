@@ -27,21 +27,23 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseTableColumn _values;
+        private readonly bool _isNullable;
 
         public int RowCount { get; }
 
-        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values)
+        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values, bool isNullable)
         {
             _keys = keys;
             _keySize = keySize;
             _values = values;
+            _isNullable = isNullable;
             RowCount = _keys.Length / _keySize;
         }
 
         public bool IsNull(int index)
         {
-            if (index < 0 || index > RowCount)
-                throw new ArgumentOutOfRangeException(nameof(index));
+            if (!_isNullable)
+                return false;
 
             var valueIndex = GetValueIndex(index);
             return valueIndex == 0;
@@ -50,7 +52,7 @@ namespace Octonica.ClickHouseClient.Types
         public object GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0)
+            if (valueIndex == 0 && _isNullable)
                 return DBNull.Value;
 
             return _values.GetValue(valueIndex);
@@ -62,7 +64,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues);
+            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
@@ -98,21 +100,23 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseTableColumn<TValue> _values;
+        private readonly bool _isNullable;
 
         public int RowCount { get; }
-    
-        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn<TValue> values)
+
+        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn<TValue> values, bool isNullable)
         {
             _keys = keys;
             _keySize = keySize;
             _values = values;
+            _isNullable = isNullable;
             RowCount = _keys.Length / _keySize;
         }
 
         public bool IsNull(int index)
         {
-            if (index < 0 || index>RowCount)
-                throw new ArgumentOutOfRangeException(nameof(index));
+            if (!_isNullable)
+                return false;
 
             var valueIndex = GetValueIndex(index);
             return valueIndex == 0;
@@ -121,7 +125,7 @@ namespace Octonica.ClickHouseClient.Types
         public TValue GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0)
+            if (valueIndex == 0 && _isNullable)
             {
                 var defaultValue = default(TValue);
                 if (!(defaultValue is null))
@@ -136,7 +140,7 @@ namespace Octonica.ClickHouseClient.Types
         object IClickHouseTableColumn.GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0)
+            if (valueIndex == 0 && _isNullable)
                 return DBNull.Value;
 
             return ((IClickHouseTableColumn) _values).GetValue(valueIndex);
@@ -148,7 +152,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues);
+            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()

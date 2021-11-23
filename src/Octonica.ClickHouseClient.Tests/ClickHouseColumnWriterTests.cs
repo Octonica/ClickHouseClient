@@ -22,7 +22,6 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Protocol;
 using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
@@ -502,14 +501,15 @@ namespace Octonica.ClickHouseClient.Tests
                 var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_low_cardinality");
                 await cmd.ExecuteNonQueryAsync();
 
-                cmd = connection.CreateCommand($"CREATE TABLE {TestTableName}_low_cardinality(id Int32, str LowCardinality(Nullable(String))) ENGINE=Memory");
+                cmd = connection.CreateCommand($"CREATE TABLE {TestTableName}_low_cardinality(id Int32, str LowCardinality(Nullable(String)), strNotNull LowCardinality(String)) ENGINE=Memory");
                 await cmd.ExecuteNonQueryAsync();
 
                 var idEnumerable = Enumerable.Range(0, 1000);
                 var strEnumerable = Enumerable.Range(0, 1000).Select(NumToString);
-                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}_low_cardinality(id, str) VALUES"))
+                var strNotNullEnumerable = Enumerable.Range(0, 1000).Select(n => NumToString(n) ?? string.Empty);
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}_low_cardinality(id, str, strNotNull) VALUES"))
                 {
-                    var source = new object[] {idEnumerable, strEnumerable};
+                    var source = new object[] {idEnumerable, strEnumerable, strNotNullEnumerable};
 
                     await writer.WriteTableAsync(source, 250, CancellationToken.None);
                     await writer.WriteTableAsync(source, 250, CancellationToken.None);
@@ -517,7 +517,7 @@ namespace Octonica.ClickHouseClient.Tests
                     await writer.EndWriteAsync(CancellationToken.None);
                 }
 
-                cmd.CommandText = $"SELECT id, str FROM {TestTableName}_low_cardinality";
+                cmd.CommandText = $"SELECT id, str, strNotNull FROM {TestTableName}_low_cardinality";
                 int count = 0;
                 await using (var reader = cmd.ExecuteReader())
                 {
@@ -525,9 +525,11 @@ namespace Octonica.ClickHouseClient.Tests
                     {
                         var id = reader.GetInt32(0);
                         var str = reader.GetString(1, null);
+                        var strNotNull = reader.GetString(2);
 
                         var expectedStr = NumToString(id);
                         Assert.Equal(expectedStr, str);
+                        Assert.Equal(expectedStr ?? string.Empty, strNotNull);
 
                         ++count;
                     }
@@ -542,7 +544,7 @@ namespace Octonica.ClickHouseClient.Tests
                 await cmd.ExecuteNonQueryAsync();
             }
 
-            static string? NumToString(int num) => num % 15 == 0 ? null : num % 3 == 0 ? "foo" : num % 5 == 0 ? "bar" : num % 2 == 0 ? "true" : "false";
+            static string? NumToString(int num) => num % 15 == 0 ? (num % 2 == 0 ? null : string.Empty) : num % 3 == 0 ? "foo" : num % 5 == 0 ? "bar" : num % 2 == 0 ? "true" : "false";
         }
 
         [Fact]

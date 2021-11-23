@@ -49,15 +49,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            return new LowCardinalityColumnReader(rowCount, GetBaseTypeInfoForColumnReader());
+            var typeInfo = GetBaseTypeInfoForColumnReader();
+            return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            return new LowCardinalitySkippingColumnReader(rowCount, GetBaseTypeInfoForColumnReader());
+            var typeInfo = GetBaseTypeInfoForColumnReader();
+            return new LowCardinalitySkippingColumnReader(rowCount, typeInfo.baseType);
         }
 
-        private IClickHouseColumnTypeInfo GetBaseTypeInfoForColumnReader()
+        private (IClickHouseColumnTypeInfo baseType, bool isNullable) GetBaseTypeInfoForColumnReader()
         {
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
@@ -68,10 +70,10 @@ namespace Octonica.ClickHouseClient.Types
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{_baseType.ComplexTypeName}\" is not fully specified.");
 
                 // LowCardinality column stores NULL as the key 0
-                return nullableBaseType.UnderlyingType;
+                return (nullableBaseType.UnderlyingType, true);
             }
 
-            return _baseType;
+            return (_baseType, false);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -126,6 +128,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly int _rowCount;
             private readonly IClickHouseColumnTypeInfo _baseType;
+            private readonly bool _isNullable;
 
             private IClickHouseColumnReader? _baseColumnReader;
             private int _baseRowCount;
@@ -134,10 +137,11 @@ namespace Octonica.ClickHouseClient.Types
             private byte[]? _buffer;
             private int _position;
 
-            public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType)
+            public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType, bool isNullable)
             {
                 _rowCount = rowCount;
                 _baseType = baseType;
+                _isNullable = isNullable;
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -216,8 +220,8 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
-                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize), out var result))
-                    result = new LowCardinalityTableColumn(keys, keySize, valuesColumn);
+                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize, _isNullable), out var result))
+                    result = new LowCardinalityTableColumn(keys, keySize, valuesColumn, _isNullable);
 
                 return result;
             }
@@ -355,17 +359,19 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class LowCardinalityTableColumnDispatcher : IClickHouseTableColumnDispatcher<IClickHouseTableColumn>
         {
             private readonly ReadOnlyMemory<byte> _keys;
-            private readonly int _keySize;            
+            private readonly int _keySize;
+            private readonly bool _isNullable;
 
-            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize)
+            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize, bool isNullable)
             {
                 _keys = keys;
                 _keySize = keySize;
+                _isNullable = isNullable;
             }
 
             public IClickHouseTableColumn Dispatch<T>(IClickHouseTableColumn<T> column)
             {
-                return new LowCardinalityTableColumn<T>(_keys, _keySize, column);
+                return new LowCardinalityTableColumn<T>(_keys, _keySize, column, _isNullable);
             }
         }
     }
