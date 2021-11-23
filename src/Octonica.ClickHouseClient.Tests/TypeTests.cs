@@ -1832,35 +1832,41 @@ namespace Octonica.ClickHouseClient.Tests
             cmd.Parameters.Add(param);
 
             var typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(38, 9)", typeName);
+            Assert.Matches(GetRegex(38, 9), typeName);
 
             param.DbType = DbType.Currency;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(18, 4)", typeName);
+            Assert.Matches(GetRegex(18, 4), typeName);
 
             param.DbType = DbType.VarNumeric;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(38, 9)", typeName);
+            Assert.Matches(GetRegex(38, 9), typeName);
 
             param.Scale = 2;
             param.Precision = 3;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(3, 2)", typeName);
+            Assert.Matches(GetRegex(3, 2), typeName);
 
             param.Scale = 14;
             param.Precision = 14;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(14, 14)", typeName);
+            Assert.Matches(GetRegex(14, 14), typeName);
 
             param.Scale = 0;
             param.Precision = 1;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(1, 0)", typeName);
+            Assert.Matches(GetRegex(1, 0), typeName);
 
             param.Scale = 32;
             param.Precision = 33;
             typeName = await cmd.ExecuteScalarAsync<string>();
-            Assert.Equal("Decimal(33, 32)", typeName);
+            Assert.Matches(GetRegex(33, 32), typeName);
+
+            static string GetRegex(int precision, int scale)
+            {
+                // ClickHouse server may wrap the parameter's type into Nullable
+                return string.Format(CultureInfo.InvariantCulture, @"^(Nullable\()?Decimal\({0},\s{1}\)\)?$", precision, scale);
+            }
         }
 
         [Fact]
