@@ -2737,6 +2737,99 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 #endif
 
         [Fact]
+        public async Task ReadDate32Scalar()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT cast('2021-11-09' AS Date32)");
+
+            var result = await cmd.ExecuteScalarAsync();
+
+            DateTime resultDateTime;
+#if NET6_0_OR_GREATER
+            var resultDateOnly = Assert.IsType<DateOnly>(result);
+            Assert.Equal(new DateOnly(2021, 11, 09), resultDateOnly);
+#else
+            resultDateTime = Assert.IsType<DateTime>(result);
+            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+#endif
+
+            resultDateTime = await cmd.ExecuteScalarAsync<DateTime>();
+            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+        }
+
+        [Fact]
+        public async Task ReadDate32ParameterScalar()
+        {
+            var now = DateTime.Now;
+            var minValue = new DateTime(1925, 1, 1);
+            var maxValue = new DateTime(2283, 11, 11);
+            now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
+
+            var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), DateTime.UnixEpoch };
+
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {param}");
+            var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
+            cmd.Parameters.Add(param);
+
+            foreach (var testValue in testData)
+            {
+                param.Value = testValue;
+
+                var result = await cmd.ExecuteScalarAsync<DateTime>();
+                Assert.Equal(testValue.Date, result);
+            }
+
+            param.Value = minValue.AddMonths(-1);
+            var handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
+            Assert.IsType<OverflowException>(handledException.InnerException);
+
+            param.Value = maxValue.AddMonths(1);
+            handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
+            Assert.IsType<OverflowException>(handledException.InnerException);
+        }
+
+#if NET6_0_OR_GREATER
+        [Fact]
+        public async Task ReadDate32ParameterScalarNet6()
+        {
+            var nowDateTime = DateTime.Now;
+            var now = new DateOnly(nowDateTime.Year, nowDateTime.Month, nowDateTime.Day);
+            var minValue = new DateOnly(1925, 1, 1);
+            var maxValue = new DateOnly(2283, 11, 11);
+            var testData = new[] { now, default, new DateOnly(1980, 12, 15), new DateOnly(2015, 1, 1), minValue.AddDays(1), maxValue, DateOnly.FromDateTime(DateTime.UnixEpoch) };
+
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("SELECT {param}");
+            var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
+            cmd.Parameters.Add(param);
+
+            foreach (var testValue in testData)
+            {
+                param.Value = testValue;
+
+                Assert.Equal(ClickHouseDbType.Date, param.ClickHouseDbType);
+
+                var result = await cmd.ExecuteScalarAsync();
+                var resultDateOnly = Assert.IsType<DateOnly>(result);
+
+                Assert.Equal(testValue, resultDateOnly);
+            }
+
+            param.Value = minValue.AddMonths(-1);
+            var handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
+            Assert.IsType<OverflowException>(handledException.InnerException);
+
+            param.Value = maxValue.AddMonths(1);
+            handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
+            Assert.IsType<OverflowException>(handledException.InnerException);
+        }
+#endif
+
+        [Fact]
         public async Task ReadMultidimensionalArrayLowCardinality()
         {
             await WithTemporaryTable("arrlc", "id Int32, arr Array(Array(Array(LowCardinality(Nullable(String)))))", Test);

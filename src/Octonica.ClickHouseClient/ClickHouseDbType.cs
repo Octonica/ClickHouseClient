@@ -233,5 +233,11 @@ namespace Octonica.ClickHouseClient
         /// An integral type representing unsigned 256-bit integers with values between 0 and 115792089237316195423570985008687907853269984665640564039457584007913129639935.
         /// </summary>
         UInt256 = ClickHouseSpecificTypeDelimiterCode + 12,
+
+        /// <summary>
+        /// A type representing a date value without a time. Supports the date range same with <see cref="DateTime64"/>.
+        /// Stored in four bytes as the number of days since 1925-01-01. Allows storing values till 2283-11-11.
+        /// </summary>
+        Date32 = ClickHouseSpecificTypeDelimiterCode + 13,
     }
 }

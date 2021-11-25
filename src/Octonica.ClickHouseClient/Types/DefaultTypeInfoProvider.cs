@@ -222,6 +222,9 @@ namespace Octonica.ClickHouseClient.Types
                 case ClickHouseDbType.Date:
                     typeName = "Date";
                     break;
+                case ClickHouseDbType.Date32:
+                    typeName = "Date32";
+                    break;
                 case ClickHouseDbType.Decimal:
                     typeName = string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale);
                     break;
@@ -529,6 +532,7 @@ namespace Octonica.ClickHouseClient.Types
                 new TupleTypeInfo(),
 
                 new DateTypeInfo(),
+                new Date32TypeInfo(),
                 new DateTimeTypeInfo(),
                 new DateTime64TypeInfo(),
 

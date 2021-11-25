@@ -26,6 +26,7 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | Float64 | double | | `GetDouble` |
 | Decimal | decimal | | `GetDecimal` |
 | Date\* | System.DateOnly | System.DateTime | `GetDate` |
+| Date32\* | System.DateOnly | System.DateTime | `GetDate` |
 | DateTime | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | DateTime64 | System.DateTimeOffset | System.DateTime | `GetDateTimeOffset` |
 | String | string | char[], byte[] | `GetString` |
