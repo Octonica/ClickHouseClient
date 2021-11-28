@@ -73,7 +73,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues);
+            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
@@ -161,7 +161,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues);
+            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -189,22 +189,24 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseArrayTableColumn<TElement> _values;
+        private readonly bool _isNullable;
 
         public int RowCount { get; }
 
-        public LowCardinalityArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, ReadOnlyMemory<byte> keys, int keySize, IClickHouseArrayTableColumn<TElement> values)
+        public LowCardinalityArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, ReadOnlyMemory<byte> keys, int keySize, IClickHouseArrayTableColumn<TElement> values, bool isNullable)
         {
             _reinterpretationRoot = reinterpretationRoot;
             _keys = keys;
             _keySize = keySize;
             _values = values;
+            _isNullable = isNullable;
             RowCount = _keys.Length / _keySize;
         }
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0)
+            if (valueIndex == 0 && _isNullable)
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.");
 
             return _values.CopyTo(valueIndex, buffer, dataOffset);
@@ -213,7 +215,7 @@ namespace Octonica.ClickHouseClient.Types
         public object GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0)
+            if (valueIndex == 0 && _isNullable)
                 return DBNull.Value;
 
             return _values.GetValue(valueIndex);
@@ -221,6 +223,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool IsNull(int index)
         {
+            if (!_isNullable)
+                return false;
+
             var valueIndex = GetValueIndex(index);
             return valueIndex == 0;
         }

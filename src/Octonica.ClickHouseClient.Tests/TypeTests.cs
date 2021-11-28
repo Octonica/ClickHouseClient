@@ -1437,7 +1437,7 @@ namespace Octonica.ClickHouseClient.Tests
 
             async Task Test(ClickHouseConnection connection, string tableName)
             {
-                var stringValues = new string?[] { null, "фываasdf", "abcdef", "ghijkl", "null", "пролджэzcvgb", "ячсмить" };
+                var stringValues = new string?[] { null, string.Empty, "фываasdf", "abcdef", "ghijkl", "null", "пролджэzcvgb", "ячсмить" };
                 var byteValues = stringValues.Select(v => v == null ? null : Encoding.UTF8.GetBytes(v)).ToArray();
 
                 const int rowCount = 150;
@@ -1509,6 +1509,86 @@ namespace Octonica.ClickHouseClient.Tests
                         Assert.Equal(expectedByteArray!.Length, len);
                         Assert.Equal(expectedByteArray, byteBuffer.Skip(3).Take(len));
                     }
+
+                    ++count;
+                }
+
+                Assert.Equal(rowCount, count);
+            }
+        }
+
+        [Fact]
+        public async Task ReadStringLowCardinalityColumnAsArray()
+        {
+            await WithTemporaryTable("low_cardinality_not_null_as_array", "id Int32, str LowCardinality(String)", Test);
+
+            async Task Test(ClickHouseConnection connection, string tableName)
+            {
+                var stringValues = new string[] { string.Empty, "фываasdf", "abcdef", "ghijkl", "null", "пролджэzcvgb", "ячсмить" };
+                var byteValues = stringValues.Select(v => Encoding.UTF8.GetBytes(v)).ToArray();
+
+                const int rowCount = 150;
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, str) VALUES", CancellationToken.None))
+                {
+                    writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.UTF8));
+                    await writer.WriteTableAsync(new object[] { Enumerable.Range(0, rowCount), Enumerable.Range(0, rowCount).Select(i => stringValues[i % stringValues.Length]) }, rowCount, CancellationToken.None);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT id, str FROM {tableName} ORDER BY id");
+
+                int count = 0;
+                await using var reader = await cmd.ExecuteReaderAsync();
+                reader.ConfigureColumn(1, new ClickHouseColumnSettings(Encoding.UTF8));
+                char[] charBuffer = new char[stringValues.Select(v => v.Length).Max() + 7];
+                byte[] byteBuffer = new byte[byteValues.Select(v => v.Length).Max() + 3];
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+                    Assert.Equal(count, id);
+
+                    var expectedStr = stringValues[id % stringValues.Length];
+                    var valueAsCharArray = reader.GetFieldValue<char[]>(1);
+                    Assert.Equal(expectedStr, new string(valueAsCharArray));
+
+                    var valueAsByteArray = reader.GetFieldValue<byte[]>(1);
+                    var expectedByteArray = byteValues[id % byteValues.Length];
+                    Assert.Equal(expectedByteArray, valueAsByteArray);
+
+                    var len = (int)reader.GetChars(1, 0, charBuffer, 0, charBuffer.Length);
+                    Assert.Equal(expectedStr.Length, len);
+                    Assert.Equal(expectedStr, new string(((ReadOnlySpan<char>)charBuffer).Slice(0, len)));
+
+                    len = (int)reader.GetBytes(1, 0, byteBuffer, 0, byteBuffer.Length);
+                    Assert.Equal(expectedByteArray!.Length, len);
+                    Assert.Equal(expectedByteArray, byteBuffer.Take(len));
+
+                    len = 0;
+                    while (len < charBuffer.Length - 7)
+                    {
+                        var size = Math.Min(3, charBuffer.Length - len - 7);
+                        var currentLen = (int)reader.GetChars(1, len, charBuffer, len + 7, size);
+                        len += currentLen;
+
+                        if (currentLen < size)
+                            break;
+                    }
+
+                    Assert.Equal(expectedStr.Length, len);
+                    Assert.Equal(expectedStr, new string(((ReadOnlySpan<char>)charBuffer).Slice(7, len)));
+
+                    len = 0;
+                    while (len < byteBuffer.Length - 3)
+                    {
+                        var size = Math.Min(3, byteBuffer.Length - len - 3);
+                        var currentLen = (int)reader.GetBytes(1, len, byteBuffer, len + 3, size);
+                        len += currentLen;
+
+                        if (currentLen < size)
+                            break;
+                    }
+
+                    Assert.Equal(expectedByteArray!.Length, len);
+                    Assert.Equal(expectedByteArray, byteBuffer.Skip(3).Take(len));
 
                     ++count;
                 }
