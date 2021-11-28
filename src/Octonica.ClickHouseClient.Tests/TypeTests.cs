@@ -2646,26 +2646,42 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             }
         }
 
-        [Fact]
-        public async Task ReadDateScalar()
+        [Theory]
+        [InlineData("2021-11-09", 2021, 11, 09)]
+        [InlineData("1970-1-1", 0, 0, 0)] // Default value
+        [InlineData("1970-1-2", 1970, 1, 2)]
+        [InlineData("2149-06-06", 2149, 6, 6)]
+        public async Task ReadDateScalar(string str, int year, int month, int day)
         {
+            DateTime expectedDateTime = default;
+#if NET6_0_OR_GREATER
+            DateOnly expectedDate = default;
+#endif
+            if (year != 0 || month != 0 || day != 0)
+            {
+                expectedDateTime = new DateTime(year, month, day);
+#if NET6_0_OR_GREATER
+                expectedDate = new DateOnly(year, month, day);
+#endif
+            }
+
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT cast('2021-11-09' AS Date)");
+            await using var cmd = connection.CreateCommand($"SELECT cast('{str}' AS Date)");
 
             var result = await cmd.ExecuteScalarAsync();
 
             DateTime resultDateTime;
 #if NET6_0_OR_GREATER
             var resultDateOnly = Assert.IsType<DateOnly>(result);
-            Assert.Equal(new DateOnly(2021, 11, 09), resultDateOnly);
+            Assert.Equal(expectedDate, resultDateOnly);
 #else
             resultDateTime = Assert.IsType<DateTime>(result);
-            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+            Assert.Equal(expectedDateTime, resultDateTime);
 #endif
 
             resultDateTime = await cmd.ExecuteScalarAsync<DateTime>();
-            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+            Assert.Equal(expectedDateTime, resultDateTime);
         }
 
         [Fact]
@@ -2678,7 +2694,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT {param}");
+            await using var cmd = connection.CreateCommand("SELECT {param} v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date };
             cmd.Parameters.Add(param);
 
@@ -2686,8 +2702,17 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             {
                 param.Value = testValue;
 
-                var result = await cmd.ExecuteScalarAsync<DateTime>();
+                await using var reader = await cmd.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+
+                var result = reader.GetFieldValue<DateTime>(0);
                 Assert.Equal(testValue.Date, result);
+
+                if (testValue == default)
+                    continue;
+
+                var resultStr = reader.GetString(1);
+                Assert.Equal(testValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = DateTime.UnixEpoch.AddMonths(-1);
@@ -2710,7 +2735,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT {param}");
+            await using var cmd = connection.CreateCommand("SELECT {param} v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date };
             cmd.Parameters.Add(param);
 
@@ -2720,10 +2745,18 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
                 Assert.Equal(ClickHouseDbType.Date, param.ClickHouseDbType);
 
-                var result = await cmd.ExecuteScalarAsync();
-                var resultDateOnly = Assert.IsType<DateOnly>(result);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
 
+                var result = reader.GetValue(0);
+                var resultDateOnly = Assert.IsType<DateOnly>(result);
                 Assert.Equal(testValue, resultDateOnly);
+
+                if (testValue == default)
+                    continue;
+
+                var resultStr = reader.GetString(1);
+                Assert.Equal(testValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = DateOnly.FromDateTime(DateTime.UnixEpoch.AddMonths(-1));
@@ -2736,26 +2769,43 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         }
 #endif
 
-        [Fact]
-        public async Task ReadDate32Scalar()
+        [Theory]
+        [InlineData("2021-11-09", 2021, 11, 09)]
+        [InlineData("1925-01-01", 0, 0, 0)] // Default value
+        [InlineData("1925-1-02", 1925, 1, 2)]
+        [InlineData("1970-1-1", 1970, 1, 1)]
+        [InlineData("2283-11-11", 2283, 11, 11)]
+        public async Task ReadDate32Scalar(string str, int year, int month, int day)
         {
+            DateTime expectedDateTime = default;
+#if NET6_0_OR_GREATER
+            DateOnly expectedDate = default;
+#endif
+            if (year != 0 || month != 0 || day != 0)
+            {
+                expectedDateTime = new DateTime(year, month, day);
+#if NET6_0_OR_GREATER
+                expectedDate = new DateOnly(year, month, day);
+#endif
+            }
+
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT cast('2021-11-09' AS Date32)");
+            await using var cmd = connection.CreateCommand($"SELECT cast('{str}' AS Date32)");
 
             var result = await cmd.ExecuteScalarAsync();
 
             DateTime resultDateTime;
 #if NET6_0_OR_GREATER
             var resultDateOnly = Assert.IsType<DateOnly>(result);
-            Assert.Equal(new DateOnly(2021, 11, 09), resultDateOnly);
+            Assert.Equal(expectedDate, resultDateOnly);
 #else
             resultDateTime = Assert.IsType<DateTime>(result);
-            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+            Assert.Equal(expectedDateTime, resultDateTime);
 #endif
 
             resultDateTime = await cmd.ExecuteScalarAsync<DateTime>();
-            Assert.Equal(new DateTime(2021, 11, 09), resultDateTime);
+            Assert.Equal(expectedDateTime, resultDateTime);
         }
 
         [Fact]
@@ -2766,11 +2816,12 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             var maxValue = new DateTime(2283, 11, 11);
             now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
 
-            var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), DateTime.UnixEpoch };
+            var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), minValue.AddDays(1), maxValue, DateTime.UnixEpoch };
 
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT {param}");
+            // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
+            await using var cmd = connection.CreateCommand("SELECT {param} v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
             cmd.Parameters.Add(param);
 
@@ -2778,8 +2829,17 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             {
                 param.Value = testValue;
 
-                var result = await cmd.ExecuteScalarAsync<DateTime>();
+                await using var reader = await cmd.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+
+                var result = reader.GetFieldValue<DateTime>(0);
                 Assert.Equal(testValue.Date, result);
+
+                if (testValue == default)
+                    continue;
+
+                var resultStr = reader.GetString(1);
+                Assert.Equal(testValue.ToString("yyyy-M-d", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = minValue.AddMonths(-1);
@@ -2803,7 +2863,8 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT {param}");
+            // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
+            await using var cmd = connection.CreateCommand("SELECT {param} AS v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
             cmd.Parameters.Add(param);
 
@@ -2811,12 +2872,18 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             {
                 param.Value = testValue;
 
-                Assert.Equal(ClickHouseDbType.Date, param.ClickHouseDbType);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
 
-                var result = await cmd.ExecuteScalarAsync();
+                var result = reader.GetValue(0);
                 var resultDateOnly = Assert.IsType<DateOnly>(result);
-
                 Assert.Equal(testValue, resultDateOnly);
+
+                if (testValue == default)
+                    continue;
+
+                var resultStr = reader.GetString(1);
+                Assert.Equal(testValue.ToString("yyyy-M-d", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = minValue.AddMonths(-1);
