@@ -18,6 +18,8 @@
 using System;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -315,6 +317,16 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Gets the value of the specified column as a <see cref="BigInteger"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public BigInteger GetBigInteger(int ordinal)
+        {
+            return GetFieldValue<BigInteger>(ordinal);
+        }
+
+        /// <summary>
         /// Gets the value of the specified column as a <see cref="bool"/>.
         /// </summary>
         /// <param name="ordinal">The zero-based column ordinal.</param>
@@ -332,6 +344,16 @@ namespace Octonica.ClickHouseClient
         public sealed override byte GetByte(int ordinal)
         {
             return GetFieldValue<byte>(ordinal);
+        }
+
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="sbyte"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public sbyte GetSByte(int ordinal)
+        {
+            return GetFieldValue<sbyte>(ordinal);
         }
 
         /// <summary>
@@ -417,6 +439,16 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Gets the value of the specified column as a <see cref="ushort"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public ushort GetUInt16(int ordinal)
+        {
+            return GetFieldValue<ushort>(ordinal);
+        }
+
+        /// <summary>
         /// Gets the value of the specified column as an <see cref="int"/>.
         /// </summary>
         /// <param name="ordinal">The zero-based column ordinal.</param>
@@ -427,6 +459,16 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Gets the value of the specified column as an <see cref="uint"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public uint GetUInt32(int ordinal)
+        {
+            return GetFieldValue<uint>(ordinal);
+        }
+
+        /// <summary>
         /// Gets the value of the specified column as a <see cref="long"/>.
         /// </summary>
         /// <param name="ordinal">The zero-based column ordinal.</param>
@@ -434,6 +476,26 @@ namespace Octonica.ClickHouseClient
         public sealed override long GetInt64(int ordinal)
         {
             return GetFieldValue<long>(ordinal);
+        }
+
+        /// <summary>
+        /// Gets the value of the specified column as a <see cref="ulong"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public ulong GetUInt64(int ordinal)
+        {
+            return GetFieldValue<ulong>(ordinal);
+        }
+
+        /// <summary>
+        /// Gets the value of the specified column as an instance of <see cref="IPAddress"/>.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <returns>The value of the specified column.</returns>
+        public IPAddress GetIPAddress(int ordinal)
+        {
+            return GetFieldValue<IPAddress>(ordinal);
         }
 
         /// <summary>

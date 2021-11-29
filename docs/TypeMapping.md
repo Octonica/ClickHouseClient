@@ -10,18 +10,18 @@
 You can get the value of one of supported types by calling `GetFieldValue<T>(int ordinal)` or `GetFieldValue<T>(int ordinal, T? nullValue)`. The latter doesn't throw an error on NULL value.
 | ClickHouse type | Default type | Supported types | ClickHouseDataReader's method | 
 |---|---|---|---|
-| Int8 | sbyte | short, int, long | `GetByte` |
+| Int8 | sbyte | short, int, long | `GetSByte` |
 | Int16 | short | int, long | `GetInt16` |
 | Int32 | int | long | `GetInt32` |
 | Int64 | long | | `GetInt64` |
-| Int128 | System.Numerics.BigInteger | | |
-| Int256 | System.Numerics.BigInteger | | |
-| UInt8 | byte | ushort, uint, ulong, int, long | |
+| Int128 | System.Numerics.BigInteger | | `GetBigInteger` |
+| Int256 | System.Numerics.BigInteger | | `GetBigInteger` |
+| UInt8 | byte | ushort, uint, ulong, int, long | `GetByte` |
 | UInt16 | ushort | uint, ulong, int, long | `GetUInt16` |
 | UInt32 | uint | ulong, long | `GetUInt132` |
 | UInt64 | ulong | | `GetUInt64` |
-| UInt128 | System.Numerics.BigInteger | | |
-| UInt256 | System.Numerics.BigInteger | | |
+| UInt128 | System.Numerics.BigInteger | | `GetBigInteger` |
+| UInt256 | System.Numerics.BigInteger | | `GetBigInteger` |
 | Float32 | float | double | `GetFloat` |
 | Float64 | double | | `GetDouble` |
 | Decimal | decimal | | `GetDecimal` |
@@ -32,8 +32,8 @@ You can get the value of one of supported types by calling `GetFieldValue<T>(int
 | String | string | char[], byte[] | `GetString` |
 | FixedString | byte[] | string, char[] | |
 | UUID | System.Guid | | `GetGuid` |
-| IPv4 | System.Net.IPAddress | string, int, uint | |
-| IPv6 | System.Net.IPAddress | string | |
+| IPv4 | System.Net.IPAddress | string, int, uint | `GetIPAddress` |
+| IPv6 | System.Net.IPAddress | string | `GetIPAddress` |
 | Enum8 | string | sbyte, short, int, long | |
 | Enum16 | string | short, int, long | |
 | Nothing | System.DBNull | | `GetValue` |
