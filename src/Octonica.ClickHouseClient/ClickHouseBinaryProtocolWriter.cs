@@ -211,6 +211,13 @@ namespace Octonica.ClickHouseClient
             Advance(1);
         }
 
+        public void WriteBytes(ReadOnlySpan<byte> bytes)
+        {
+            var span = GetSpan(bytes.Length);
+            bytes.CopyTo(span);
+            Advance(bytes.Length);
+        }
+
         private async Task WriteWithTimeoutAsync(Func<Stream, CancellationToken, Task> writeAsync, CancellationToken cancellationToken)
         {
             if (cancellationToken == CancellationToken.None && _stream.WriteTimeout >= 0)

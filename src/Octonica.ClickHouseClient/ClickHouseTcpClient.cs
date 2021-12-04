@@ -285,10 +285,13 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)
             {
+                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+
                 var result = await WithCancellationToken(
                     cancellationToken,
                     ct =>
                         ReadTable(
+                            withDecompression,
                             (typeInfo, rowCount) => typeInfo.CreateColumnReader(rowCount),
                             (columnInfo, reader, index) => ReadTableColumn(columnInfo, reader, columnSettings == null || columnSettings.Count <= index ? null : columnSettings[index]),
                             async,
@@ -302,11 +305,13 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<BlockHeader> SkipTable(ServerDataMessage dataMessage, bool async, CancellationToken cancellationToken)
             {
-                var result = await WithCancellationToken(cancellationToken, ct => ReadTable((typeInfo, rowCount) => typeInfo.CreateSkippingColumnReader(rowCount), null, async, ct));
-                return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);                
+                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+                var result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount) => typeInfo.CreateSkippingColumnReader(rowCount), null, async, ct));
+                return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
             }
 
             private async ValueTask<(List<ColumnInfo> columnInfos, List<IClickHouseTableColumn>? columns, int rowCount)> ReadTable<TReader>(
+                bool withDecompression,
                 Func<IClickHouseColumnTypeInfo, int, TReader> createColumnReader,
                 Func<ColumnInfo, TReader, int, IClickHouseTableColumn>? readTableColumn,
                 bool async,
@@ -315,7 +320,7 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var compression = _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
+                var compression = withDecompression && _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
                 var reader = _client._reader;
                 reader.BeginDecompress(compression);
 

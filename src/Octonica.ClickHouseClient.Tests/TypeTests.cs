@@ -3142,7 +3142,11 @@ FROM clickhouse_test_nullable";
 
                 await using var dmlcmd = connection.CreateCommand(dml);
                 result = await dmlcmd.ExecuteNonQueryAsync();
-                Assert.Equal(1, result);
+                if (!connection.ServerVersion.StartsWith("21.11."))
+                {
+                    // The server of the version 21.11 doesn't send profile events.
+                    Assert.Equal(1, result);
+                }
 
                 await using var queryCmd = connection.CreateCommand(query);
                 var r = await queryCmd.ExecuteReaderAsync();

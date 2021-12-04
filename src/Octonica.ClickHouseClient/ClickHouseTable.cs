@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient
 {
-    internal sealed class ClickHouseTable
+    internal struct ClickHouseTable
     {
         public BlockHeader Header { get; }
 

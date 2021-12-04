@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,6 +78,13 @@ namespace Octonica.ClickHouseClient.Protocol
                     writer.WriteString(InitialQueryId?? string.Empty); //initial query id
                     writer.WriteString(RemoteAddress); //initial IP address
 
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInitialQueryStartTime)
+                    {
+                        // Initial query start time in microseconds. An actual value of this property should be set by the server.
+                        Span<byte> zero = stackalloc byte[sizeof(ulong)];
+                        writer.WriteBytes(zero);
+                    }
+
                     writer.Write7BitInt32(1); //TCP
 
                     writer.WriteString(string.Empty); //OS user
@@ -90,7 +97,15 @@ namespace Octonica.ClickHouseClient.Protocol
                     writer.Write7BitInt32(ProtocolRevision);
 
                     writer.WriteString(string.Empty); //quota key
+
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithDistributedDepth)
+                        writer.Write7BitInt32(0); //distributed depth
+
                     writer.Write7BitInt32(ClientVersion.Build);
+
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithOpenTelemetry)
+                        writer.WriteByte(0); // TODO: add support for Open Telemetry headers
+
                     break;
 
                 case QueryKind.SecondaryQuery:

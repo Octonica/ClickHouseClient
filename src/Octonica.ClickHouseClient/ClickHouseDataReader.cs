@@ -35,17 +35,16 @@ namespace Octonica.ClickHouseClient
     /// </summary>
     public sealed class ClickHouseDataReader : ClickHouseDataReaderBase
     {
-        private readonly BlockHeader _blockHeader;
         private readonly ClickHouseTcpClient.Session _session;
         private readonly ClickHouseDataReaderRowLimit _rowLimit;
-
+        private readonly bool _ignoreProfileEvents;
         private ulong _recordsAffected;
 
         private int _rowIndex = -1;
 
         private IServerMessage? _nextResultMessage;
         private ClickHouseTable _currentTable;
-        
+
         private IClickHouseTableColumn[] _reinterpretedColumnsCache;
         private ClickHouseColumnSettings?[]? _columnSettings;
 
@@ -92,7 +91,7 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets the number of columns.
         /// </summary>
-        public override int FieldCount => _blockHeader.Columns.Count;
+        public override int FieldCount => _currentTable.Header.Columns.Count;
 
         /// <summary>
         /// Gets a value that indicates the depth of nesting for the current row.
@@ -100,14 +99,14 @@ namespace Octonica.ClickHouseClient
         /// <returns>Always returns 0.</returns>
         public override int Depth => 0;
 
-        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseDataReaderRowLimit rowLimit)
+        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseDataReaderRowLimit rowLimit, bool ignoreProfileEvents)
         {
-            _currentTable = table ?? throw new ArgumentNullException(nameof(table));
+            _currentTable = table.Header == null || table.Columns == null ? throw new ArgumentNullException(nameof(table)) : table;
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _rowLimit = rowLimit;
+            _ignoreProfileEvents = ignoreProfileEvents;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
-            _blockHeader = _currentTable.Header;
             State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
         }
 
@@ -136,6 +135,9 @@ namespace Octonica.ClickHouseClient
         {
             if (_rowIndex >= 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+
+            if (State == ClickHouseDataReaderState.ProfileEvents)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
 
             if (_columnSettings == null)
                 _columnSettings = new ClickHouseColumnSettings?[_currentTable.Columns.Count];
@@ -168,7 +170,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The <see cref="IClickHouseTypeInfo"/> which represents information about the type of the column.</returns>
         public IClickHouseTypeInfo GetFieldTypeInfo(int ordinal)
         {
-            return _blockHeader.Columns[ordinal].TypeInfo;
+            return _currentTable.Header.Columns[ordinal].TypeInfo;
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.GetName
@@ -179,7 +181,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The name of the specified column.</returns>
         public sealed override string GetName(int ordinal)
         {
-            return _blockHeader.Columns[ordinal].Name;
+            return _currentTable.Header.Columns[ordinal].Name;
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.GetDataTypeName
@@ -190,7 +192,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The string representing the data type of the specified column.</returns>
         public sealed override string GetDataTypeName(int ordinal)
         {
-            return _blockHeader.Columns[ordinal].TypeInfo.ComplexTypeName;
+            return _currentTable.Header.Columns[ordinal].TypeInfo.ComplexTypeName;
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.GetFieldType
@@ -206,7 +208,7 @@ namespace Octonica.ClickHouseClient
             // So an actual field type should be unboxed from Nullable<T>.
 
             var type = _columnSettings?[ordinal]?.ColumnType;
-            type ??= _blockHeader.Columns[ordinal].TypeInfo.GetFieldType();
+            type ??= _currentTable.Header.Columns[ordinal].TypeInfo.GetFieldType();
             return Nullable.GetUnderlyingType(type) ?? type;
         }
 
@@ -221,7 +223,7 @@ namespace Octonica.ClickHouseClient
             if (name == null)
                 throw new ArgumentNullException(nameof(name));
 
-            return CommonUtils.GetColumnIndex(_blockHeader.Columns, name);
+            return CommonUtils.GetColumnIndex(_currentTable.Header.Columns, name);
         }
 
         /// <summary>
@@ -802,13 +804,18 @@ namespace Octonica.ClickHouseClient
                                 case ClickHouseDataReaderState.Totals:
                                 case ClickHouseDataReaderState.Extremes:
                                 {
-                                    var dataMessage = (ServerDataMessage) message;
+                                    var dataMessage = (ServerDataMessage)message;
                                     var table = await _session.SkipTable(dataMessage, async, cancellationToken);
                                     if (table.RowCount != 0 || table.Columns.Count != 0)
                                         throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, "Unexpected data block after totals or extremes.");
 
                                     continue;
                                 }
+
+                                case ClickHouseDataReaderState.ProfileEvents:
+                                    _nextResultMessage = message;
+                                    State = ClickHouseDataReaderState.NextResultPending;
+                                    return false;
 
                                 default:
                                     goto UNEXPECTED_RESPONSE;
@@ -848,6 +855,7 @@ namespace Octonica.ClickHouseClient
 
                                 case ClickHouseDataReaderState.Data:
                                 case ClickHouseDataReaderState.Extremes:
+                                case ClickHouseDataReaderState.ProfileEvents:
                                     _nextResultMessage = message;
                                     State = ClickHouseDataReaderState.NextResultPending;
                                     return false;
@@ -871,6 +879,38 @@ namespace Octonica.ClickHouseClient
                                     break;
 
                                 case ClickHouseDataReaderState.Data:
+                                case ClickHouseDataReaderState.Totals:
+                                case ClickHouseDataReaderState.ProfileEvents:
+                                    _nextResultMessage = message;
+                                    State = ClickHouseDataReaderState.NextResultPending;
+                                    return false;
+
+                                default:
+                                    goto UNEXPECTED_RESPONSE;
+                            }
+
+                            break;
+
+                        case ServerMessageCode.ProfileEvents:
+                            if (_ignoreProfileEvents)
+                            {
+                                await _session.SkipTable((ServerDataMessage)message, async, cancellationToken);
+                                continue;
+                            }
+
+                            switch (State)
+                            {
+                                case ClickHouseDataReaderState.NextResultPending:
+                                    State = ClickHouseDataReaderState.ProfileEvents;
+                                    goto case ClickHouseDataReaderState.ProfileEvents;
+
+                                case ClickHouseDataReaderState.ProfileEvents:
+                                    var profileEventsMessage = (ServerDataMessage) message;
+                                    nextTable = await _session.ReadTable(profileEventsMessage, null, async, cancellationToken);
+                                    break;
+
+                                case ClickHouseDataReaderState.Data:
+                                case ClickHouseDataReaderState.Extremes:
                                 case ClickHouseDataReaderState.Totals:
                                     _nextResultMessage = message;
                                     State = ClickHouseDataReaderState.NextResultPending;
@@ -943,7 +983,7 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<bool> NextResult(bool async, CancellationToken cancellationToken)
         {
-            if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes)
+            if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes || State == ClickHouseDataReaderState.ProfileEvents)
             {
                 bool canReadNext;
                 do
@@ -1019,6 +1059,7 @@ namespace Octonica.ClickHouseClient
                             case ServerMessageCode.Data:
                             case ServerMessageCode.Totals:
                             case ServerMessageCode.Extremes:
+                            case ServerMessageCode.ProfileEvents:
                                 var dataMessage = (ServerDataMessage) message;
                                 await _session.SkipTable(dataMessage, async, CancellationToken.None);
                                 continue;

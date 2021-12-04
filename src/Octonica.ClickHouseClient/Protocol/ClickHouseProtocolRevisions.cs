@@ -25,7 +25,22 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = 54441;
+        public const int CurrentRevision = 54450;
+
+        /// <summary>
+        /// The number of protocol's revision with the initial query start time.
+        /// </summary>
+        public const int MinRevisionWithInitialQueryStartTime = 54449;
+
+        /// <summary>
+        /// The number of protocol's revision that supports distributed depth.
+        /// </summary>
+        public const int MinRevisionWithDistributedDepth = 54448;
+
+        /// <summary>
+        /// The number of protocol's revision with the support of Open Telemetry headers.
+        /// </summary>
+        public const int MinRevisionWithOpenTelemetry = 54442;
 
         /// <summary>
         /// The number of the protocol's revision that supports interserver secret.

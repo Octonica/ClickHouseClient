@@ -147,6 +147,13 @@ namespace Octonica.ClickHouseClient
         public bool? Extremes { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether profile events should be ignored while reading data.
+        /// </summary>
+        /// <returns><see langword="true"/>, if the data reader should skip profile events. <see langword="false"/>,
+        /// if the data reader should return profile events as a recordset. The default value is <see langword="true"/>.</returns>
+        public bool IgnoreProfileEvents { get; set; } = true;
+
+        /// <summary>
         /// Creates a new instance of <see cref="ClickHouseCommand"/>.
         /// </summary>
         public ClickHouseCommand()
@@ -226,6 +233,11 @@ namespace Octonica.ClickHouseClient
                                 result = (result.read + progress.read, result.written + progress.written);
                                 progress = (0, 0);
                             }
+                            continue;
+
+                        case ServerMessageCode.ProfileEvents:
+                            var profileEventsMessage = (ServerDataMessage)message;
+                            await session.SkipTable(profileEventsMessage, async, cancellationToken);
                             continue;
 
                         case ServerMessageCode.Error:
@@ -462,7 +474,7 @@ namespace Octonica.ClickHouseClient
             ClickHouseDataReader? reader = null;
             try
             {
-                reader = await ExecuteDbDataReader(CommandBehavior.Default, async, cancellationToken);
+                reader = await ExecuteDbDataReader(CommandBehavior.Default, true, async, cancellationToken);
                 bool hasAnyColumn = reader.FieldCount > 0;
                 if (!hasAnyColumn)
                     return DBNull.Value;
@@ -538,7 +550,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync()
         {
-            return await ExecuteDbDataReader(CommandBehavior.Default, true, CancellationToken.None);
+            return await ExecuteDbDataReader(CommandBehavior.Default, IgnoreProfileEvents, true, CancellationToken.None);
         }
 
         /// <summary>
@@ -548,7 +560,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CancellationToken cancellationToken)
         {
-            return await ExecuteDbDataReader(CommandBehavior.Default, true, cancellationToken);
+            return await ExecuteDbDataReader(CommandBehavior.Default, IgnoreProfileEvents, true, cancellationToken);
         }
 
         /// <summary>
@@ -562,7 +574,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CommandBehavior behavior)
         {
-            return await ExecuteDbDataReader(behavior, true, CancellationToken.None);
+            return await ExecuteDbDataReader(behavior, IgnoreProfileEvents, true, CancellationToken.None);
         }
 
         /// <summary>
@@ -577,13 +589,13 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
         public new async Task<ClickHouseDataReader> ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
         {
-            return await ExecuteDbDataReader(behavior, true, cancellationToken);
+            return await ExecuteDbDataReader(behavior, IgnoreProfileEvents, true, cancellationToken);
         }
 
         /// <inheritdoc cref="ExecuteReaderAsync(CommandBehavior, CancellationToken)"/>
         protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
         {
-            return await ExecuteDbDataReader(behavior, true, cancellationToken);
+            return await ExecuteDbDataReader(behavior, IgnoreProfileEvents, true, cancellationToken);
         }
 
         /// <summary>
@@ -592,7 +604,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="ClickHouseDataReader"/> object.</returns>
         public new ClickHouseDataReader ExecuteReader()
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(CommandBehavior.Default, false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(CommandBehavior.Default, IgnoreProfileEvents, false, CancellationToken.None));
         }
 
         /// <summary>
@@ -606,16 +618,16 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="ClickHouseDataReader"/> object.</returns>
         public new ClickHouseDataReader ExecuteReader(CommandBehavior behavior)
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, IgnoreProfileEvents, false, CancellationToken.None));
         }
 
         /// <inheritdoc cref="ExecuteReader(CommandBehavior)"/>
         protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
         {
-            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(ExecuteDbDataReader(behavior, IgnoreProfileEvents, false, CancellationToken.None));
         }
 
-        private async ValueTask<ClickHouseDataReader> ExecuteDbDataReader(CommandBehavior behavior, bool async, CancellationToken cancellationToken)
+        private async ValueTask<ClickHouseDataReader> ExecuteDbDataReader(CommandBehavior behavior, bool ignoreProfileEvents, bool async, CancellationToken cancellationToken)
         {
             const CommandBehavior knownBehaviorFlags =
                 CommandBehavior.CloseConnection |
@@ -686,7 +698,7 @@ namespace Octonica.ClickHouseClient
                 if (rowLimit == ClickHouseDataReaderRowLimit.Zero)
                     await session.SendCancel(async);
 
-                return new ClickHouseDataReader(firstTable, session, rowLimit);
+                return new ClickHouseDataReader(firstTable, session, rowLimit, ignoreProfileEvents);
             }
             catch (ClickHouseHandledException)
             {

@@ -256,7 +256,12 @@ namespace Octonica.ClickHouseClient
 
                 case ServerMessageCode.TableStatusResponse:
                 case ServerMessageCode.Log:
-                    throw new NotImplementedException();
+                case ServerMessageCode.PartUuids:
+                case ServerMessageCode.ReadTaskRequest:
+                    throw new NotImplementedException($"A message of type \"{messageCode}\" is not supported.");
+
+                case ServerMessageCode.ProfileEvents:
+                    return await ServerDataMessage.Read(this, messageCode, async, cancellationToken);
 
                 default:
                     if (throwOnUnknownMessage)

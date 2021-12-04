@@ -66,6 +66,11 @@ namespace Octonica.ClickHouseClient
         /// This state usualy indicates that the reader was created with a <see cref="System.Data.CommandBehavior"/> that
         /// forbids further reading even if there are more rows in the current result set or there are more result sets.
         /// </remarks>
-        ClosePending = 6
+        ClosePending = 6,
+
+        /// <summary>
+        /// The reader is currently reading profile events.
+        /// </summary>
+        ProfileEvents = 7
     }
 }

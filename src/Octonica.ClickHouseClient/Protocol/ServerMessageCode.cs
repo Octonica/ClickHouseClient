@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2021 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,9 @@ namespace Octonica.ClickHouseClient.Protocol
         Extremes = 8,
         TableStatusResponse = 9,
         Log = 10,
-        TableColumns = 11
+        TableColumns = 11,
+        PartUuids = 12,
+        ReadTaskRequest = 13,
+        ProfileEvents = 14
     }
 }

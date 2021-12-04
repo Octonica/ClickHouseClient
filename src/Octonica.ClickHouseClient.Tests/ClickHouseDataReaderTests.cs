@@ -17,6 +17,7 @@
 
 using System;
 using System.Data;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -349,6 +350,76 @@ namespace Octonica.ClickHouseClient.Tests
             await using var cmd = cn.CreateCommand("SELECT 42");
             var ex = await Assert.ThrowsAsync<ArgumentException>(() => cmd.ExecuteReaderAsync(CommandBehavior.KeyInfo));
             Assert.Equal("behavior", ex.ParamName);
+        }
+
+        [Fact]
+        public async Task ProfileEvents()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            const int expectedCount = 1_000_000;
+            await using var cmd = cn.CreateCommand(string.Format(CultureInfo.InvariantCulture, "SELECT number as n, addSeconds('2000-01-01 00:00:00'::DateTime, n) as d FROM numbers({0})", expectedCount));
+            cmd.IgnoreProfileEvents = false;
+
+            int count = 0, eventTableCount = 0;
+            ulong selectedRows = 0;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumn("d", new ClickHouseColumnSettings(columnType: typeof(DateTime)));
+
+            var startDate = new DateTimeOffset(2000, 1, 1, 0, 0, 0, -cn.GetServerTimeZone().GetUtcOffset(new DateTime(2000, 1, 1)));
+
+            while(true)
+            {
+                Assert.Equal(ClickHouseDataReaderState.Data, reader.State);
+
+                while (await reader.ReadAsync())
+                {
+                    var number = reader.GetUInt64(0);
+                    var dateObj = reader.GetValue(1);
+
+                    // Check that column settings applied
+                    var date = Assert.IsType<DateTime>(dateObj);
+
+                    Assert.Equal(startDate.AddSeconds(number), date);
+                    ++count;
+                }
+
+                if (!await reader.NextResultAsync())
+                    break;
+
+                Assert.Equal(ClickHouseDataReaderState.ProfileEvents, reader.State);
+
+                var typeColumnIdx = reader.GetOrdinal("type");
+                var nameColumnIdx = reader.GetOrdinal("name");
+                var valueColumnIdx = reader.GetOrdinal("value");
+
+                ++eventTableCount;
+                while(await reader.ReadAsync())
+                {
+                    var name = reader.GetString(nameColumnIdx);
+                    if (name != "SelectedRows")
+                        continue;
+
+                    var type = reader.GetString(typeColumnIdx);
+                    var value = reader.GetUInt64(valueColumnIdx);
+                    switch (type)
+                    {
+                        case "increment":
+                            selectedRows = value;
+                            break;
+                        default:
+                            Assert.True(false, $"Unexpected event type: {type}");
+                            continue;
+                    }
+                }
+
+                if (!await reader.NextResultAsync())
+                    break;
+            };
+
+            Assert.True(eventTableCount > 1);
+            Assert.Equal(expectedCount, count);
+            Assert.True(selectedRows >= expectedCount);
         }
     }
 }
