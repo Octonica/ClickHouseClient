@@ -1,3 +1,30 @@
+### Octonica.ClickHouseClient v2.2.7, 2021-12-04
+
+#### New Feature
+
+* .NET 6.0 support ([#33](https://github.com/Octonica/ClickHouseClient/issues/33)):
+  * New API for time zones. Remove dependency from the package TimeZoneConverter;
+  * Change mapping of the ClickHouse type `Date` from `DateTime` to `DateOnly`. This affects the behavior of methods `ClickHouseDataReader.GetValue` and `ClickHouseDataReader.GetValues`;
+  * Add the method `ClickHouseDataReader.GetDate` for reading values of types `Date` and `Date32`.
+* Add methods to the `ClickHouseDataReader` for reading values of well-known types ([#38](https://github.com/Octonica/ClickHouseClient/issues/38)):
+  * `GetBigInteger`;
+  * `GetIPAddress`;
+  * `GetSByte`;
+  * `GetUInt16`;
+  * `GetUInt32`;
+  * `GetUInt64`.
+* Add support for the type `Date32` ([#36](https://github.com/Octonica/ClickHouseClient/issues/36)).
+* Add support for profile events. Profile events are disabled by default. To enable it set the value of the property `ClickHouseCommand.IgnoreProfileEvents` to `false`.
+ Please note that the method `ClickHouseDataReader.NextResult` (or `NextResultAsync`) should be called for switching between regular data and profile events.
+
+#### Bug Fix
+
+* Fix reading empty values of the type `LowCardinality(String)` ([#37](https://github.com/Octonica/ClickHouseClient/issues/37)).
+
+#### Miscellaneous
+
+* Default protocol revision is set to 54450.
+
 ### Octonica.ClickHouseClient release v2.1.2, 2021-11-07
 
 #### New Feature
