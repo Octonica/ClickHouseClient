@@ -357,7 +357,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var cn = await OpenConnectionAsync();
 
-            const int expectedCount = 1_000_000;
+            const int expectedCount = 200_000;
             await using var cmd = cn.CreateCommand(string.Format(CultureInfo.InvariantCulture, "SELECT number as n, addSeconds('2000-01-01 00:00:00'::DateTime, n) as d FROM numbers({0})", expectedCount));
             cmd.IgnoreProfileEvents = false;
 
@@ -380,7 +380,7 @@ namespace Octonica.ClickHouseClient.Tests
                     // Check that column settings applied
                     var date = Assert.IsType<DateTime>(dateObj);
 
-                    Assert.Equal(startDate.AddSeconds(number).Date, date);
+                    Assert.Equal(startDate.AddSeconds(number).DateTime, date);
                     ++count;
                 }
 
