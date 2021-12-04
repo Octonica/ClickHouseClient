@@ -380,7 +380,7 @@ namespace Octonica.ClickHouseClient.Tests
                     // Check that column settings applied
                     var date = Assert.IsType<DateTime>(dateObj);
 
-                    Assert.Equal(startDate.AddSeconds(number), date);
+                    Assert.Equal(startDate.AddSeconds(number).Date, date);
                     ++count;
                 }
 
