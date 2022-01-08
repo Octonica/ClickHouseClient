@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -269,7 +269,7 @@ namespace Octonica.ClickHouseClient.Tests
 
                 var tokenSource = new CancellationTokenSource();
                 tokenSource.CancelAfter(500);
-                var ex = await Assert.ThrowsAsync<OperationCanceledException>(() => cmd.ExecuteNonQueryAsync(tokenSource.Token));
+                var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cmd.ExecuteNonQueryAsync(tokenSource.Token));
                 Assert.Equal(tokenSource.Token, ex.CancellationToken);
             }
         }
