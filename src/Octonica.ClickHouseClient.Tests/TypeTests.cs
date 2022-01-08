@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -3089,7 +3089,7 @@ INSERT INTO clickhouse_test_nullable (
     ,datetime
     ,enum8
     ,enum16
-) VALUES (
+) SELECT
     8
     ,16
     ,32
@@ -3105,8 +3105,7 @@ INSERT INTO clickhouse_test_nullable (
     ,now()
     ,now()
     ,'a'
-    ,'c'
-)";
+    ,'c'";
 
             const string query = @"
 SELECT

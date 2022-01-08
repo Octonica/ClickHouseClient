@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -362,7 +362,7 @@ namespace Octonica.ClickHouseClient.Tests
             cmd.IgnoreProfileEvents = false;
 
             int count = 0, eventTableCount = 0;
-            ulong selectedRows = 0;
+            long selectedRows = 0;
             await using var reader = await cmd.ExecuteReaderAsync();
             reader.ConfigureColumn("d", new ClickHouseColumnSettings(columnType: typeof(DateTime)));
 
@@ -401,7 +401,7 @@ namespace Octonica.ClickHouseClient.Tests
                         continue;
 
                     var type = reader.GetString(typeColumnIdx);
-                    var value = reader.GetUInt64(valueColumnIdx);
+                    var value = reader.GetInt64(valueColumnIdx);
                     switch (type)
                     {
                         case "increment":
