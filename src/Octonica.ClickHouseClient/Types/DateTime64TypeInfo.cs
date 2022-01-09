@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,13 @@ namespace Octonica.ClickHouseClient.Types
 
         private readonly int? _precision;
         private readonly string? _timeZoneCode;
-        private readonly TimeZoneInfo _timeZone;
+
+        /// <summary>
+        /// Indicates that the <see cref="_timeZoneCode"/> was acquired from the name of the type.
+        /// </summary>
+        private readonly bool _explicitTimeZoneCode;
+
+        private TimeZoneInfo? _timeZone;
 
         public string ComplexTypeName { get; }
 
@@ -42,7 +48,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public int GenericArgumentsCount => 0;
 
-        public int TypeArgumentsCount => (_precision == null ? 0 : 1) + (_timeZoneCode == null ? 0 : 1);
+        public int TypeArgumentsCount => (_precision == null ? 0 : 1) + (_timeZoneCode == null || !_explicitTimeZoneCode ? 0 : 1);
 
         static DateTime64TypeInfo()
         {
@@ -78,11 +84,11 @@ namespace Octonica.ClickHouseClient.Types
         }
 
         public DateTime64TypeInfo()
-            : this(null, TimeZoneInfo.Utc, null)
+            : this(null, null, false)
         {
         }
 
-        private DateTime64TypeInfo(int? precision, TimeZoneInfo timeZone, string? timeZoneCode)
+        private DateTime64TypeInfo(int? precision, string? timeZoneCode, bool explicitTimeZoneCode)
         {
             if (precision != null)
             {
@@ -92,11 +98,11 @@ namespace Octonica.ClickHouseClient.Types
                     throw new ArgumentOutOfRangeException(nameof(precision), $"The precision can't be greater than {DateTimeTicksScales.Length - 1}.");
             }
 
-            _timeZone = timeZone;
+            _explicitTimeZoneCode = explicitTimeZoneCode;
             _precision = precision;
             _timeZoneCode = timeZoneCode;
 
-            if (timeZoneCode != null)
+            if (timeZoneCode != null && _explicitTimeZoneCode)
             {
                 if (precision == null)
                     throw new ArgumentNullException(nameof(precision));
@@ -132,7 +138,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             if (_precision == null)
             {
-                Debug.Assert(_timeZoneCode == null);
+                Debug.Assert(_timeZoneCode == null || !_explicitTimeZoneCode);
                 throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
             }
 
@@ -142,7 +148,7 @@ namespace Octonica.ClickHouseClient.Types
                     return _precision;
 
                 case 1:
-                    if (_timeZoneCode != null)
+                    if (_timeZoneCode != null && _explicitTimeZoneCode)
                         return _timeZoneCode;
 
                     goto default;
@@ -154,7 +160,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            return new DateTime64Reader(rowCount, _precision ?? DefaultPrecision, _timeZone);
+            var timeZone = GetTimeZone();
+            return new DateTime64Reader(rowCount, _precision ?? DefaultPrecision, timeZone);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -165,10 +172,16 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(DateTime))
-                return new DateTimeWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, (IReadOnlyList<DateTime>)rows);
+            {
+                var timeZone = GetTimeZone();
+                return new DateTimeWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, timeZone, (IReadOnlyList<DateTime>)rows);
+            }
 
             if (typeof(T) == typeof(DateTimeOffset))
-                return new DateTimeOffsetWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, _timeZone, (IReadOnlyList<DateTimeOffset>)rows);
+            {
+                var timeZone = GetTimeZone();
+                return new DateTimeOffsetWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, timeZone, (IReadOnlyList<DateTimeOffset>)rows);
+            }
 
             if (typeof(T) == typeof(ulong))
                 return new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, (IReadOnlyList<ulong>)rows);
@@ -186,21 +199,30 @@ namespace Octonica.ClickHouseClient.Types
             else if (precision < 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The precision value for the type \"{TypeName}\" must be a non-negative number.");
 
-            string? tzCode = null;
-            TimeZoneInfo? timeZone = null;
             if (options.Count == 2)
             {
-                tzCode = options[1].Trim('\'').ToString();
-                timeZone = TimeZoneHelper.GetTimeZoneInfo(tzCode);
+                var tzCode = options[1].Trim('\'').ToString();
+                return new DateTime64TypeInfo(precision, tzCode, true);
             }
 
-            return new DateTime64TypeInfo(precision, timeZone ?? _timeZone, tzCode);
+            return new DateTime64TypeInfo(precision, _timeZoneCode, false);
         }
 
         public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)
         {
-            var timezone = TimeZoneHelper.GetTimeZoneInfo(serverInfo.Timezone);
-            return new DateTime64TypeInfo(null, timezone, null);
+            return new DateTime64TypeInfo(null, serverInfo.Timezone, false);
+        }
+
+        private TimeZoneInfo GetTimeZone()
+        {
+            if (_timeZone != null)
+                return _timeZone;
+
+            if (_timeZoneCode == null)
+                return TimeZoneInfo.Utc;
+
+            _timeZone = TimeZoneHelper.GetTimeZoneInfo(_timeZoneCode);
+            return _timeZone;
         }
 
         private sealed class DateTime64Reader : StructureReaderBase<ulong, DateTimeOffset>

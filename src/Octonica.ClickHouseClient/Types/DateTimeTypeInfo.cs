@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,31 +26,38 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class DateTimeTypeInfo : IClickHouseConfigurableTypeInfo
     {
         private readonly string? _timeZoneCode;
-        private readonly TimeZoneInfo _timeZone;
-        
+
+        /// <summary>
+        /// Indicates that the <see cref="_timeZoneCode"/> was acquired from the name of the type.
+        /// </summary>
+        private readonly bool _explicitTimeZoneCode;
+
+        private TimeZoneInfo? _timeZone;
+
         public string ComplexTypeName { get; }
 
         public string TypeName => "DateTime";
 
         public int GenericArgumentsCount => 0;
 
-        public int TypeArgumentsCount => _timeZoneCode == null ? 0 : 1;
+        public int TypeArgumentsCount => _timeZoneCode == null || !_explicitTimeZoneCode ? 0 : 1;
 
         public DateTimeTypeInfo()
-            : this(TimeZoneInfo.Utc, null)
+            : this(null, false)
         {
         }
 
-        private DateTimeTypeInfo(TimeZoneInfo timeZone, string? timeZoneCode)
+        private DateTimeTypeInfo(string? timeZoneCode, bool explicitTimeZoneCode)
         {
-            _timeZone = timeZone;
             _timeZoneCode = timeZoneCode;
-            ComplexTypeName = timeZoneCode == null ? TypeName : $"{TypeName}('{timeZoneCode}')";
+            _explicitTimeZoneCode = explicitTimeZoneCode;
+            ComplexTypeName = timeZoneCode == null || !_explicitTimeZoneCode ? TypeName : $"{TypeName}('{timeZoneCode}')";
         }
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            return new DateTimeReader(rowCount, _timeZone);
+            var timeZone = GetTimeZone();
+            return new DateTimeReader(rowCount, timeZone);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -61,10 +68,16 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(DateTime))
-                return new DateTimeWriter(columnName, ComplexTypeName, _timeZone, (IReadOnlyList<DateTime>)rows);
+            {
+                var timeZone = GetTimeZone();
+                return new DateTimeWriter(columnName, ComplexTypeName, timeZone, (IReadOnlyList<DateTime>)rows);
+            }
 
             if (typeof(T) == typeof(DateTimeOffset))
-                return new DateTimeOffsetWriter(columnName, ComplexTypeName, _timeZone, (IReadOnlyList<DateTimeOffset>)rows);
+            {
+                var timeZone = GetTimeZone();
+                return new DateTimeOffsetWriter(columnName, ComplexTypeName, timeZone, (IReadOnlyList<DateTimeOffset>)rows);
+            }
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
@@ -75,8 +88,7 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
 
             var tzCode = options[0].Trim('\'').ToString();
-            var timezone = TimeZoneHelper.GetTimeZoneInfo(tzCode);
-            return new DateTimeTypeInfo(timezone, tzCode);
+            return new DateTimeTypeInfo(tzCode, true);
         }
 
         public Type GetFieldType()
@@ -96,7 +108,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetTypeArgument(int index)
         {
-            if (_timeZoneCode == null)
+            if (_timeZoneCode == null || !_explicitTimeZoneCode)
                 throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
 
             if (index != 0)
@@ -107,8 +119,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)
         {
-            var timezone = TimeZoneHelper.GetTimeZoneInfo(serverInfo.Timezone);
-            return new DateTimeTypeInfo(timezone, null);
+            return new DateTimeTypeInfo(serverInfo.Timezone, false);
+        }
+
+        private TimeZoneInfo GetTimeZone()
+        {
+            if (_timeZone != null)
+                return _timeZone;
+
+            if (_timeZoneCode == null)
+                return TimeZoneInfo.Utc;
+
+            _timeZone = TimeZoneHelper.GetTimeZoneInfo(_timeZoneCode);
+            return _timeZone;
         }
 
         private sealed class DateTimeReader : StructureReaderBase<uint, DateTimeOffset>
