@@ -1,3 +1,18 @@
+### Octonica.ClickHouseClient v2.2.8, 2022-01-09
+
+#### Bug Fix
+
+* Fix getting a time zone from IANA code. This fix is only applicable to the .NET 6 version of ClickHouseClient running on Windows ([#40](https://github.com/Octonica/ClickHouseClient/issues/40)).
+
+#### Improvement
+
+* Make possible to open a connection to the server with an unrecognized time zone. The `TimeZoneNotFoundException` may be thrown later when reading
+  the column of type `DateTime` or `DateTime64` ([#40](https://github.com/Octonica/ClickHouseClient/issues/40)).
+
+#### Miscellaneous
+
+* Default protocol revision is set to 54452. This change was made because the minimal protocol revison with profile events was updated in the ClickHouse v21.12.
+
 ### Octonica.ClickHouseClient v2.2.7, 2021-12-04
 
 #### New Feature
