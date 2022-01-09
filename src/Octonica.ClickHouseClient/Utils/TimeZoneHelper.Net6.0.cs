@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@
 
 using System;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Octonica.ClickHouseClient.Utils
 {
@@ -28,18 +27,7 @@ namespace Octonica.ClickHouseClient.Utils
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static partial void GetTimeZoneInfoImpl(string timeZone, ref TimeZoneInfo? timeZoneInfo)
         {
-            string? timeZoneId;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                if (!TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZone, out timeZoneId))
-                    throw new TimeZoneNotFoundException($"The time zone with the identifier '{timeZone}' was not found.");
-            }
-            else
-            {
-                timeZoneId = timeZone;
-            }
-
-            timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
