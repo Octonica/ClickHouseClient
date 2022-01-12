@@ -22,6 +22,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Octonica.ClickHouseClient.Types
@@ -101,6 +102,89 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             return new MapColumnWriter(underlyingWriter);
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            // TODO: ClickHouseDbType.Map is not supported in DefaultTypeInfoProvider.GetTypeInfo
+            
+            if (_underlyingType == null || _typeArgs == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            Type? dictionaryItf = null;
+            foreach (var itf in value.GetType().GetInterfaces())
+            {
+                if (itf.IsGenericType && itf.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
+                {
+                    if (dictionaryItf != null)
+                    {
+                        dictionaryItf = null;
+                        break;
+                    }
+
+                    dictionaryItf = itf;
+                }
+            }
+            if (dictionaryItf == null)
+            {
+                _underlyingType.FormatValue(queryStringBuilder, value);
+            }
+            else
+            {
+                if (!(_underlyingType is ArrayTypeInfo arrayTypeInfo) ||
+                    !(arrayTypeInfo.GetGenericArgument(0) is TupleTypeInfo tupleTypeInfo) ||
+                    tupleTypeInfo.GenericArgumentsCount != 2)
+                {
+                    
+                }
+                var mapFormatter = (MapFormatterBase) Activator.CreateInstance(typeof(MapFormatter<,>).MakeGenericType(dictionaryItf.GetGenericArguments()))!;
+                queryStringBuilder.Append("{");
+                var keyType = _typeArgs.Value.Key;
+                var valueType = _typeArgs.Value.Value;
+                mapFormatter.Format(keyType, valueType, queryStringBuilder, value);
+                queryStringBuilder.Append("}");
+            }
+        }
+
+        abstract class MapFormatterBase
+        {
+            public abstract void Format(IClickHouseColumnTypeInfo keyType, IClickHouseColumnTypeInfo valueType, StringBuilder queryStringBuilder, object map);
+        }
+
+        class MapFormatter<TKey, TValue> : MapFormatterBase where TKey : notnull
+        {
+            public override void Format(IClickHouseColumnTypeInfo keyType, IClickHouseColumnTypeInfo valueType, StringBuilder queryStringBuilder, object untypedMap)
+            {
+                var map = (IReadOnlyDictionary<TKey, TValue>) untypedMap;
+                queryStringBuilder.Append("tuple([");
+                {
+                    var needComma = false;
+                    foreach (var (key, _) in map)
+                    {
+                        if (needComma)
+                            queryStringBuilder.Append(',');
+                        else
+                            needComma = true;
+                        keyType.FormatValue(queryStringBuilder, key);
+                    }
+                }
+                queryStringBuilder.Append("],[");
+                {
+                    var needComma = false;
+                    foreach (var (_, value) in map)
+                    {
+                        if (needComma)
+                            queryStringBuilder.Append(',');
+                        else
+                            needComma = true;
+                        keyType.FormatValue(queryStringBuilder, value);
+                    }
+                }
+                queryStringBuilder.Append("])");
+            }
         }
 
         public ClickHouseDbType GetDbType()

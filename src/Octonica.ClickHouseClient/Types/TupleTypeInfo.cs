@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -75,6 +76,33 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return TupleColumnWriter.CreateColumnWriter(columnName, ComplexTypeName, _elementTypes, rows, columnSettings);
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            // TODO: ClickHouseDbType.Tuple is not supported in DefaultTypeInfoProvider.GetTypeInfo
+            if (_elementTypes == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            
+            if (!(value is ITuple tuple) || tuple.Length != _elementTypes.Count)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            queryStringBuilder.Append("tuple(");
+
+            var length = _elementTypes.Count;
+            for (var i = 0; i < length; i++)
+            {
+                var element = tuple[i];
+                var type = _elementTypes[i];
+                if (i > 0)
+                    queryStringBuilder.Append(",");
+                type.FormatValue(queryStringBuilder, element);
+            }
+
+            queryStringBuilder.Append(")");
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

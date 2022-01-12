@@ -17,8 +17,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -57,6 +59,42 @@ namespace Octonica.ClickHouseClient.Types
 
             return new IpV6Writer(columnName, TypeName, preparedRows);
         }
+        
+        const string HexDigits = "0123456789ABCDEF";
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            IPAddress ipAddress = value switch
+            {
+                IPAddress theValue => theValue,
+                string theValue => ParseIpAddress(theValue),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+
+            if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
+                ipAddress = ipAddress.MapToIPv6();
+
+            if (ipAddress.AddressFamily != AddressFamily.InterNetworkV6)
+                throw new InvalidCastException($"The network address \"{ipAddress}\" is not a IPv6 address.");
+
+            Span<byte> buffer = stackalloc byte[AddressSize];
+
+            if (!ipAddress.TryWriteBytes(buffer, out var bytesWritten) || bytesWritten != AddressSize)
+                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: IPv6 address writing error.");
+
+            queryStringBuilder.Append('\'');
+            foreach (var byteValue in buffer)
+            {
+                queryStringBuilder.Append("\\x");
+                queryStringBuilder.Append(HexDigits[byteValue >> 4]);
+                queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
+            }
+            
+            queryStringBuilder.Append('\'');
+        }
 
         public override Type GetFieldType()
         {
@@ -68,6 +106,7 @@ namespace Octonica.ClickHouseClient.Types
             return ClickHouseDbType.IpV6;
         }
 
+        [return: NotNullIfNotNull("address")]
         private static IPAddress? ParseIpAddress(string? address)
         {
             if (address == null)

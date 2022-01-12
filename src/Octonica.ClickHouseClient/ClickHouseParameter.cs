@@ -25,9 +25,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -360,67 +358,30 @@ namespace Octonica.ClickHouseClient
             parameter._valueTypeInfo = null;
         }
 
-        internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
-        {
-            bool isNull = Value == DBNull.Value || Value == null;
-            if (isNull && _forcedNullable == false)
-                throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The parameter \"{ParameterName}\" is declared as non-nullable but it's value is null.");
-
-            IClickHouseColumnTypeInfo typeInfo;
-            var adapter = new ParameterColumnTypeDescriptorAdapter(this);
-            try
-            {
-                typeInfo = typeInfoProvider.GetTypeInfo(adapter);
+        internal void OutputParameterValue(StringBuilder queryStringBuilder, ReadOnlyMemory<char> specifiedType, IClickHouseTypeInfoProvider typeInfoProvider) {
+            if (!specifiedType.IsEmpty)
+                queryStringBuilder.Append("CAST(");
+            queryStringBuilder.Append("CAST(");
+            var typeInfo = typeInfoProvider.GetTypeInfo(new ParameterColumnTypeDescriptorAdapter(this));
+            
+            typeInfo.FormatValue(queryStringBuilder, Value);
+            
+            queryStringBuilder.Append(" as ");
+            queryStringBuilder.Append(typeInfo.ComplexTypeName);
+            
+            queryStringBuilder.Append(")");
+            if (!specifiedType.IsEmpty) {
+                queryStringBuilder.Append(" as ");
+                var shouldAppendNullable = Value == null && !specifiedType.Span.StartsWith("Nullable(");
+                if (shouldAppendNullable) {
+                    queryStringBuilder.Append("Nullable(");
+                }
+                queryStringBuilder.Append(specifiedType.Span);
+                if (shouldAppendNullable) {
+                    queryStringBuilder.Append(")");
+                }
+                queryStringBuilder.Append(")");
             }
-            catch (ClickHouseException ex)
-            {
-                throw new ClickHouseException(ex.ErrorCode, $"Parameter \"{ParameterName}\". {ex.Message}", ex);
-            }
-
-            object? preparedValue = null;
-            if (_forcedType == ClickHouseDbType.StringFixedLength)
-            {
-                Debug.Assert(typeInfo.TypeName == "FixedString");
-
-                ReadOnlySpan<char> strSpan = default;
-                bool isStr = false;
-                if (Value is string strValue)
-                {
-                    strSpan = strValue;
-                    isStr = true;
-                }
-                else if (Value is Memory<char> mem)
-                {
-                    strSpan = mem.Span;
-                    isStr = true;
-                }
-                else if (Value is ReadOnlyMemory<char> roMem)
-                {
-                    strSpan = roMem.Span;
-                    isStr = true;
-                }
-
-                if (isStr)
-                {
-                    var encoding = StringEncoding ?? Encoding.UTF8;
-                    var size = encoding.GetByteCount(strSpan);
-                    if (size > Size)
-                    {
-                        throw new ClickHouseException(
-                            ClickHouseErrorCodes.InvalidQueryParameterConfiguration,
-                            $"Parameter \"{ParameterName}\". The length of the string in bytes with encoding \"{encoding.EncodingName}\" is greater than the size of the parameter.");
-                    }
-
-                    var bytes = new byte[size];
-                    encoding.GetBytes(strSpan, bytes);
-                    preparedValue = bytes;
-                }
-            }
-
-            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();            
-            var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, adapter.Settings, typeInfo);
-            var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
-            return column;
         }
 
         private IntermediateClickHouseTypeInfo GetTypeFromValue()
@@ -507,28 +468,6 @@ namespace Octonica.ClickHouseClient
             }
 
             return parameterName;
-        }
-
-        private class ParameterColumnWriterBuilder : ITypeDispatcher<IClickHouseColumnWriter>
-        {
-            private readonly string _parameterId;
-            [AllowNull] private readonly object _value;
-            private readonly ClickHouseColumnSettings? _columnSettings;
-            private readonly IClickHouseColumnTypeInfo _typeInfo;
-
-            public ParameterColumnWriterBuilder(string parameterId, object? value, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo typeInfo)
-            {
-                _parameterId = parameterId;
-                _value = value;
-                _columnSettings = columnSettings;
-                _typeInfo = typeInfo ?? throw new ArgumentNullException(nameof(typeInfo));
-            }
-
-            public IClickHouseColumnWriter Dispatch<T>()
-            {
-                var singleElementColumn = new ConstantReadOnlyList<T>((T) _value, 1);
-                return _typeInfo.CreateColumnWriter(_parameterId, singleElementColumn, _columnSettings);
-            }
         }
 
         private class ParameterColumnTypeDescriptorAdapter : IClickHouseColumnDescriptor

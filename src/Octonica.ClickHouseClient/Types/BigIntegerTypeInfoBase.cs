@@ -21,8 +21,10 @@ using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Diagnostics;
 using System.Numerics;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -88,6 +90,39 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new BigIntegerColumnWriter(columnName, ComplexTypeName, _elementByteSize, bigIntegerRows, _isUnsigned);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            if (value is BigInteger bigIntegerValue)
+            {
+                if (_isUnsigned && bigIntegerValue.Sign < 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow negative BigInteger values");
+                queryStringBuilder.Append('\'').Append(bigIntegerValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            }
+            else if (value is ulong ulongValue)
+                queryStringBuilder.Append('\'').Append(ulongValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            else if (value is uint uintValue)
+                queryStringBuilder.Append('\'').Append(uintValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            else if (value is ushort ushortValue)
+                queryStringBuilder.Append('\'').Append(ushortValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            else if (value is byte byteValue)
+                queryStringBuilder.Append('\'').Append(byteValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            else if (!_isUnsigned)
+            {
+                if (value is long longValue)
+                    queryStringBuilder.Append('\'').Append(longValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+                else if (value is int intValue)
+                    queryStringBuilder.Append('\'').Append(intValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+                else if (value is short shortValue)
+                    queryStringBuilder.Append('\'').Append(shortValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+                else if (value is sbyte sbyteValue)
+                    queryStringBuilder.Append('\'').Append(sbyteValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            } else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public sealed override Type GetFieldType()

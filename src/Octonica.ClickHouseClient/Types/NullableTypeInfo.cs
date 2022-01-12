@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -71,6 +72,17 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (UnderlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            
+            if (value == null || value is DBNull)
+                queryStringBuilder.Append("null");
+            else
+                UnderlyingType.FormatValue(queryStringBuilder, value);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

@@ -17,6 +17,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -80,6 +82,50 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            uint seconds;
+            if (value is DateTime dateTimeValue)
+            {
+                if (dateTimeValue == default)
+                {
+                    seconds = 0;
+                }
+                else
+                {
+                    var doubleSeconds = (dateTimeValue - DateTime.UnixEpoch).TotalSeconds - GetTimeZone().GetUtcOffset(dateTimeValue).TotalSeconds;
+                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
+                        throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
+                    
+                    seconds = (uint) doubleSeconds;
+                }
+            }
+            else if (value is DateTimeOffset dateTimeOffsetValue)
+            {
+                if (dateTimeOffsetValue == default)
+                {
+                    seconds = 0;
+                }
+                else
+                {
+                    var offset = GetTimeZone().GetUtcOffset(dateTimeOffsetValue);
+                    var valueWithOffset = dateTimeOffsetValue.ToOffset(offset);
+                    var doubleSeconds = (valueWithOffset - DateTimeOffset.UnixEpoch).TotalSeconds;
+                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
+                        throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
+                    
+                    seconds = (uint)doubleSeconds;
+                }
+            }
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            queryStringBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

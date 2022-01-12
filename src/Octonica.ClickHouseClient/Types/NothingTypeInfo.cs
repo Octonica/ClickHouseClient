@@ -18,6 +18,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -44,6 +45,11 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             return new NothingColumnWriter(columnName, ComplexTypeName, rows.Count);
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"The ClickHouse type \"{ComplexTypeName}\" does not have any values");
         }
 
         IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -62,6 +63,9 @@ namespace Octonica.ClickHouseClient.Types
 
         /// <inheritdoc/>
         public abstract ClickHouseDbType GetDbType();
+
+        /// <inheritdoc/>
+        public abstract void FormatValue(StringBuilder queryStringBuilder, object? value);
 
         /// <summary>
         /// Gets the generic arguments at the specified position.

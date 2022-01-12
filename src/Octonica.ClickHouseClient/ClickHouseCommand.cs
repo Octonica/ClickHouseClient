@@ -734,14 +734,7 @@ namespace Octonica.ClickHouseClient
 
             try
             {
-                var parametersTable = $"_{Guid.NewGuid():N}";
-                commandText = PrepareCommandText(parametersTable, out var parameters);
-
-                if (parameters != null)
-                {
-                    tableWriters = new List<IClickHouseTableWriter>(TableProviders.Count + 1);
-                    tableWriters.Add(CreateParameterTableWriter(session.TypeInfoProvider, parametersTable));
-                }
+                commandText = PrepareCommandText(session.TypeInfoProvider);
 
                 if (TableProviders.Count > 0)
                 {
@@ -819,11 +812,6 @@ namespace Octonica.ClickHouseClient
             return _commandTimeout ?? connection?.CommandTimeSpan ?? TimeSpan.FromSeconds(ClickHouseConnectionStringBuilder.DefaultCommandTimeout);
         }
 
-        private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
-        {
-            return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
-        }
-
         private static async ValueTask<IClickHouseTableWriter> CreateTableWriter(IClickHouseTableProvider tableProvider, IClickHouseTypeInfoProvider typeInfoProvider, bool async, CancellationToken cancellationToken)
         {
             var factories = new List<IClickHouseColumnWriterFactory>(tableProvider.ColumnCount);
@@ -843,7 +831,7 @@ namespace Octonica.ClickHouseClient
             return new ClickHouseTableWriter(tableProvider.TableName, rowCount, factories.Select(f => f.Create(0, rowCount)));
         }
 
-        private string PrepareCommandText(string parametersTable, out HashSet<string>? parameters)
+        private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider)
         {
             var query = CommandText;
             if (string.IsNullOrEmpty(query))
@@ -852,11 +840,9 @@ namespace Octonica.ClickHouseClient
             var parameterPositions = GetParameterPositions(query);
             if (parameterPositions.Count == 0)
             {
-                parameters = null;
                 return query;
             }
 
-            parameters = new HashSet<string>(parameterPositions.Count);
             var queryStringBuilder = new StringBuilder(query.Length);
             for (int i = 0; i < parameterPositions.Count; i++)
             {
@@ -869,16 +855,8 @@ namespace Octonica.ClickHouseClient
                 if (!Parameters.TryGetValue(parameterName, out var parameter))
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
 
-                if (!parameters.Contains(parameter.ParameterName))
-                    parameters.Add(parameter.ParameterName);
-
-                if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append("(CAST(");
-
-                queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
-
-                if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
+                var specifiedType = typeSeparatorIdx >= 0 ? query.AsMemory().Slice(offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2) : ReadOnlyMemory<char>.Empty;
+                parameter.OutputParameterValue(queryStringBuilder, specifiedType, typeInfoProvider);
             }
 
             var lastPartStart = parameterPositions[^1].offset + parameterPositions[^1].length;

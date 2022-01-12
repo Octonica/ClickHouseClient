@@ -21,6 +21,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -193,6 +194,81 @@ namespace Octonica.ClickHouseClient.Types
                 return sizeof(ulong);
 
             return 0;
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (_elementTypeInfo == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{ComplexTypeName}\" does not allow null values");
+
+            if (value is string || !(value is IEnumerable enumerable))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            if (value is Array array && array.Rank > 1)
+            {
+                FormatMultiDimensionalArray(array, _elementTypeInfo, 0, array.GetEnumerator());
+                
+                void FormatMultiDimensionalArray(Array array, IClickHouseColumnTypeInfo dimensionElementType, int dimension, IEnumerator enumerator)
+                {
+                    var rankLength = array.GetLength(dimension);
+                    queryStringBuilder.Append('[');
+                    if (dimension == array.Rank - 1)
+                    {
+                        for (var i = 0; i < rankLength; ++i)
+                        {
+                            if (i > 0)
+                                queryStringBuilder.Append(',');
+                            
+                            if (!enumerator.MoveNext())
+                            {
+                                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: unexpected iterator out of bound.");
+                            }
+                            
+                            dimensionElementType.FormatValue(queryStringBuilder, enumerator.Current);
+                        }
+                    }
+                    else
+                    {
+                        var nextDimension = dimension + 1;
+                        IClickHouseColumnTypeInfo nextDimensionElementType;
+                        var tmp = dimensionElementType;
+                        while (tmp is NullableTypeInfo nti)
+                            tmp = nti.UnderlyingType;
+                        if (tmp == null)
+                            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+                        if (tmp is ArrayTypeInfo ati)
+                            nextDimensionElementType = ati._elementTypeInfo ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+                        else
+                            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The multidimensional array value can not be converted type \"{ComplexTypeName}\": dimension number mismatch.");
+                        
+                        for (var i = 0; i < rankLength; ++i)
+                        {
+                            if (i > 0)
+                                queryStringBuilder.Append(',');
+                            
+                            FormatMultiDimensionalArray(array, nextDimensionElementType, nextDimension, enumerator);
+                        }
+                    }
+                    queryStringBuilder.Append(']');
+                }
+            }
+            else
+            {
+                queryStringBuilder.Append('[');
+                var needPrecedingComma = false;
+                foreach (var element in enumerable)
+                {
+                    if (needPrecedingComma)
+                        queryStringBuilder.Append(',');
+                    else
+                        needPrecedingComma = true;
+                    _elementTypeInfo.FormatValue(queryStringBuilder, element);
+                }
+                queryStringBuilder.Append(']');
+            }
         }
 
         private abstract class ArrayColumnReaderBase<TElementColumnReader> : IClickHouseColumnReaderBase

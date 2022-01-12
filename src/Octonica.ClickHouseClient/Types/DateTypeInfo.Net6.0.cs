@@ -22,6 +22,8 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -40,6 +42,26 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new DateWriter(columnName, ComplexTypeName, dateOnlyRows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            DateOnly dateOnlyValue = value switch
+            {
+                DateOnly theValue => theValue,
+                DateTime theValue => DateOnly.FromDateTime(theValue),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+            
+            var days = dateOnlyValue == default ? 0 : dateOnlyValue.DayNumber - UnixEpoch.DayNumber;
+            
+            if (days < 0 || days > ushort.MaxValue)
+                throw new OverflowException("The value must be in range [1970-01-01, 2149-06-06].");
+
+            queryStringBuilder.Append(days.ToString(CultureInfo.InvariantCulture));
         }
 
         public override Type GetFieldType()
