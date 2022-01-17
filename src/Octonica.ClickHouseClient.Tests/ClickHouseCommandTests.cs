@@ -465,5 +465,118 @@ namespace Octonica.ClickHouseClient.Tests
 
             Assert.Equal(addr.Length, expectedId);
         }
+
+        [Fact]
+        public async Task InsertWithParameters()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS insert_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE insert_with_parameters_test(str_val String) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "INSERT INTO insert_with_parameters_test(str_val) VALUES (@str_param)";
+                var p = cmd.CreateParameter();
+                p.ParameterName = "str_param";
+                var insertedValue = "IZyy8d\\'\"\n\t\v\b\rLsVeTtdfk6MjJl";
+                p.Value = insertedValue;
+                cmd.Parameters.Add(p);
+                await cmd.ExecuteNonQueryAsync();
+                cmd.Parameters.Clear();
+
+                cmd.CommandText = "SELECT str_val FROM insert_with_parameters_test";
+                var selectedValue = (string?)await cmd.ExecuteScalarAsync();
+                Assert.Equal(insertedValue, selectedValue);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS insert_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task DeleteWithParameters()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS delete_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE delete_with_parameters_test(str_val String) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "alter table delete_with_parameters_test delete where str_val = @str_param";
+                var p = cmd.CreateParameter();
+                p.ParameterName = "str_param";
+                var insertedValue = "IZyy8d\\'\"\n\t\v\b\rLsVeTtdfk6MjJl";
+                p.Value = insertedValue;
+                cmd.Parameters.Add(p);
+                await cmd.ExecuteNonQueryAsync();
+                // Assert: Not Throws
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS delete_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task UpdateWithParameters()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS update_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("CREATE TABLE update_with_parameters_test(str_val String) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd.CommandText = "alter table update_with_parameters_test update str_val = @str_param where str_val = @str_param";
+                var p = cmd.CreateParameter();
+                p.ParameterName = "str_param";
+                var insertedValue = "IZyy8d\\'\"\n\t\v\b\rLsVeTtdfk6MjJl";
+                p.Value = insertedValue;
+                cmd.Parameters.Add(p);
+                await cmd.ExecuteNonQueryAsync();
+                // Assert: Not Throws
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand("DROP TABLE IF EXISTS update_with_parameters_test");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task SelectWithOffsetLimitParameters()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            await using var cmd = connection.CreateCommand("select cast(42 as UInt64) limit @Limit offset @Offset");
+            var p_limit = cmd.CreateParameter();
+            var p_offset = cmd.CreateParameter();
+            p_limit.ParameterName = "Limit";
+            p_limit.Value = 1;
+            p_offset.ParameterName = "Offset";
+            p_offset.Value = 0;
+            cmd.Parameters.Add(p_limit);
+            cmd.Parameters.Add(p_offset);
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.IsType<ulong>(result);
+            Assert.Equal(42UL, result);
+        }
     }
 }
