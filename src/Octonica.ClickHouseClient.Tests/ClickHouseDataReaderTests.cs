@@ -421,5 +421,49 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(expectedCount, count);
             Assert.True(selectedRows >= expectedCount);
         }
+
+        [Fact]
+        public async Task DateTimeKindForDate()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "select cast('2022-01-01' as Date)";
+
+            await using var reader = await cmd.ExecuteReaderAsync(CancellationToken.None);
+            Assert.True(await reader.ReadAsync(CancellationToken.None));
+            var value = reader.GetDateTime(0);
+            Assert.False(await reader.ReadAsync());
+
+            Assert.Equal(2022, value.Year);
+            Assert.Equal(1, value.Month);
+            Assert.Equal(1, value.Day);
+            Assert.Equal(0, value.Hour);
+            Assert.Equal(0, value.Minute);
+            Assert.Equal(0, value.Second);
+            Assert.Equal(DateTimeKind.Unspecified, value.Kind);
+        }
+
+        [Fact]
+        public async Task DateTimeKindForDate32()
+        {
+            await using var cn = await OpenConnectionAsync();
+
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "select cast('2022-01-01' as Date32)";
+
+            await using var reader = await cmd.ExecuteReaderAsync(CancellationToken.None);
+            Assert.True(await reader.ReadAsync(CancellationToken.None));
+            var value = reader.GetDateTime(0);
+            Assert.False(await reader.ReadAsync());
+
+            Assert.Equal(2022, value.Year);
+            Assert.Equal(1, value.Month);
+            Assert.Equal(1, value.Day);
+            Assert.Equal(0, value.Hour);
+            Assert.Equal(0, value.Minute);
+            Assert.Equal(0, value.Second);
+            Assert.Equal(DateTimeKind.Unspecified, value.Kind);
+        }
     }
 }

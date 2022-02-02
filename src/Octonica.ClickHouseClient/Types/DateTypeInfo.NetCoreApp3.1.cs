@@ -41,6 +41,8 @@ namespace Octonica.ClickHouseClient.Types
 
         partial class DateReader : StructureReaderBase<DateTime>
         {
+            static readonly DateTime UnixEpochUnspecified = new DateTime(DateTime.UnixEpoch.Ticks, DateTimeKind.Unspecified);
+
             public DateReader(int rowCount)
                 : base(sizeof(ushort), rowCount)
             {
@@ -52,7 +54,7 @@ namespace Octonica.ClickHouseClient.Types
                 if (value == 0)
                     return default;
 
-                return DateTime.UnixEpoch.AddDays(value);
+                return UnixEpochUnspecified.AddDays(value);
             }
         }
 
