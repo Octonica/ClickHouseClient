@@ -23,13 +23,15 @@ namespace Octonica.ClickHouseClient.Types
 {
     partial class Date32TableColumn : IClickHouseTableColumn<DateTime>
     {
+        static readonly DateTime UnixEpochUnspecified = new DateTime(DateTime.UnixEpoch.Ticks, DateTimeKind.Unspecified);
+
         public DateTime GetValue(int index)
         {
             var value = _buffer.Span[index];
             if (value == DefaultValue)
                 return default;
 
-            return DateTime.UnixEpoch.AddDays(value);
+            return UnixEpochUnspecified.AddDays(value);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
