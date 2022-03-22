@@ -18,6 +18,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -56,6 +58,25 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             
             return new UInt32Writer(columnName, ComplexTypeName, uintRows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            uint outputValue;
+            
+            if (value is uint uintValue)
+                outputValue = uintValue;
+            else if (value is ushort ushortValue)
+                outputValue = ushortValue;
+            else if (value is byte byteValue)
+                outputValue = byteValue;
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            queryStringBuilder.Append(outputValue.ToString(CultureInfo.InvariantCulture));
         }
 
         public override Type GetFieldType()

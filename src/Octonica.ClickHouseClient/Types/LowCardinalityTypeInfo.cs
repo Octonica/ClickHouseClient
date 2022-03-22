@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -83,6 +84,17 @@ namespace Octonica.ClickHouseClient.Types
 
             // Writing values as is. Let the database do de-duplication
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (_baseType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            _baseType.FormatValue(queryStringBuilder, value);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

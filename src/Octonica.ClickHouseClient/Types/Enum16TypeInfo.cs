@@ -17,6 +17,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -69,6 +71,32 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{TypeName}\".");
 
             return new Int16TypeInfo.Int16Writer(columnName, ComplexTypeName, shortRows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            // TODO: ClickHouseDbType.Enum is not supported in DefaultTypeInfoProvider.GetTypeInfo
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            if (_enumMap == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            short outputValue = value switch
+            {
+                string theValue => _enumMap.TryGetValue(theValue, out var tmp) ? tmp :
+                    throw new InvalidCastException($"The value \"{theValue}\" can't be converted to {ComplexTypeName}."),
+                short theValue => theValue,
+                byte theValue => theValue,
+                sbyte theValue => theValue,
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+
+            queryStringBuilder.Append(outputValue.ToString(CultureInfo.InvariantCulture));
         }
 
         protected override bool TryParse(ReadOnlySpan<char> text, out short value)

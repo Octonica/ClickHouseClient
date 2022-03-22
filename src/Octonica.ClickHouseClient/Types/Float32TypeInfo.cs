@@ -18,6 +18,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -46,6 +48,21 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new Float32Writer(columnName, ComplexTypeName, (IReadOnlyList<float>)rows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+
+            float outputValue = value switch
+            {
+                float theValue => theValue,
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+
+            queryStringBuilder.Append(outputValue.ToString(CultureInfo.InvariantCulture)); // .Append('\'')
         }
 
         public override Type GetFieldType()

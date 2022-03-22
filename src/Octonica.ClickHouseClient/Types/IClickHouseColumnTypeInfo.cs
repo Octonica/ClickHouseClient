@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
@@ -57,5 +58,12 @@ namespace Octonica.ClickHouseClient.Types
         /// <param name="typeInfoProvider">The type provider that can be used to get other types.</param>
         /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> with the same <see cref="IClickHouseTypeInfo.TypeName"/> as this type and with the specified list of type arguments</returns>
         IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider);
+
+        /// <summary>
+        /// Appends textual representation of <paramref name="value"/> as ClickHouse SQL literal into <paramref name="queryStringBuilder"/>.
+        /// </summary>
+        /// <param name="queryStringBuilder">Destination string builder</param>
+        /// <param name="value">Value (or null) to be formatted. Value is of compatible type but not necessarily of exact type.</param>
+        void FormatValue(StringBuilder queryStringBuilder, object? value);
     }
 }

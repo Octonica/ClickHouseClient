@@ -21,6 +21,8 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -37,6 +39,24 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new Date32Writer(columnName, ComplexTypeName, (IReadOnlyList<DateTime>)rows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            int days;
+
+            if (value is DateTime dateTimeValue)
+                days = dateTimeValue == default ? MinValue : (int)(dateTimeValue - DateTime.UnixEpoch).TotalDays;
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            
+            if (days < MinValue || days > MaxValue)
+                throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
+
+            queryStringBuilder.Append(days.ToString(CultureInfo.InvariantCulture));
         }
 
         partial class Date32Reader : StructureReaderBase<int, DateTime>

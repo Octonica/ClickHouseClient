@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -61,6 +62,23 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new IpV4Writer(columnName, TypeName, preparedRows);
+        }
+
+        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            uint outputValue = value switch
+            {
+                IPAddress theValue => IpAddressToUInt32(theValue),
+                string theValue => IpAddressStringToUInt32(theValue),
+                uint theValue => theValue,
+                int theValue => unchecked((uint) theValue),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+
+            queryStringBuilder.Append(outputValue);
         }
 
         public override Type GetFieldType()

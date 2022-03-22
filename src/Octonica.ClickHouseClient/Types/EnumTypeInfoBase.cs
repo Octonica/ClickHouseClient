@@ -28,7 +28,7 @@ namespace Octonica.ClickHouseClient.Types
     internal abstract class EnumTypeInfoBase<TValue> : IClickHouseColumnTypeInfo
         where TValue : struct
     {
-        private readonly Dictionary<string, TValue>? _enumMap;
+        protected readonly Dictionary<string, TValue>? _enumMap;
         private readonly Dictionary<TValue, string>? _reversedEnumMap;
         private readonly List<string>? _mapOrder;
 
@@ -123,6 +123,8 @@ namespace Octonica.ClickHouseClient.Types
 
             return CreateInternalColumnWriter(columnName, rows);
         }
+
+        public abstract void FormatValue(StringBuilder queryStringBuilder, object? value);
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {

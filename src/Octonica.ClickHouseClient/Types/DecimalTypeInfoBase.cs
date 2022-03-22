@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -135,6 +136,73 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
+        }
+
+        const string HexDigits = "0123456789ABCDEF";
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (_precision == null && _scale == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
+            
+            if (_scale == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+
+            if (_precision == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            decimal outputValue = value switch
+            {
+                decimal theValue => theValue,
+                long theValue => theValue,
+                ulong theValue => theValue,
+                int theValue => theValue,
+                uint theValue => theValue,
+                short theValue => theValue,
+                ushort theValue => theValue,
+                sbyte theValue => theValue,
+                byte theValue => theValue,
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+            };
+
+            var writer = new DecimalWriter("Value", ComplexTypeName, _precision.Value, _scale.Value, new[] { outputValue });
+            var elementSize = GetElementSize(_precision.Value);
+            Span<byte> buffer = stackalloc byte[elementSize];
+            var writeSize = writer.WriteNext(buffer);
+            if (writeSize.Bytes != elementSize)
+                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. DecimalWrite did not write expected amount of bytes.");
+
+            // Not all decimal values can be parsed:
+            // > Real value ranges that can be stored in memory are a bit larger than specified above, which are checked only on conversion from a string.
+            // But reinterpret_cast lets obtain any Decimal value
+            queryStringBuilder.Append("reinterpret('");
+            foreach (var byteValue in buffer)
+            {
+                queryStringBuilder.Append("\\x");
+                queryStringBuilder.Append(HexDigits[byteValue >> 4]);
+                queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
+            }
+            queryStringBuilder.Append("', 'Decimal");
+            switch (elementSize)
+            {
+                case 4:
+                    queryStringBuilder.Append("32");
+                    break;
+                case 8:
+                    queryStringBuilder.Append("64");
+                    break;
+                case 16:
+                    queryStringBuilder.Append("128");
+                    break;
+                default:
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Invalid element size.");
+            }
+            queryStringBuilder.Append("(");
+            queryStringBuilder.Append(_scale.Value.ToString(CultureInfo.InvariantCulture));
+            queryStringBuilder.Append(")')");
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

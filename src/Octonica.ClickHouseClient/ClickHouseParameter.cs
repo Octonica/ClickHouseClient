@@ -417,10 +417,36 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();            
+            var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();
             var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, adapter.Settings, typeInfo);
             var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
             return column;
+        }
+
+        internal void OutputParameterValue(StringBuilder queryStringBuilder, ReadOnlyMemory<char> specifiedType, IClickHouseTypeInfoProvider typeInfoProvider) {
+            if (!specifiedType.IsEmpty)
+                queryStringBuilder.Append("CAST(");
+            queryStringBuilder.Append("CAST(");
+            var typeInfo = typeInfoProvider.GetTypeInfo(new ParameterColumnTypeDescriptorAdapter(this));
+            
+            typeInfo.FormatValue(queryStringBuilder, Value);
+            
+            queryStringBuilder.Append(" as ");
+            queryStringBuilder.Append(typeInfo.ComplexTypeName);
+            
+            queryStringBuilder.Append(")");
+            if (!specifiedType.IsEmpty) {
+                queryStringBuilder.Append(" as ");
+                var shouldAppendNullable = Value == null && !specifiedType.Span.StartsWith("Nullable(");
+                if (shouldAppendNullable) {
+                    queryStringBuilder.Append("Nullable(");
+                }
+                queryStringBuilder.Append(specifiedType.Span);
+                if (shouldAppendNullable) {
+                    queryStringBuilder.Append(")");
+                }
+                queryStringBuilder.Append(")");
+            }
         }
 
         private IntermediateClickHouseTypeInfo GetTypeFromValue()

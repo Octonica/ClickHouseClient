@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -187,6 +188,68 @@ namespace Octonica.ClickHouseClient.Types
                 return new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, (IReadOnlyList<ulong>)rows);
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+        }
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            var precision = _precision ?? DefaultPrecision;
+            var _ticksScale = DateTimeTicksScales[precision];
+            var _ticksMaxValue = DateTimeTicksMaxValues[precision];
+
+            ulong ticks;
+            if (value is ulong tickValue)
+            {
+                ticks = tickValue;
+            }
+            else if (value is DateTime dateTimeValue)
+            {
+                if (dateTimeValue == default)
+                {
+                    ticks = 0;
+                }
+                else
+                {
+                    var dateTimeTicks = (dateTimeValue - DateTime.UnixEpoch - GetTimeZone().GetUtcOffset(dateTimeValue)).Ticks;
+                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
+                        throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch:O}, {DateTime.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
+
+                    if (_ticksScale < 0)
+                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
+                    else
+                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
+                }
+            }
+            else if (value is DateTimeOffset dateTimeOffsetValue)
+            {
+                if (value == default)
+                {
+                    ticks = 0;
+                }
+                else
+                {
+                    var offset = GetTimeZone().GetUtcOffset(dateTimeOffsetValue);
+                    var valueWithOffset = dateTimeOffsetValue.ToOffset(offset);
+                    var dateTimeTicks = (valueWithOffset - DateTimeOffset.UnixEpoch).Ticks;
+                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
+                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch:O}, {DateTimeOffset.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
+
+                    if (_ticksScale < 0)
+                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
+                    else
+                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
+                }
+            }
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            queryStringBuilder.Append("reinterpret(cast(");
+            queryStringBuilder.Append(ticks.ToString(CultureInfo.InvariantCulture));
+            queryStringBuilder.Append(",'Int64'),'");
+            queryStringBuilder.Append(ComplexTypeName.Replace("'", "''"));
+            queryStringBuilder.Append("')");
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

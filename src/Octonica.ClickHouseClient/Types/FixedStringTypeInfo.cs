@@ -86,6 +86,76 @@ namespace Octonica.ClickHouseClient.Types
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
+        
+        const string HexDigits = "0123456789ABCDEF";
+
+        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            if (_length == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
+            
+            if (value == null || value is DBNull)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            if (value is string stringValue)
+                FormatCharString(stringValue);
+            // else if (value is char[] charArrValue)
+            //     FormatCharString(charArrValue);
+            else if (value is ReadOnlyMemory<char> charRoMemValue)
+                FormatCharString(charRoMemValue.Span);
+            else if (value is Memory<char> charMemValue)
+                FormatCharString(charMemValue.Span);
+            else if (value is byte[] byteArrValue)
+                FormatByteString(byteArrValue);
+            else if (value is ReadOnlyMemory<byte> byteRoMemValue)
+                FormatByteString(byteRoMemValue.Span);
+            else if (value is Memory<byte> byteMemValue)
+                FormatByteString(byteMemValue.Span);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            void FormatCharString(ReadOnlySpan<char> data)
+            {
+                var length = _length.Value;
+                var encoding = Encoding.UTF8;
+                var bytesCount = encoding.GetByteCount(data);
+                if (bytesCount > length)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the string ({bytesCount}) is greater than the maximum length ({length}).");
+                    
+                queryStringBuilder.Append('\'');
+                foreach (var charValue in data)
+                {
+                    switch (charValue)
+                    {
+                        case '\\':
+                            queryStringBuilder.Append("\\\\");
+                            break;
+                        case '\'':
+                            queryStringBuilder.Append("''");
+                            break;
+                        default:
+                            queryStringBuilder.Append(charValue);
+                            break;
+                    }
+                }
+                queryStringBuilder.Append('\'');
+            }
+            
+            void FormatByteString(ReadOnlySpan<byte> data)
+            {
+                var length = _length.Value;
+                if (data.Length > length)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the array ({data.Length}) is greater than the maximum length ({length}).");
+                queryStringBuilder.Append('\'');
+                foreach (var byteValue in data)
+                {
+                    queryStringBuilder.Append("\\x");
+                    queryStringBuilder.Append(HexDigits[byteValue >> 4]);
+                    queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
+                }
+                queryStringBuilder.Append('\'');
+            }
+        }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
