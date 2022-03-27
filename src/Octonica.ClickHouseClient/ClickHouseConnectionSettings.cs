@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,6 +98,11 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public ReadOnlyMemory<byte> ServerCertificateHash { get; }
 
+        /// <summary>
+        /// Gets the default mode of passing parameters to the query for the connection.
+        /// </summary>
+        public ClickHouseParameterMode ParametersMode { get; }
+
         internal readonly int CompressionBlockSize = 1024 * 8; // Maybe it should be configurable
 
         internal ClickHouseConnectionSettings(ClickHouseConnectionStringBuilder builder)
@@ -122,6 +127,7 @@ namespace Octonica.ClickHouseClient
             TlsMode = builder.TlsMode;
             RootCertificate = builder.RootCertificate;
             ServerCertificateHash = ParseHashString(builder.ServerCertificateHash);
+            ParametersMode = builder.ParametersMode;
         }
 
         private static byte[]? ParseHashString(string? hashString)

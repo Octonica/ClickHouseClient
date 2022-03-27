@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void Clone()
         {
-            var p1 = new ClickHouseParameter("p1") { Value = new[] { 42 }, ClickHouseDbType = ClickHouseDbType.VarNumeric, Precision = 19, Scale = 7 };
+            var p1 = new ClickHouseParameter("p1") { Value = new[] { 42 }, ClickHouseDbType = ClickHouseDbType.VarNumeric, Precision = 19, Scale = 7, ParameterMode = ClickHouseParameterMode.Interpolate };
 
             var p2 = p1.Clone();
 
@@ -61,6 +61,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(ClickHouseDbType.VarNumeric, p2.ClickHouseDbType);
             Assert.Equal(19, p2.Precision);
             Assert.Equal(7, p2.Scale);
+            Assert.Equal(ClickHouseParameterMode.Interpolate, p2.ParameterMode);
 
             p2.TimeZone = TimeZoneInfo.Local;
             p2.Size = 35;

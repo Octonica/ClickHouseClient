@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -131,6 +131,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.True(settings.ServerCertificateHash.IsEmpty);
             ++checkedPropertiesCount;
 
+            Assert.Equal(ClickHouseConnectionStringBuilder.DefaultParametersMode, settings.ParametersMode);
+            ++checkedPropertiesCount;
+
             Assert.Equal(checkedPropertiesCount, settings.GetType().GetProperties().Length);
         }
 
@@ -151,7 +154,8 @@ namespace Octonica.ClickHouseClient.Tests
                 "CommandTimeout=123;" +
                 "TLSMode=rEqUIrE;" +
                 "RootCertificate=/usr/local/share/ca-certificates/Yandex/YandexInternalRootCA.pem;" +
-                "ServerCertificateHash=1234-5678 9abc-def0");
+                "ServerCertificateHash=1234-5678 9abc-def0;" +
+                "ParametersMode=Interpolate");
 
             var settings = builder.BuildSettings();
 
@@ -200,6 +204,9 @@ namespace Octonica.ClickHouseClient.Tests
             ++checkedPropertiesCount;
 
             Assert.Equal(new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0 }, settings.ServerCertificateHash.ToArray());
+            ++checkedPropertiesCount;
+
+            Assert.Equal(ClickHouseParameterMode.Interpolate, settings.ParametersMode);
             ++checkedPropertiesCount;
 
             Assert.Equal(checkedPropertiesCount, settings.GetType().GetProperties().Length);

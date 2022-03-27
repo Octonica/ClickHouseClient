@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,6 +152,12 @@ namespace Octonica.ClickHouseClient
         /// <returns><see langword="true"/>, if the data reader should skip profile events. <see langword="false"/>,
         /// if the data reader should return profile events as a recordset. The default value is <see langword="true"/>.</returns>
         public bool IgnoreProfileEvents { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the mode of passing parameters to the query. The value of this property overrides <see cref="ClickHouseConnection.ParametersMode"/>.
+        /// </summary>
+        /// <returns>The mode of passing parameters to the query. The default value is <see cref="ClickHouseParameterMode.Inherit"/>.</returns>
+        public ClickHouseParameterMode ParametersMode { get; set; } = ClickHouseParameterMode.Inherit;
 
         /// <summary>
         /// Creates a new instance of <see cref="ClickHouseCommand"/>.
@@ -818,6 +824,15 @@ namespace Octonica.ClickHouseClient
             return _commandTimeout ?? connection?.CommandTimeSpan ?? TimeSpan.FromSeconds(ClickHouseConnectionStringBuilder.DefaultCommandTimeout);
         }
 
+        private ClickHouseParameterMode GetParametersMode(ClickHouseConnection? connection)
+        {
+            var mode = ParametersMode;
+            if (mode != ClickHouseParameterMode.Inherit)
+                return mode;
+
+            return connection?.ParametersMode ?? ClickHouseParameterMode.Default;
+        }
+
         private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
         {
             return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
@@ -856,6 +871,7 @@ namespace Octonica.ClickHouseClient
             }
 
             parameters = null;
+            var inheritParameterMode = GetParametersMode(Connection);
             var queryStringBuilder = new StringBuilder(query.Length);
             for (int i = 0; i < parameterPositions.Count; i++)
             {
@@ -868,21 +884,34 @@ namespace Octonica.ClickHouseClient
                 if (!Parameters.TryGetValue(parameterName, out var parameter))
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
 
-                var specifiedType = typeSeparatorIdx >= 0 ? query.AsMemory().Slice(offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2) : ReadOnlyMemory<char>.Empty;
-                parameter.OutputParameterValue(queryStringBuilder, specifiedType, typeInfoProvider);
+                var parameterMode = parameter.GetParameterMode(inheritParameterMode);
+                switch (parameterMode)
+                {
+                    case ClickHouseParameterMode.Interpolate:
+                        var specifiedType = typeSeparatorIdx >= 0 ? query.AsMemory().Slice(offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2) : ReadOnlyMemory<char>.Empty;
+                        parameter.OutputParameterValue(queryStringBuilder, specifiedType, typeInfoProvider);
+                        break;
 
-                /* TODO: add parameter inline mode
-                if (!parameters.Contains(parameter.ParameterName))
-                    parameters.Add(parameter.ParameterName);
+                    case ClickHouseParameterMode.Default:
+                    case ClickHouseParameterMode.Binary:
+                        if (parameters == null)
+                            parameters = new HashSet<string>();
 
-                if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append("(CAST(");
+                        if (!parameters.Contains(parameter.ParameterName))
+                            parameters.Add(parameter.ParameterName);
 
-                queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
+                        if (typeSeparatorIdx >= 0)
+                            queryStringBuilder.Append("(CAST(");
 
-                if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
-                */
+                        queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
+
+                        if (typeSeparatorIdx >= 0)
+                            queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
+                        break;
+
+                    default:
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Unexpected parameter mode: {parameterMode}.");
+                }
             }
 
             var lastPartStart = parameterPositions[^1].offset + parameterPositions[^1].length;

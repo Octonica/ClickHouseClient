@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -284,6 +284,12 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Gets or sets the mode of passing this parameter to the query. The value of this property overrides <see cref="ClickHouseCommand.ParametersMode"/>.
+        /// </summary>
+        /// <returns>The mode of passing this parameter to the query. The default value is <see cref="ClickHouseParameterMode.Inherit"/>.</returns>
+        public ClickHouseParameterMode ParameterMode { get; set; } = ClickHouseParameterMode.Inherit;
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseParameter"/> with the default name.
         /// </summary>
         public ClickHouseParameter()
@@ -358,6 +364,7 @@ namespace Octonica.ClickHouseClient
             parameter.SourceVersion = SourceVersion;
 
             parameter._valueTypeInfo = null;
+            parameter.ParameterMode = ParameterMode;
         }
 
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
@@ -518,6 +525,15 @@ namespace Octonica.ClickHouseClient
 
             id = TrimParameterName(parameterName);
             return ParameterNameRegex.IsMatch(id);
+        }
+
+        internal ClickHouseParameterMode GetParameterMode(ClickHouseParameterMode inheritParameterMode)
+        {
+            var mode = ParameterMode;
+            if (mode == ClickHouseParameterMode.Inherit)
+                return inheritParameterMode;
+
+            return mode;
         }
 
         internal static string TrimParameterName(string parameterName)

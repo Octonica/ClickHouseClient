@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,14 +25,14 @@ namespace Octonica.ClickHouseClient.Tests
     {
         private ClickHouseConnectionSettings? _settings;
 
-        public ClickHouseConnectionSettings GetDefaultConnectionSettings()
+        public ClickHouseConnectionSettings GetDefaultConnectionSettings(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
             if (_settings != null)
             {
                 return _settings;
             }
 
-            _settings = ConnectionSettingsHelper.GetConnectionSettings();
+            _settings = ConnectionSettingsHelper.GetConnectionSettings(updateSettings);
             return _settings;
         }
 
@@ -44,14 +44,14 @@ namespace Octonica.ClickHouseClient.Tests
             return connection;
         }
 
-        public async Task<ClickHouseConnection> OpenConnectionAsync()
+        public async Task<ClickHouseConnection> OpenConnectionAsync(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
-            return await OpenConnectionAsync(GetDefaultConnectionSettings(), CancellationToken.None);
+            return await OpenConnectionAsync(GetDefaultConnectionSettings(updateSettings), CancellationToken.None);
         }
 
-        public ClickHouseConnection OpenConnection()
+        public ClickHouseConnection OpenConnection(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
-            ClickHouseConnection connection = new ClickHouseConnection(GetDefaultConnectionSettings());
+            ClickHouseConnection connection = new ClickHouseConnection(GetDefaultConnectionSettings(updateSettings));
             connection.Open();
 
             return connection;

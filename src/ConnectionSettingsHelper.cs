@@ -1,5 +1,5 @@
 #region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,17 +22,17 @@ namespace Octonica.ClickHouseClient
 {
     internal static class ConnectionSettingsHelper
     {
-        public static ClickHouseConnectionSettings GetConnectionSettings()
+        public static ClickHouseConnectionSettings GetConnectionSettings(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
-            return GetConnectionSettingsInternal().settings;
+            return GetConnectionSettingsInternal(updateSettings).settings;
         }
 
-        public static string GetConnectionString()
+        public static string GetConnectionString(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
-            return GetConnectionSettingsInternal().connectionString;
+            return GetConnectionSettingsInternal(updateSettings).connectionString;
         }
 
-        private static (ClickHouseConnectionSettings settings, string connectionString) GetConnectionSettingsInternal()
+        private static (ClickHouseConnectionSettings settings, string connectionString) GetConnectionSettingsInternal(Action<ClickHouseConnectionStringBuilder>? updateSettings)
         {
             const string envVariableName = "CLICKHOUSE_TEST_CONNECTION";
             const string configFileName = "clickHouse.dbconfig";
@@ -44,6 +44,7 @@ namespace Octonica.ClickHouseClient
                 try
                 {
                     var builder = new ClickHouseConnectionStringBuilder(configTextFromEnvVar);
+                    updateSettings?.Invoke(builder);
                     return (builder.BuildSettings(), configTextFromEnvVar);
                 }
                 catch (Exception ex)
@@ -65,6 +66,7 @@ namespace Octonica.ClickHouseClient
             try
             {
                 var builder = new ClickHouseConnectionStringBuilder(configText);
+                updateSettings?.Invoke(builder);
                 return (builder.BuildSettings(), configText);
             }
             catch (Exception ex)

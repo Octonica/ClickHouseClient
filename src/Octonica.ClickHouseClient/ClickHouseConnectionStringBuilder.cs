@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,7 +73,12 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// The default value for the TLS mode is <see cref="ClickHouseTlsMode.Disable"/>.
         /// </summary>
-        public static readonly ClickHouseTlsMode DefaultTlsMode = ClickHouseTlsMode.Disable;
+        public const ClickHouseTlsMode DefaultTlsMode = ClickHouseTlsMode.Disable;
+
+        /// <summary>
+        /// The default value for the mode of passing parameters to the query is <see cref="ClickHouseParameterMode.Default"/>.
+        /// </summary>
+        public const ClickHouseParameterMode DefaultParametersMode = ClickHouseParameterMode.Default;
 
         /// <summary>
         /// Gets or sets the name or the IP address of the host.
@@ -241,6 +246,16 @@ namespace Octonica.ClickHouseClient
             set => this[nameof(ServerCertificateHash)] = value;
         }
 
+        /// <summary>
+        /// Gets the default mode of passing parameters to the query for the connection.
+        /// </summary>
+        /// <returns>The default mode of passing parameters to the query for the connection. The default value is <see cref="DefaultParametersMode"/>.</returns>
+        public ClickHouseParameterMode ParametersMode
+        {
+            get => GetEnumOrDefault(nameof(ParametersMode), DefaultParametersMode);
+            set => this[nameof(ParametersMode)] = value == DefaultParametersMode ? null : value.ToString("G");
+        }
+
         static ClickHouseConnectionStringBuilder()
         {
             var asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
@@ -262,7 +277,8 @@ namespace Octonica.ClickHouseClient
                 nameof(User),
                 nameof(TlsMode),
                 nameof(RootCertificate),
-                nameof(ServerCertificateHash)
+                nameof(ServerCertificateHash),
+                nameof(ParametersMode)
             };
         }
 
@@ -303,6 +319,7 @@ namespace Octonica.ClickHouseClient
             TlsMode = settings.TlsMode;
             RootCertificate = settings.RootCertificate;
             ServerCertificateHash = HashToString(settings.ServerCertificateHash);
+            ParametersMode = settings.ParametersMode;
 
             if (settings.ClientName != DefaultClientName)
                 ClientName = settings.ClientName;

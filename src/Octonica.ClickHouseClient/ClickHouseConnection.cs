@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,6 +136,22 @@ namespace Octonica.ClickHouseClient
                     return null;
 
                 return TimeSpan.FromSeconds(commandTimeout.Value);
+            }
+        }
+
+        /// <summary>
+        /// Gets the default mode of passing parameters to the query for the connection.
+        /// </summary>
+        /// <returns>The default mode of passing parameters to the query for the connection. The default value is <see cref="ClickHouseParameterMode.Default"/>.</returns>
+        public ClickHouseParameterMode ParametersMode
+        {
+            get
+            {
+                var mode = _connectionState.Settings?.ParametersMode;
+                if (mode == null || mode.Value == ClickHouseParameterMode.Inherit)
+                    return ClickHouseParameterMode.Default;
+
+                return mode.Value;
             }
         }
 

@@ -471,7 +471,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             try
             {
-                await using var connection = await OpenConnectionAsync();
+                await using var connection = await OpenConnectionAsync(builder => builder.ParametersMode = ClickHouseParameterMode.Interpolate);
 
                 var cmd = connection.CreateCommand("DROP TABLE IF EXISTS insert_with_parameters_test");
                 await cmd.ExecuteNonQueryAsync();
@@ -505,7 +505,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             try
             {
-                await using var connection = await OpenConnectionAsync();
+                await using var connection = await OpenConnectionAsync(builder => builder.ParametersMode = ClickHouseParameterMode.Interpolate);
 
                 var cmd = connection.CreateCommand("DROP TABLE IF EXISTS delete_with_parameters_test");
                 await cmd.ExecuteNonQueryAsync();
@@ -548,6 +548,7 @@ namespace Octonica.ClickHouseClient.Tests
                 p.ParameterName = "str_param";
                 var insertedValue = "IZyy8d\\'\"\n\t\v\b\rLsVeTtdfk6MjJl";
                 p.Value = insertedValue;
+                ((ClickHouseParameter)p).ParameterMode = ClickHouseParameterMode.Interpolate;
                 cmd.Parameters.Add(p);
                 await cmd.ExecuteNonQueryAsync();
                 // Assert: Not Throws
@@ -566,6 +567,7 @@ namespace Octonica.ClickHouseClient.Tests
             await using var connection = await OpenConnectionAsync();
 
             await using var cmd = connection.CreateCommand("select cast(42 as UInt64) limit @Limit offset @Offset");
+            cmd.ParametersMode = ClickHouseParameterMode.Interpolate;
             var p_limit = cmd.CreateParameter();
             var p_offset = cmd.CreateParameter();
             p_limit.ParameterName = "Limit";
