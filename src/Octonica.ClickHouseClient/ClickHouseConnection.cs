@@ -164,12 +164,30 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings and the default type provider.
+        /// </summary>
+        /// <param name="connectionString">The connection string.</param>
+        public ClickHouseConnection(string connectionString)
+            : this(connectionString, null)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings.
         /// </summary>
         /// <param name="connectionString">The connection string.</param>
         /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
-        public ClickHouseConnection(string connectionString, IClickHouseTypeInfoProvider? typeInfoProvider = null)
+        public ClickHouseConnection(string connectionString, IClickHouseTypeInfoProvider? typeInfoProvider)
             : this(new ClickHouseConnectionStringBuilder(connectionString), typeInfoProvider)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings and the default type provider.
+        /// </summary>
+        /// <param name="stringBuilder">The connection string builder which will be used for building the connection settings.</param>
+        public ClickHouseConnection(ClickHouseConnectionStringBuilder stringBuilder)
+            : this(stringBuilder, null)
         {
         }
 
@@ -178,7 +196,7 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="stringBuilder">The connection string builder which will be used for building the connection settings.</param>
         /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
-        public ClickHouseConnection(ClickHouseConnectionStringBuilder stringBuilder, IClickHouseTypeInfoProvider? typeInfoProvider = null)
+        public ClickHouseConnection(ClickHouseConnectionStringBuilder stringBuilder, IClickHouseTypeInfoProvider? typeInfoProvider)
         {
             if (stringBuilder == null)
                 throw new ArgumentNullException(nameof(stringBuilder));
@@ -190,11 +208,20 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings and the default type provider.
+        /// </summary>
+        /// <param name="connectionSettings">The connection settings.</param>
+        public ClickHouseConnection(ClickHouseConnectionSettings connectionSettings)
+            : this(connectionSettings, null)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseConnection"/> with the settings.
         /// </summary>
         /// <param name="connectionSettings">The connection settings.</param>
         /// <param name="typeInfoProvider">Optional parameter. The provider of types for the connection. If the value is not specified the default type provider (<see cref="DefaultTypeInfoProvider.Instance"/>) will be used.</param>
-        public ClickHouseConnection(ClickHouseConnectionSettings connectionSettings, IClickHouseTypeInfoProvider? typeInfoProvider = null)
+        public ClickHouseConnection(ClickHouseConnectionSettings connectionSettings, IClickHouseTypeInfoProvider? typeInfoProvider)
         {
             if (connectionSettings == null)
                 throw new ArgumentNullException(nameof(connectionSettings));
