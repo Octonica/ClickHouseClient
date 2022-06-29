@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -214,7 +214,7 @@ namespace Octonica.ClickHouseClient.Types
                     typeName = "UInt8";
                     break;
                 case ClickHouseDbType.Boolean:
-                    typeName = "UInt8";
+                    typeName = "Bool";
                     break;
                 case ClickHouseDbType.Currency:
                     typeName = "Decimal(18, 4)";
@@ -370,7 +370,7 @@ namespace Octonica.ClickHouseClient.Types
             if (valueType == typeof(byte))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 0);
             if (valueType == typeof(bool))
-                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Boolean, "UInt8", false, 0);
+                return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Boolean, "Bool", false, 0);
             if (valueType == typeof(decimal))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
             if (valueType == typeof(double))
@@ -530,6 +530,8 @@ namespace Octonica.ClickHouseClient.Types
                 new ArrayTypeInfo(),
                 new LowCardinalityTypeInfo(),
                 new TupleTypeInfo(),
+
+                new BoolTypeInfo(),
 
                 new DateTypeInfo(),
                 new Date32TypeInfo(),

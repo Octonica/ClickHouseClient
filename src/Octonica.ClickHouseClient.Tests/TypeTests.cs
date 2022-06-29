@@ -3048,6 +3048,74 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             }
         }
 
+        [Theory]
+        [InlineData("true::Bool", true)]
+        [InlineData("false::Bool", false)]
+        [InlineData("1::Bool", true)]
+        [InlineData("0::Bool", false)]
+        [InlineData("NULL::Nullable(Bool)", null)]
+        public async Task ReadBoolScalar(string value, bool? expectedValue)
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            var cmd = connection.CreateCommand();
+            cmd.CommandText = $"SELECT {value}";
+
+            var result = await cmd.ExecuteScalarAsync();
+            Assert.Equal((object?)expectedValue ?? DBNull.Value, result);
+        }
+
+        [Fact]
+        public async Task ReadBoolParameter()
+        {
+            var testData = new[] { false, true, (object?)null, DBNull.Value };
+
+            await using var connection = await OpenConnectionAsync();
+
+            var sb = new StringBuilder("SELECT ");
+            var cmd = connection.CreateCommand();
+            for (int i = 0; i < testData.Length * 2; i++)
+            {
+                var value = testData[i % testData.Length];
+                ClickHouseParameter p;
+                if (value is bool)
+                    p = cmd.Parameters.AddWithValue($"p{i + 1}", value);
+                else
+                    p = cmd.Parameters.AddWithValue($"p{i + 1}", value, ClickHouseDbType.Boolean);
+
+                if (i > 0)
+                    sb.Append(", ");
+
+                if (i > testData.Length)
+                    p.ParameterMode = ClickHouseParameterMode.Interpolate;
+
+                sb.Append($"{{p{i + 1}}} AS p{i + 1}");
+            }
+
+            cmd.CommandText = sb.ToString();
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.Equal(testData.Length*2, reader.FieldCount);
+
+            Assert.True(await reader.ReadAsync());
+            for (int i = 0; i < testData.Length * 2; i++)
+            {
+                Assert.Equal(ClickHouseDbType.Boolean, reader.GetFieldTypeInfo(i).GetDbType());
+                var value = testData[i % testData.Length];
+
+                if (value is bool boolVal)
+                {
+                    var result = reader.GetValue(i);
+                    Assert.Equal(boolVal, result);
+                }
+                else
+                {
+                    Assert.True(reader.IsDBNull(i));
+                }
+            }
+
+            Assert.False(await reader.ReadAsync());
+        }
+
         [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
