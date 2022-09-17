@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
  */
 #endregion
 
-using System;
+using Octonica.ClickHouseClient.Types;
 
 namespace Octonica.ClickHouseClient
 {
     /// <summary>
     /// Represents a set of properties describing a column and its type.
     /// </summary>
-    public interface IClickHouseColumnDescriptor
+    public interface IClickHouseColumnDescriptor : IClickHouseColumnTypeDescriptor
     {
         /// <summary>
         /// Gets the name of the column.
@@ -33,45 +33,5 @@ namespace Octonica.ClickHouseClient
         /// Gets the settings that should be applied when writing the column.
         /// </summary>
         ClickHouseColumnSettings? Settings { get; }
-
-        /// <summary>
-        /// Gets the type of the column.
-        /// </summary>
-        ClickHouseDbType? ClickHouseDbType { get; }
-
-        /// <summary>
-        /// Gets the type of the column's value (i.e. the type of column's cells).
-        /// </summary>
-        Type ValueType { get; }
-
-        /// <summary>
-        /// Gets the value indicating whether the column can contain NULLs.
-        /// </summary>
-        bool? IsNullable { get; }
-
-        /// <summary>
-        /// Gets the size. This value is applied to the ClickHouse type FixedString.
-        /// </summary>
-        int Size { get; }
-
-        /// <summary>
-        /// Gets the precision. This value is applied to ClickHouse types Decimal and DateTime64.
-        /// </summary>
-        byte? Precision { get; }
-
-        /// <summary>
-        /// Gets the scale. This value is applied to the ClickHouse type Decimal.
-        /// </summary>
-        byte? Scale { get; }
-
-        /// <summary>
-        /// Gets the time zone. This value is applied to ClickHouse types DateTime and DateTime64.
-        /// </summary>
-        TimeZoneInfo? TimeZone { get; }
-
-        /// <summary>
-        /// Gets the rank (a number of dimensions) of an array.
-        /// </summary>
-        int? ArrayRank { get; }
     }
 }

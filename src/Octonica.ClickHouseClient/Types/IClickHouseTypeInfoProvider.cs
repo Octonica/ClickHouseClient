@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2022 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,15 +37,15 @@ namespace Octonica.ClickHouseClient.Types
         /// <summary>
         /// Gets the type based on the <see cref="IClickHouseColumnDescriptor"/>.
         /// </summary>
-        /// <param name="columnDescriptor">The descriptor of a column.</param>
-        /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that provides information about the type.</returns>
-        IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnDescriptor columnDescriptor);
+        /// <param name="typeDescriptor">The descriptor of a column's type.</param>
+        /// <returns>The <see cref="IClickHouseColumnTypeDescriptor"/> that provides information about the type.</returns>
+        IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnTypeDescriptor typeDescriptor);
 
         /// <summary>
         /// Returns the <see cref="IClickHouseColumnTypeInfo"/> that provides access to types configured with the specified settings.
         /// </summary>
         /// <param name="serverInfo">Information about the server.</param>
         /// <returns>The <see cref="IClickHouseColumnTypeInfo"/> that provides access to types configured with the specified settings.</returns>
-        IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);        
+        IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo);
     }
 }

@@ -30,7 +30,7 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient.Types
 {
     /// <summary>
-    /// The default implementation of the interface <see cref="IClickHouseColumnTypeInfo"/>. This class provides access to
+    /// The default implementation of the interface <see cref="IClickHouseTypeInfoProvider"/>. This class provides access to
     /// all types supported by ClickHouseClient.
     /// </summary>
     public class DefaultTypeInfoProvider : IClickHouseTypeInfoProvider
@@ -181,34 +181,34 @@ namespace Octonica.ClickHouseClient.Types
         }
 
         /// <inheritdoc/>
-        public IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnDescriptor columnDescriptor)
+        public IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseColumnTypeDescriptor typeDescriptor)
         {
             string? tzCode;
             string typeName;
             IntermediateClickHouseTypeInfo typeInfo;
-            switch (columnDescriptor.ClickHouseDbType)
+            switch (typeDescriptor.ClickHouseDbType)
             {
                 case ClickHouseDbType.AnsiString:
                 case ClickHouseDbType.AnsiStringFixedLength:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported. String encoding can be specified with the property \"{nameof(ClickHouseParameter.StringEncoding)}\".");
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeDescriptor.ClickHouseDbType}\" is not supported. String encoding can be specified with the property \"{nameof(ClickHouseParameter.StringEncoding)}\".");
                 case ClickHouseDbType.Array:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported. An array could be declared with properties \"{nameof(IClickHouseColumnDescriptor.ArrayRank)}\" or \"{nameof(ClickHouseParameter.IsArray)}\".");
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeDescriptor.ClickHouseDbType}\" is not supported. An array could be declared with properties \"{nameof(IClickHouseColumnDescriptor.ArrayRank)}\" or \"{nameof(ClickHouseParameter.IsArray)}\".");
                 case ClickHouseDbType.Enum:
                 case ClickHouseDbType.Nothing:
                 case ClickHouseDbType.Time:
                 case ClickHouseDbType.Tuple:
                 case ClickHouseDbType.Xml:
                 case ClickHouseDbType.Map:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported.");
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeDescriptor.ClickHouseDbType}\" is not supported.");
 
                 case ClickHouseDbType.Binary:
-                    if (columnDescriptor.Size <= 0)
+                    if (typeDescriptor.Size <= 0)
                     {
                         typeInfo = new IntermediateClickHouseTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 1);
                         goto AFTER_TYPE_INFO_DEFINED;
                     }
 
-                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", columnDescriptor.Size);
+                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", typeDescriptor.Size);
                     break;
                 case ClickHouseDbType.Byte:
                     typeName = "UInt8";
@@ -250,8 +250,8 @@ namespace Octonica.ClickHouseClient.Types
                     typeName = "Int256";
                     break;
                 case ClickHouseDbType.Object:
-                    if (columnDescriptor.ValueType != typeof(DBNull))
-                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{columnDescriptor.ClickHouseDbType}\" is not supported.");
+                    if (typeDescriptor.ValueType != typeof(DBNull))
+                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeDescriptor.ClickHouseDbType}\" is not supported.");
 
                     typeName = "Nothing";
                     break;
@@ -283,30 +283,30 @@ namespace Octonica.ClickHouseClient.Types
                     typeName = string.Format(
                         CultureInfo.InvariantCulture,
                         "Decimal({0}, {1})",
-                        columnDescriptor.Precision ?? DecimalTypeInfoBase.DefaultPrecision,
-                        columnDescriptor.Scale ?? DecimalTypeInfoBase.DefaultScale);
+                        typeDescriptor.Precision ?? DecimalTypeInfoBase.DefaultPrecision,
+                        typeDescriptor.Scale ?? DecimalTypeInfoBase.DefaultScale);
 
                     break;
                 case ClickHouseDbType.StringFixedLength:
-                    if (columnDescriptor.Size <= 0)
+                    if (typeDescriptor.Size <= 0)
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The size of the fixed string must be a positive number.");
                     
-                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", columnDescriptor.Size);
+                    typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", typeDescriptor.Size);
                     break;
                 case ClickHouseDbType.DateTime2:
-                    tzCode = GetTimeZoneCode(columnDescriptor.TimeZone);
+                    tzCode = GetTimeZoneCode(typeDescriptor.TimeZone);
                     typeName = tzCode == null ? "DateTime64(7)" : $"DateTime64(7, '{tzCode}')";
                     break;
                 case ClickHouseDbType.DateTime64:
-                    tzCode = GetTimeZoneCode(columnDescriptor.TimeZone);
+                    tzCode = GetTimeZoneCode(typeDescriptor.TimeZone);
                     typeName = tzCode == null
-                        ? string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", columnDescriptor.Precision ?? DateTime64TypeInfo.DefaultPrecision)
-                        : string.Format(CultureInfo.InvariantCulture, "DateTime64({0}, '{1}')", columnDescriptor.Precision ?? DateTime64TypeInfo.DefaultPrecision, tzCode);
+                        ? string.Format(CultureInfo.InvariantCulture, "DateTime64({0})", typeDescriptor.Precision ?? DateTime64TypeInfo.DefaultPrecision)
+                        : string.Format(CultureInfo.InvariantCulture, "DateTime64({0}, '{1}')", typeDescriptor.Precision ?? DateTime64TypeInfo.DefaultPrecision, tzCode);
 
                     break;
                 case ClickHouseDbType.DateTime:
                 case ClickHouseDbType.DateTimeOffset:
-                    tzCode = GetTimeZoneCode(columnDescriptor.TimeZone);
+                    tzCode = GetTimeZoneCode(typeDescriptor.TimeZone);
                     typeName = tzCode == null ? "DateTime" : $"DateTime('{tzCode}')";
                     break;
                 case ClickHouseDbType.IpV4:
@@ -318,35 +318,35 @@ namespace Octonica.ClickHouseClient.Types
                 case ClickHouseDbType.ClickHouseSpecificTypeDelimiterCode:
                     goto default;
                 case null:
-                    typeInfo = GetTypeFromValue(columnDescriptor.ValueType, columnDescriptor.IsNullable ?? false, columnDescriptor.TimeZone);
+                    typeInfo = GetTypeFromValue(typeDescriptor.ValueType, typeDescriptor.IsNullable ?? false, typeDescriptor.TimeZone);
                     goto AFTER_TYPE_INFO_DEFINED;
                 default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"There is no type associated with the value \"{columnDescriptor.ClickHouseDbType}\".");
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"There is no type associated with the value \"{typeDescriptor.ClickHouseDbType}\".");
             }
 
-            if (columnDescriptor.IsNullable != null)
+            if (typeDescriptor.IsNullable != null)
             {
-                typeInfo = new IntermediateClickHouseTypeInfo(columnDescriptor.ClickHouseDbType.Value, typeName, columnDescriptor.IsNullable.Value, columnDescriptor.ArrayRank ?? 0);
+                typeInfo = new IntermediateClickHouseTypeInfo(typeDescriptor.ClickHouseDbType.Value, typeName, typeDescriptor.IsNullable.Value, typeDescriptor.ArrayRank ?? 0);
             }
             else
             {
                 // Derive nullability from the value's type. It's important to know whether the value is nullable or not because
                 // nullability is a part of ClickHouse type
-                var autoType = GetTypeFromValue(columnDescriptor.ValueType, columnDescriptor.IsNullable ?? false, columnDescriptor.TimeZone);
-                typeInfo = new IntermediateClickHouseTypeInfo(columnDescriptor.ClickHouseDbType.Value, typeName, autoType.IsNullable, columnDescriptor.ArrayRank ?? 0);
+                var autoType = GetTypeFromValue(typeDescriptor.ValueType, typeDescriptor.IsNullable ?? false, typeDescriptor.TimeZone);
+                typeInfo = new IntermediateClickHouseTypeInfo(typeDescriptor.ClickHouseDbType.Value, typeName, autoType.IsNullable, typeDescriptor.ArrayRank ?? 0);
             }
 
         // This label is an alternative exit point for switch
         // It's a shortcut for several cases when typeInfo is fully defined
         AFTER_TYPE_INFO_DEFINED:
 
-            bool isNull = columnDescriptor.ValueType == typeof(DBNull);
-            if (isNull && columnDescriptor.IsNullable == false)
-                throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The value of the type \"{columnDescriptor.ValueType}\" can't be declared as non-nullable.");
+            bool isNull = typeDescriptor.ValueType == typeof(DBNull);
+            if (isNull && typeDescriptor.IsNullable == false)
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The value of the type \"{typeDescriptor.ValueType}\" can't be declared as non-nullable.");
 
             bool isNullable;
-            if (columnDescriptor.IsNullable != null)
-                isNullable = columnDescriptor.IsNullable.Value;
+            if (typeDescriptor.IsNullable != null)
+                isNullable = typeDescriptor.IsNullable.Value;
             else if (isNull)
                 isNullable = true;
             else
@@ -356,7 +356,7 @@ namespace Octonica.ClickHouseClient.Types
             if (isNullable)
                 typeName = $"Nullable({typeName})";
 
-            var arrayRank = columnDescriptor?.ArrayRank ?? typeInfo.ArrayRank;
+            var arrayRank = typeDescriptor?.ArrayRank ?? typeInfo.ArrayRank;
             for (int i = 0; i < arrayRank; i++)
                 typeName = $"Array({typeName})";
 
