@@ -467,7 +467,7 @@ namespace Octonica.ClickHouseClient
             {
                 try
                 {
-                    result = DefaultTypeInfoProvider.GetTypeFromValue(Value?.GetType() ?? typeof(DBNull), Value == null, TimeZone);
+                    result = ClickHouseTypeInfoProvider.GetTypeFromValue(Value?.GetType() ?? typeof(DBNull), Value == null, TimeZone);
                 }
                 catch (ClickHouseException ex)
                 {

@@ -29,18 +29,23 @@ using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
+    #region DefaultTypeInfoProvider (obsolete)
+
     /// <summary>
-    /// The default implementation of the interface <see cref="IClickHouseTypeInfoProvider"/>. This class provides access to
-    /// all types supported by ClickHouseClient.
+    /// This class is obsolete and will be deleted. Use <see cref="ClickHouseTypeInfoProvider"/> instead of <see cref="DefaultTypeInfoProvider"/>.
     /// </summary>
-    public class DefaultTypeInfoProvider : IClickHouseTypeInfoProvider
+    [Obsolete(nameof(DefaultTypeInfoProvider) + " was renamed to " + nameof(ClickHouseTypeInfoProvider) + ".")]
+    public class DefaultTypeInfoProvider : ClickHouseTypeInfoProvider
     {
         /// <summary>
         /// The instance of <see cref="DefaultTypeInfoProvider"/> provides access to all types supported by ClickHouseClient.
         /// </summary>
-        public static readonly DefaultTypeInfoProvider Instance = new DefaultTypeInfoProvider();
-
-        private readonly Dictionary<string, IClickHouseColumnTypeInfo> _types;
+        /// <remarks>
+        /// The class <see cref="DefaultTypeInfoProvider"/> is obsolete.
+        /// Use <see cref="ClickHouseTypeInfoProvider.Instance"/> instead of <see cref="Instance"/>.
+        /// </remarks>
+        [Obsolete(nameof(DefaultTypeInfoProvider) + " was renamed to " + nameof(ClickHouseTypeInfoProvider) + ".")]
+        public static readonly new DefaultTypeInfoProvider Instance = new DefaultTypeInfoProvider();
 
         private DefaultTypeInfoProvider()
             : this(GetDefaultTypes())
@@ -51,8 +56,43 @@ namespace Octonica.ClickHouseClient.Types
         /// Initializes a new instance of <see cref="DefaultTypeInfoProvider"/> with a collection of supported types.
         /// </summary>
         /// <param name="types">The collection of supported types.</param>
-        /// <remarks>It is possible to get types supported by default with the method <see cref="GetDefaultTypes()"/>.</remarks>
+        /// <remarks>
+        /// The class <see cref="DefaultTypeInfoProvider"/> is obsolete.
+        /// Use the base class <see cref="ClickHouseTypeInfoProvider"/> instead of <see cref="DefaultTypeInfoProvider"/>.
+        /// </remarks>
+        [Obsolete(nameof(DefaultTypeInfoProvider) + " was renamed to " + nameof(ClickHouseTypeInfoProvider) + ".")]
         protected DefaultTypeInfoProvider(IEnumerable<IClickHouseColumnTypeInfo> types)
+            : base(types)
+        {
+        }
+    }
+
+    #endregion DefaultTypeInfoProvider (obsolete)
+
+    /// <summary>
+    /// The default implementation of the interface <see cref="IClickHouseTypeInfoProvider"/>. This class provides access to
+    /// all types supported by ClickHouseClient.
+    /// </summary>
+    public class ClickHouseTypeInfoProvider : IClickHouseTypeInfoProvider
+    {
+        /// <summary>
+        /// The instance of <see cref="ClickHouseTypeInfoProvider"/> provides access to all types supported by ClickHouseClient.
+        /// </summary>
+        public static readonly ClickHouseTypeInfoProvider Instance = new ClickHouseTypeInfoProvider();
+
+        private readonly Dictionary<string, IClickHouseColumnTypeInfo> _types;
+
+        private ClickHouseTypeInfoProvider()
+            : this(GetDefaultTypes())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of <see cref="ClickHouseTypeInfoProvider"/> with a collection of supported types.
+        /// </summary>
+        /// <param name="types">The collection of supported types.</param>
+        /// <remarks>It is possible to get types supported by default with the method <see cref="GetDefaultTypes()"/>.</remarks>
+        protected ClickHouseTypeInfoProvider(IEnumerable<IClickHouseColumnTypeInfo> types)
         {
             if (types == null)
                 throw new ArgumentNullException(nameof(types));
@@ -516,7 +556,7 @@ namespace Octonica.ClickHouseClient.Types
             if (serverInfo == null)
                 throw new ArgumentNullException(nameof(serverInfo));
 
-            return new DefaultTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
+            return new ClickHouseTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
         }
 
         /// <summary>

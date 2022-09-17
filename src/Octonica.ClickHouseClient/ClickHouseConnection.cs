@@ -623,7 +623,7 @@ namespace Octonica.ClickHouseClient
                         }
 
                         var serverInfo = helloMessage.ServerInfo;
-                        var configuredTypeInfoProvider = (_typeInfoProvider ?? DefaultTypeInfoProvider.Instance).Configure(serverInfo);
+                        var configuredTypeInfoProvider = (_typeInfoProvider ?? ClickHouseTypeInfoProvider.Instance).Configure(serverInfo);
                         var tcpClient = new ClickHouseTcpClient(client, reader, writer, connectionSettings, serverInfo, configuredTypeInfoProvider, sslStream);
                         
                         if (!TryChangeConnectionState(connectionState, ConnectionState.Open, tcpClient, out _, out onStateChanged))
