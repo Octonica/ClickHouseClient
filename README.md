@@ -13,6 +13,7 @@ This is an implementation of .NET Core driver for ClickHouse in a form of ADO.NE
 * ~~tested~~- used in production
 * c# named tuple and record support
 * [Dapper](https://dapperlib.github.io/Dapper/) support (example in [#19](https://github.com/Octonica/ClickHouseClient/issues/19))
+* [Linq To DB](https://github.com/linq2db/linq2db) support
 
 ### Usage
 Install from [NuGet](https://www.nuget.org/packages/Octonica.ClickHouseClient/):
