@@ -447,7 +447,7 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public override IEnumerator GetEnumerator()
         {
-            return _parameters.GetEnumerator();
+            return _parameterNames.Select(n => _parameters[n]).GetEnumerator();
         }
 
         /// <inheritdoc/>
