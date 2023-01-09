@@ -888,7 +888,7 @@ namespace Octonica.ClickHouseClient
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is opening. It can't be closed.");
 
                     default:
-                        throw new NotSupportedException($"Internal error. The state {_connectionState} is not supported.");
+                        throw new NotSupportedException($"Internal error. The state {connectionState.State} is not supported.");
                 }
             }
         }
