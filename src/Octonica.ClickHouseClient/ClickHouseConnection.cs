@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -476,6 +476,13 @@ namespace Octonica.ClickHouseClient
         protected override void Dispose(bool disposing)
         {
             var connectionState = _connectionState;
+            if (connectionState == null)
+            {
+                // This is possible when GC calls finalizer for System.ComponentModel.Component, but the connection
+                // object was not created properly (an error occured in the constructor).
+                return;
+            }
+
             var counter = connectionState.Counter;
             while (connectionState.Counter == counter)
             {
