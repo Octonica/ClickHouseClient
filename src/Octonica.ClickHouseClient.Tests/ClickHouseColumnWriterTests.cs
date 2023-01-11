@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -594,6 +594,57 @@ namespace Octonica.ClickHouseClient.Tests
             {
                 await using var connection = await OpenConnectionAsync();
                 var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_enums");
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        [Fact]
+        public async Task InsertNullableEnumValues()
+        {
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_null_enums");
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand($"CREATE TABLE {TestTableName}_null_enums(id Int16, e8 Nullable(Enum8('min' = -128, 'zero' = 0, 'max' = 127)), e16 Nullable(Enum16('unknown value' = 0, 'well known value' = 42, 'foo' = -1024, 'bar' = 108))) ENGINE=Memory");
+                await cmd.ExecuteNonQueryAsync();
+
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {TestTableName}_null_enums(id, e16, e8) VALUES"))
+                {
+                    var source = new object[]
+                    {
+                        Enumerable.Range(0, 1000).Select(num => (short) num),
+                        Enumerable.Range(-500, 1000).Select(num => num % 108 == 0 ? num % 5 == 0 ? null : "bar" : num < 0 ? "foo" : num == 42 ? "well known value" : "unknown value"),
+                        Enumerable.Range(0, 1000).Select(num => num % 3 == 0 ? num % 7 == 0 ? (sbyte?) null : sbyte.MinValue : num % 3 == 1 ? (sbyte) 0 : sbyte.MaxValue)
+                    };
+
+                    await writer.WriteTableAsync(source, 1000, CancellationToken.None);
+                    await writer.EndWriteAsync(CancellationToken.None);
+                }
+
+                cmd.CommandText = $"SELECT e8, e16 FROM {TestTableName}_null_enums ORDER BY id";
+
+                int count = 0;
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                while (reader.Read())
+                {
+                    var e8 = reader.GetValue(0);
+                    var e16 = reader.GetFieldValue(1, (short?)null);
+
+                    Assert.Equal(count % 3 == 0 ? count % 7 == 0 ? (object)DBNull.Value : "min" : count % 3 == 1 ? "zero" : "max", e8);
+                    Assert.Equal((count - 500) % 108 == 0 ? (count - 500) % 5 == 0 ? (short?)null : 108 : count - 500 < 0 ? -1024 : count - 500 == 42 ? (short?)42 : 0, e16);
+                    ++count;
+                }
+
+                Assert.Equal(1000, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {TestTableName}_null_enums");
                 await cmd.ExecuteNonQueryAsync();
             }
         }
