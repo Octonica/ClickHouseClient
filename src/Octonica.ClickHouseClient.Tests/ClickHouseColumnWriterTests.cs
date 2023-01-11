@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -1273,6 +1274,68 @@ namespace Octonica.ClickHouseClient.Tests
                 }
 
                 Assert.Equal(10, count);
+            }
+        }
+
+        [Fact]
+        public Task InsertBoolValues()
+        {
+            var columns = new Dictionary<string, object?>
+            {
+                ["id"] = Enumerable.Range(1, 100).ToList(),
+                ["b1"] = Enumerable.Range(1, 100).Select(i => i % 2 == 0).ToList(),
+                ["b2"] = Enumerable.Range(1, 100).Select(i => i % 3 == 0 ? (bool?)null : i % 4 == 0).ToList(),
+                ["b3"] = Enumerable.Range(1, 100).Select(i => (byte)(i % 8)).ToList(),
+                ["b4"] = Enumerable.Range(1, 100).Select(i => i % 5 == 0 ? null : (byte?)(i % 16))
+            };
+
+            return WithTemporaryTable("bool", "id Int32, b1 Boolean, b2 Nullable(Boolean), b3 Boolean, b4 Nullable(Boolean)", Test);
+
+            async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, b1, b2, b3, b4) VALUES", CancellationToken.None))
+                {
+                    await writer.WriteTableAsync(columns, 100, CancellationToken.None);
+                }
+
+                var cmd = cn.CreateCommand($"SELECT id, b1, b2, b3, b4 data FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    var id = reader.GetInt32(0);
+
+                    // Bool value can be true or false.
+                    // Byte value can be 1 or 0, even if inserted value was different.
+
+                    var b1 = reader.GetBoolean(1);
+                    var b1Byte = reader.GetByte(1);
+                    Assert.Equal(b1 ? 1 : 0, b1Byte);
+
+                    var b2 = reader.GetFieldValue(2, (bool?)null);
+                    var b2Byte = reader.GetFieldValue(2, (byte?)null);
+                    Assert.Equal(b2 == null ? null : b2.Value ? (byte?)1 : 0, b2Byte);
+
+                    var b3 = reader.GetValue(3);
+                    var b3Byte = reader.GetByte(3);
+                    var b3Bool = Assert.IsType<bool>(b3);
+                    Assert.Equal(b3Bool ? 1 : 0, b3Byte);
+
+                    var b4 = reader.GetValue(4);
+                    var b4Byte = reader.GetFieldValue(4, (byte?)null);
+                    var b4Bool = b4 == DBNull.Value ? (bool?)null : Assert.IsType<bool>(b4);
+                    Assert.Equal(b4Bool == null ? null : b4Bool.Value ? (byte?)1 : 0, b4Byte);
+
+                    Assert.Equal(count + 1, id);
+                    Assert.Equal(id % 2 == 0, b1);
+                    Assert.Equal(id % 3 == 0 ? (bool?)null : id % 4 == 0, b2);
+                    Assert.Equal(id % 8 != 0, b3);
+                    Assert.Equal(id % 5 == 0 ? DBNull.Value : (object)(id % 16 != 0), b4);
+
+                    ++count;
+                }
+
+                Assert.Equal(100, count);
             }
         }
 

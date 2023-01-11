@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2022 Octonica
+/* Copyright 2022-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -42,10 +43,23 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (typeof(T) != typeof(bool))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            IReadOnlyList<bool> typedList;
 
-            return new BoolWriter(columnName, ComplexTypeName, (IReadOnlyList<bool>)rows);
+            if (typeof(T) == typeof(bool))
+            {
+                typedList = (IReadOnlyList<bool>)rows;
+            }
+            else if (typeof(T) == typeof(byte))
+            {
+                // Some kind of a compatibility mode. Write bytes as bools. Any non-zero value is treated as true.
+                typedList = MappedReadOnlyList<byte, bool>.Map((IReadOnlyList<byte>)rows, b => b != 0);
+            }
+            else
+            {
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
+
+            return new BoolWriter(columnName, ComplexTypeName, typedList);
         }
 
         public override void FormatValue(StringBuilder queryStringBuilder, object? value)
@@ -54,7 +68,12 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             if (!(value is bool val))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                if (value is byte b)
+                    val = b != 0;
+                else 
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             queryStringBuilder.Append(val ? '1' : '0').Append("::Bool");
         }
