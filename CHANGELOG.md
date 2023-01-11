@@ -1,3 +1,9 @@
+### Octonica.ClickHouseClient v2.2.11, 2023-01-11
+
+#### Bug Fix
+
+* Fix null reference exception when the garbage collector calls the finalizer for `ClickHouseConnection` ([#70](https://github.com/Octonica/ClickHouseClient/issues/70)).
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
