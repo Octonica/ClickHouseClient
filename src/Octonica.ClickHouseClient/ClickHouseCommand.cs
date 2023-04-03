@@ -903,7 +903,11 @@ namespace Octonica.ClickHouseClient
                         if (typeSeparatorIdx >= 0)
                             queryStringBuilder.Append("(CAST(");
 
-                        queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
+                        queryStringBuilder.Append("(SELECT ")
+                            .Append(parameter.IsArray ? "arrayJoin(" : "")
+                            .Append(parametersTable).Append('.')
+                            .Append(parameter.Id)
+                            .Append(parameter.IsArray ? ")" : "").Append(" FROM ").Append(parametersTable).Append(')');
 
                         if (typeSeparatorIdx >= 0)
                             queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
