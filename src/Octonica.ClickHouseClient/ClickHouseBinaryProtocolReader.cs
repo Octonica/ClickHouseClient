@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -387,10 +387,7 @@ namespace Octonica.ClickHouseClient
             }
 
             if (bytesRead == 0)
-            {
-                //TODO: end of stream exception
-                throw new InvalidOperationException();
-            }
+                throw new EndOfStreamException($"Reached an unexpected end of the server's response. {ClickHouseConnectionStringBuilder.DefaultClientName} expected at least one more byte in the response.");
 
             _buffer.ConfirmWrite(bytesRead);
             _buffer.Flush();
