@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -267,6 +267,9 @@ namespace Octonica.ClickHouseClient
                     writer.WriteString(column.ColumnName);
                     writer.WriteString(column.ColumnType);
 
+                    if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
+                        writer.WriteBool(false); // has_custom
+
                     int rowCount = table.RowCount;
                     while (rowCount > 0)
                     {
@@ -358,6 +361,14 @@ namespace Octonica.ClickHouseClient
                 {
                     var columnName = await reader.ReadString(async, cancellationToken);
                     var columnTypeName = await reader.ReadString(async, cancellationToken);
+
+                    if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
+                    {
+                        var hasCustom = await reader.ReadBool(async, cancellationToken);
+                        if (hasCustom)
+                            throw new NotImplementedException("TODO: add support for custom serialization.");
+                    }
+
                     var columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
                     var columnInfo = new ColumnInfo(columnName, columnType);
                     columnInfos.Add(columnInfo);
