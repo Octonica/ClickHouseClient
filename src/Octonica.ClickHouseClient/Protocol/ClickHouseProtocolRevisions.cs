@@ -25,7 +25,7 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithCustomSerialization;
+        public const int CurrentRevision = 54456;
 
         /// <summary>
         /// The number of protocol's revision with support of custom serialization.

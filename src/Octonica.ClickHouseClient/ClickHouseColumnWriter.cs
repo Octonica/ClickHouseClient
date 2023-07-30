@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -451,28 +451,39 @@ namespace Octonica.ClickHouseClient
                 else
                     await _session.SendTable(ClickHouseEmptyTableWriter.Instance, async, cancellationToken);
 
-                var message = await _session.ReadMessage(async, CancellationToken.None);
-                switch (message.MessageCode)
+                bool isProfileEvents;
+                do
                 {
-                    case ServerMessageCode.EndOfStream:
-                        await _session.Dispose(async);
-                        break;
-
-                    case ServerMessageCode.Error:
-                        // Connection state can't be resotred if the server raised an exception.
-                        // This error is probably caused by the wrong formatted data.
-                        var exception = ((ServerErrorMessage)message).Exception;
-                        if (disposing)
-                        {
-                            await _session.SetFailed(exception, false, async);
+                    isProfileEvents = false;
+                    var message = await _session.ReadMessage(async, CancellationToken.None);
+                    switch (message.MessageCode)
+                    {
+                        case ServerMessageCode.EndOfStream:
+                            await _session.Dispose(async);
                             break;
-                        }
-                        
-                        throw exception;
 
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
-                }
+                        case ServerMessageCode.Error:
+                            // Connection state can't be resotred if the server raised an exception.
+                            // This error is probably caused by the wrong formatted data.
+                            var exception = ((ServerErrorMessage)message).Exception;
+                            if (disposing)
+                            {
+                                await _session.SetFailed(exception, false, async);
+                                break;
+                            }
+
+                            throw exception;
+
+                        case ServerMessageCode.ProfileEvents:
+                            isProfileEvents = true;
+                            var profileEventsMessage = (ServerDataMessage)message;
+                            await _session.SkipTable(profileEventsMessage, async, cancellationToken);
+                            break;
+
+                        default:
+                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
+                    }
+                } while (isProfileEvents);
             }
             catch (ClickHouseHandledException ex)
             {

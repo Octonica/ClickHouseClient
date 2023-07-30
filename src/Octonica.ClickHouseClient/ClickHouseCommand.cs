@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -684,21 +684,34 @@ namespace Octonica.ClickHouseClient
                 var query = await SendQuery(session, behavior, async, cancellationToken);
 
                 cancelOnFailure = true;
-                var message = await session.ReadMessage(async, cancellationToken);
-                switch (message.MessageCode)
+                bool isProfileEvents;
+                IServerMessage message;
+                do
                 {
-                    case ServerMessageCode.Data:
-                        break;
+                    isProfileEvents = false;
+                    message = await session.ReadMessage(async, cancellationToken);
+                    switch (message.MessageCode)
+                    {
+                        case ServerMessageCode.Data:
+                            break;
 
-                    case ServerMessageCode.Error:
-                        throw ((ServerErrorMessage) message).Exception.CopyWithQuery(query);
+                        case ServerMessageCode.Error:
+                            throw ((ServerErrorMessage)message).Exception.CopyWithQuery(query);
 
-                    case ServerMessageCode.EndOfStream:
-                        throw ClickHouseHandledException.Wrap(new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response."));
+                        case ServerMessageCode.ProfileEvents:
+                            isProfileEvents = true;
+                            var dataMessage = (ServerDataMessage)message;
+                            await session.SkipTable(dataMessage, async, CancellationToken.None);
+                            break;
 
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response.");
+                        case ServerMessageCode.EndOfStream:
+                            throw ClickHouseHandledException.Wrap(new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response."));
+
+                        default:
+                            throw new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response.");
+                    }
                 }
+                while (isProfileEvents);
 
                 var firstTable = await session.ReadTable((ServerDataMessage) message, null, async, cancellationToken);
                 if (rowLimit == ClickHouseDataReaderRowLimit.Zero)
