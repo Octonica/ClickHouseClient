@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,6 +105,13 @@ namespace Octonica.ClickHouseClient.Protocol
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithOpenTelemetry)
                         writer.WriteByte(0); // TODO: add support for Open Telemetry headers
+
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
+                    {
+                        writer.WriteByte(0); // collaborate_with_initiator
+                        writer.WriteByte(0); // count_participating_replicas
+                        writer.WriteByte(0); // number_of_current_replica
+                    }
 
                     break;
 
