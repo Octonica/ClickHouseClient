@@ -190,18 +190,35 @@ namespace Octonica.ClickHouseClient
         /// Writes a single row to the table.
         /// </summary>
         /// <param name="values">The list of column values.</param> 
+        /// <remarks>Please note that the method always commits a transaction. No subsequent call of <see cref="Commit"/> is required.</remarks>
         public void WriteRow(params object?[] values)
         {
-            TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: false, async: false, CancellationToken.None));
         }
 
         /// <summary>
         /// Writes a single row to the table.
         /// </summary>
-        /// <param name="values">The list of column values.</param>        
+        /// <param name="values">The list of column values.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="Commit"/> is required.</remarks>
         public void WriteRow(IReadOnlyCollection<object?> values)
         {
-            TaskHelper.WaitNonAsyncTask(WriteRow(values, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: false, async: false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>
+        /// <param name="commit">
+        /// If <see langword="true"/>, commits the transaction immediately after writing a row (the same mode as <see cref="ClickHouseTransactionMode.Block"/>).
+        /// If <see langword="false"/>, leaves the transaction open (the same mode as <see cref="ClickHouseTransactionMode.Manual"/>).
+        /// </param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        public void WriteRow(IReadOnlyCollection<object?> values, bool commit)
+        {
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit, async: false, CancellationToken.None));
         }
 
         /// <summary>
@@ -209,9 +226,25 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="values">The list of column values.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values)
         {
-            await WriteRow(values, true, CancellationToken.None);
+            await WriteRow(values, commit: false, async: true, CancellationToken.None);
+        }
+
+
+        /// <summary>
+        /// Asyncronously writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>
+        /// <param name="commit">
+        /// If <see langword="true"/>, commits the transaction immediately after writing a row (the same mode as <see cref="ClickHouseTransactionMode.Block"/>).
+        /// If <see langword="false"/>, leaves the transaction open (the same mode as <see cref="ClickHouseTransactionMode.Manual"/>).
+        /// </param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        public async Task WriteRowAsync(IReadOnlyCollection<object?> values, bool commit)
+        {
+            await WriteRow(values, commit, async: true, CancellationToken.None);
         }
 
         /// <summary>
@@ -220,12 +253,28 @@ namespace Octonica.ClickHouseClient
         /// <param name="values">The list of column values.</param>
         /// <param name="cancellationToken">The cancellation instruction.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values, CancellationToken cancellationToken)
         {
-            await WriteRow(values, true, cancellationToken);
+            await WriteRow(values, commit: false, async: true, cancellationToken);
         }
 
-        private async ValueTask WriteRow(IReadOnlyCollection<object?> values, bool async, CancellationToken cancellationToken)
+        /// <summary>
+        /// Asyncronously writes a single row to the table.
+        /// </summary>
+        /// <param name="values">The list of column values.</param>
+        /// <param name="commit">
+        /// If <see langword="true"/>, commits the transaction immediately after writing a row (the same mode as <see cref="ClickHouseTransactionMode.Block"/>).
+        /// If <see langword="false"/>, leaves the transaction open (the same mode as <see cref="ClickHouseTransactionMode.Manual"/>).
+        /// </param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        public async Task WriteRowAsync(IReadOnlyCollection<object?> values, bool commit, CancellationToken cancellationToken)
+        {
+            await WriteRow(values, commit, async: true, cancellationToken);
+        }
+
+        private async ValueTask WriteRow(IReadOnlyCollection<object?> values, bool commit, bool async, CancellationToken cancellationToken)
         {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
@@ -312,7 +361,7 @@ namespace Octonica.ClickHouseClient
             }
 
             var table = new ClickHouseTableWriter(string.Empty, 1, columnWriters);
-            await SendTable(table, true, async, cancellationToken);
+            await SendTable(table, commit, async, cancellationToken);
         }
 
         /// <summary>
@@ -328,7 +377,24 @@ namespace Octonica.ClickHouseClient
         /// <param name="rowCount">The number of rows in columns.</param>
         public void WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount)
         {
-            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, ClickHouseTransactionMode.Default, false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The <see cref="IReadOnlyDictionary{TKey, TValue}"/> object that provides access to columns by their names.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="transactionMode">The mode of sending write confirmations to the server.See <see cref="ClickHouseTransactionMode"/> for details.</param>
+        public void WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount, ClickHouseTransactionMode transactionMode)
+        {
+            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, transactionMode, false, CancellationToken.None));
         }
 
         /// <summary>
@@ -344,7 +410,24 @@ namespace Octonica.ClickHouseClient
         /// <param name="rowCount">The number of rows in columns.</param>
         public void WriteTable(IReadOnlyList<object?> columns, int rowCount)
         {
-            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, ClickHouseTransactionMode.Default, false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The list of columns.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="transactionMode">The mode of sending write confirmations to the server.See <see cref="ClickHouseTransactionMode"/> for details.</param>
+        public void WriteTable(IReadOnlyList<object?> columns, int rowCount, ClickHouseTransactionMode transactionMode)
+        {
+            TaskHelper.WaitNonAsyncTask(WriteTable(columns, rowCount, transactionMode, false, CancellationToken.None));
         }
 
         /// <summary>
@@ -363,7 +446,27 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteTableAsync(IReadOnlyDictionary<string, object?> columns, int rowCount, CancellationToken cancellationToken)
         {
-            await WriteTable(columns, rowCount, true, cancellationToken);
+            await WriteTable(columns, rowCount, ClickHouseTransactionMode.Default, true, cancellationToken);
+        }
+
+        /// <summary>
+        /// Asyncronously writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The <see cref="IReadOnlyDictionary{TKey, TValue}"/> object that provides access to columns by their names.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="transactionMode">The mode of sending write confirmations to the server.See <see cref="ClickHouseTransactionMode"/> for details.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        public async Task WriteTableAsync(IReadOnlyDictionary<string, object?> columns, int rowCount, ClickHouseTransactionMode transactionMode, CancellationToken cancellationToken)
+        {
+            await WriteTable(columns, rowCount, transactionMode, true, cancellationToken);
         }
 
         /// <summary>
@@ -382,10 +485,30 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task WriteTableAsync(IReadOnlyList<object?> columns, int rowCount, CancellationToken cancellationToken)
         {
-            await WriteTable(columns, rowCount, true, cancellationToken);
+            await WriteTable(columns, rowCount, ClickHouseTransactionMode.Default, true, cancellationToken);
         }
 
-        private async ValueTask WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount, bool async, CancellationToken cancellationToken)
+        /// <summary>
+        /// Asyncronously writes the specified columns to the table.
+        /// <br/>
+        /// Each column must be an object implementing one of the interfaces:
+        /// <see cref="IReadOnlyList{T}"/>,
+        /// <see cref="IList{T}"/>,
+        /// <see cref="IAsyncEnumerable{T}"/>,
+        /// <see cref="IEnumerable{T}"/> or
+        /// <see cref="IEnumerable"/>.
+        /// </summary>
+        /// <param name="columns">The list of columns.</param>
+        /// <param name="rowCount">The number of rows in columns.</param>
+        /// <param name="transactionMode">The mode of sending write confirmations to the server.See <see cref="ClickHouseTransactionMode"/> for details.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        public async Task WriteTableAsync(IReadOnlyList<object?> columns, int rowCount, ClickHouseTransactionMode transactionMode, CancellationToken cancellationToken)
+        {
+            await WriteTable(columns, rowCount, transactionMode, true, cancellationToken);
+        }
+
+        private async ValueTask WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount, ClickHouseTransactionMode mode, bool async, CancellationToken cancellationToken)
         {
             if (columns == null)
                 throw new ArgumentNullException(nameof(columns));
@@ -399,10 +522,10 @@ namespace Octonica.ClickHouseClient
                     list.Add(null);
             }
 
-            await WriteTable(list, rowCount, async, cancellationToken);
+            await WriteTable(list, rowCount, mode, async, cancellationToken);
         }
 
-        private async ValueTask WriteTable(IReadOnlyList<object?> columns, int rowCount, bool async, CancellationToken cancellationToken)
+        private async ValueTask WriteTable(IReadOnlyList<object?> columns, int rowCount, ClickHouseTransactionMode mode, bool async, CancellationToken cancellationToken)
         {
             if (columns == null)
                 throw new ArgumentNullException(nameof(columns));
@@ -425,18 +548,20 @@ namespace Octonica.ClickHouseClient
 
             int offset;
             var blockSize = MaxBlockSize ?? rowCount;
+            bool commitBlock = mode == ClickHouseTransactionMode.Block;
             for (offset = 0; offset + blockSize < rowCount; offset += blockSize)
             {
                 var table = new ClickHouseTableWriter(string.Empty, blockSize, writerFactories.Select(w => w.Create(offset, blockSize)));
-                await SendTable(table, false, async, cancellationToken);
+                await SendTable(table, commitBlock, async, cancellationToken);
             }
 
             var finalBlockSize = rowCount - offset;
             var finalTable = new ClickHouseTableWriter(string.Empty, finalBlockSize, writerFactories.Select(w => w.Create(offset, finalBlockSize)));
-            await SendTable(finalTable, true, async, cancellationToken);
+            bool commit = commitBlock || mode == ClickHouseTransactionMode.Default || mode == ClickHouseTransactionMode.Auto;
+            await SendTable(finalTable, commit, async, cancellationToken);
         }
 
-        private async ValueTask SendTable(ClickHouseTableWriter table, bool confirm, bool async, CancellationToken cancellationToken)
+        private async ValueTask SendTable(ClickHouseTableWriter table, bool commit, bool async, CancellationToken cancellationToken)
         {
             if (_endOfStream)
                 await RepeatQuery(async, cancellationToken);
@@ -445,7 +570,7 @@ namespace Octonica.ClickHouseClient
             {
                 await _session.SendTable(table, async, cancellationToken);
 
-                if (confirm)
+                if (commit)
                     await EndWrite(disposing: false, closeSession: false, async, cancellationToken);
             }
             catch (ClickHouseHandledException)
@@ -529,6 +654,28 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Notifies the server that the transaction should be commited.
+        /// This method acts similar to <see cref="EndWrite()"/>, but it doesn't close the writer.
+        /// </summary>
+        /// <remarks>A subsequent writing operation will send a new INSERT query to the server.</remarks>
+        public void Commit()
+        {
+            TaskHelper.WaitNonAsyncTask(EndWrite(disposing: false, closeSession: false, async: false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Asyncronously notifies the server that the transaction should be commited.
+        /// This method acts similar to <see cref="EndWriteAsync(CancellationToken)"/>, but it doesn't close the writer.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>A subsequent writing operation will send a new INSERT query to the server.</remarks>
+        public async Task CommitAsync(CancellationToken cancellationToken)
+        {
+            await EndWrite(disposing: false, closeSession: false, async: true, cancellationToken);
+        }
+
+        /// <summary>
         /// Closes the writer and releases all resources associated with it.
         /// </summary>
         public void EndWrite()
@@ -579,9 +726,8 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.EndOfStream:
                             if (closeSession)
                                 await _session.Dispose(async);
-                            else
-                                _endOfStream = true;
 
+                            _endOfStream = true;
                             break;
 
                         case ServerMessageCode.Error:
