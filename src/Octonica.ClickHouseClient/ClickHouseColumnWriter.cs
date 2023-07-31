@@ -38,12 +38,13 @@ namespace Octonica.ClickHouseClient
     public sealed class ClickHouseColumnWriter : IDisposable, IAsyncDisposable
     {
         private readonly ClickHouseTcpClient.Session _session;
-
+        private readonly ClientQueryMessage _query;
         private readonly ReadOnlyCollection<ColumnInfo> _columns;
 
         private ClickHouseColumnSettings?[]? _columnSettings;
 
         private int? _rowsPerBlock;
+        private bool _endOfStream;
 
         /// <summary>
         /// Gets the number of fields (columns) in the table.
@@ -72,9 +73,10 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        internal ClickHouseColumnWriter(ClickHouseTcpClient.Session session, ReadOnlyCollection<ColumnInfo> columns)
+        internal ClickHouseColumnWriter(ClickHouseTcpClient.Session session, ClientQueryMessage query, ReadOnlyCollection<ColumnInfo> columns)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _query = query ?? throw new ArgumentNullException(nameof(query));
             _columns = columns;
 
             if (columns.Count <= 100)
@@ -83,6 +85,39 @@ namespace Octonica.ClickHouseClient
                 MaxBlockSize = 800;
             else
                 MaxBlockSize = 8800 - 8 * columns.Count;
+        }
+
+        internal static async ValueTask<ClickHouseTable> ReadTableMetadata(ClickHouseTcpClient.Session session, string queryText, bool async, CancellationToken cancellationToken)
+        {
+            var msg = await session.ReadMessage(async, cancellationToken);
+            switch (msg.MessageCode)
+            {
+                case ServerMessageCode.Error:
+                    throw ((ServerErrorMessage)msg).Exception.CopyWithQuery(queryText);
+
+                case ServerMessageCode.TableColumns:
+                    break;
+
+                default:
+                    throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
+            }
+
+            msg = await session.ReadMessage(async, cancellationToken);
+            ClickHouseTable data;
+            switch (msg.MessageCode)
+            {
+                case ServerMessageCode.Error:
+                    throw ((ServerErrorMessage)msg).Exception.CopyWithQuery(queryText);
+
+                case ServerMessageCode.Data:
+                    data = await session.ReadTable((ServerDataMessage)msg, null, async, cancellationToken);
+                    break;
+
+                default:
+                    throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
+            }
+
+            return data;
         }
 
         /// <inheritdoc cref="ClickHouseDataReader.ConfigureColumn(string, ClickHouseColumnSettings)"/>
@@ -277,7 +312,7 @@ namespace Octonica.ClickHouseClient
             }
 
             var table = new ClickHouseTableWriter(string.Empty, 1, columnWriters);
-            await SendTable(table, async, cancellationToken);
+            await SendTable(table, true, async, cancellationToken);
         }
 
         /// <summary>
@@ -376,7 +411,7 @@ namespace Octonica.ClickHouseClient
             if (rowCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(rowCount));
             if (rowCount == 0)
-                throw new ArgumentException("The number of rows must be grater than zero.", nameof(rowCount));
+                throw new ArgumentException("The number of rows must be greater than zero.", nameof(rowCount));
 
             if (IsClosed)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The writer is closed.");
@@ -393,19 +428,25 @@ namespace Octonica.ClickHouseClient
             for (offset = 0; offset + blockSize < rowCount; offset += blockSize)
             {
                 var table = new ClickHouseTableWriter(string.Empty, blockSize, writerFactories.Select(w => w.Create(offset, blockSize)));
-                await SendTable(table, async, cancellationToken);
+                await SendTable(table, false, async, cancellationToken);
             }
 
             var finalBlockSize = rowCount - offset;
             var finalTable = new ClickHouseTableWriter(string.Empty, finalBlockSize, writerFactories.Select(w => w.Create(offset, finalBlockSize)));
-            await SendTable(finalTable, async, cancellationToken);
+            await SendTable(finalTable, true, async, cancellationToken);
         }
 
-        private async ValueTask SendTable(ClickHouseTableWriter table, bool async, CancellationToken cancellationToken)
+        private async ValueTask SendTable(ClickHouseTableWriter table, bool confirm, bool async, CancellationToken cancellationToken)
         {
+            if (_endOfStream)
+                await RepeatQuery(async, cancellationToken);
+
             try
             {
                 await _session.SendTable(table, async, cancellationToken);
+
+                if (confirm)
+                    await EndWrite(disposing: false, closeSession: false, async, cancellationToken);
             }
             catch (ClickHouseHandledException)
             {
@@ -421,12 +462,78 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        private async ValueTask RepeatQuery(bool async, CancellationToken cancellationToken)
+        {
+            ClickHouseTable data;
+            try
+            {
+                await _session.SendQuery(_query, async, cancellationToken);
+                data = await ReadTableMetadata(_session, _query.Query, async, cancellationToken);
+                _endOfStream = false;
+            }
+            catch (ClickHouseServerException)
+            {
+                await _session.Dispose(async);
+                throw;
+            }
+            catch (ClickHouseHandledException)
+            {
+                await _session.Dispose(async);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var aggrEx = await _session.SetFailed(ex, false, async);
+                if (aggrEx != null)
+                    throw aggrEx;
+
+                throw;
+            }
+
+            try
+            {
+                // Repeating the query is almost the same as opening a new independent column writer. So we must check that the structure of the table wasn't changed.
+                var newColumns = data.Header.Columns;
+                if (newColumns.Count != _columns.Count)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TableModified, "The number of columns returned by the query has changed.");
+
+                for (int i = 0; i < data.Columns.Count; i++)
+                {
+                    var newCol = newColumns[i];
+                    var origCol = _columns[i];
+
+                    if (!string.Equals(origCol.Name, newCol.Name, StringComparison.Ordinal))
+                        throw new ClickHouseException(ClickHouseErrorCodes.TableModified, $"Unexpected column \"{newCol.Name}\" at the position {i}. Expected \"{origCol.Name}\".");
+
+                    if (!string.Equals(origCol.TypeInfo.ComplexTypeName, newCol.TypeInfo.ComplexTypeName, StringComparison.Ordinal))
+                        throw new ClickHouseException(ClickHouseErrorCodes.TableModified, $"The type of the column \"{origCol.Name}\" has changed from \"{origCol.TypeInfo.ComplexTypeName}\" to \"{newCol.TypeInfo.ComplexTypeName}\" between queries.");
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await EndWrite(disposing: true, closeSession: true, async, cancellationToken);
+                }
+                catch (Exception disposingEx)
+                {
+                    throw new AggregateException(ex, disposingEx);
+                }
+
+                var hEx = ClickHouseHandledException.Wrap(ex);
+                if (ReferenceEquals(hEx, ex))
+                    throw;
+
+                throw hEx;
+            }
+        }
+
         /// <summary>
         /// Closes the writer and releases all resources associated with it.
         /// </summary>
         public void EndWrite()
         {
-            TaskHelper.WaitNonAsyncTask(EndWrite(false, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(EndWrite(disposing: false, closeSession: true, false, CancellationToken.None));
         }
 
         /// <summary>
@@ -436,13 +543,24 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task EndWriteAsync(CancellationToken cancellationToken)
         {
-            await EndWrite(false, true, cancellationToken);
+            await EndWrite(disposing: false, closeSession: true, true, cancellationToken);
         }
 
-        private async ValueTask EndWrite(bool disposing, bool async, CancellationToken cancellationToken)
+        private async ValueTask EndWrite(bool disposing, bool closeSession, bool async, CancellationToken cancellationToken)
         {
+            // The session should not be in the open state after disposing
+            Debug.Assert(closeSession || !disposing);
+
             if (IsClosed)
                 return;
+
+            if (_endOfStream)
+            {
+                if (closeSession)
+                    await _session.Dispose(async);
+
+                return;
+            }
 
             try
             {
@@ -459,7 +577,11 @@ namespace Octonica.ClickHouseClient
                     switch (message.MessageCode)
                     {
                         case ServerMessageCode.EndOfStream:
-                            await _session.Dispose(async);
+                            if (closeSession)
+                                await _session.Dispose(async);
+                            else
+                                _endOfStream = true;
+
                             break;
 
                         case ServerMessageCode.Error:
@@ -522,7 +644,7 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Dispose(bool async)
         {
-            await EndWrite(true, async, CancellationToken.None);
+            await EndWrite(disposing: true, closeSession: true, async, CancellationToken.None);
         }
 
         internal static async ValueTask<IClickHouseColumnWriterFactory> CreateColumnWriterFactory(ColumnInfo columnInfo, object? column, int columnIndex, int rowCount, ClickHouseColumnSettings? settings, bool async, CancellationToken cancellationToken)

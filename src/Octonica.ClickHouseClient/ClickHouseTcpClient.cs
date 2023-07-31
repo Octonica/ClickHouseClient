@@ -156,7 +156,7 @@ namespace Octonica.ClickHouseClient
                 _sessionCancellationToken = sessionCancellationToken;
             }
 
-            public async ValueTask SendQuery(
+            public async ValueTask<ClientQueryMessage> SendQuery(
                 ClientQueryMessage.Builder messageBuilder,
                 IReadOnlyCollection<IClickHouseTableWriter>? tables,
                 bool async,
@@ -165,6 +165,7 @@ namespace Octonica.ClickHouseClient
                 CheckDisposed();
 
                 var writer = _client._writer;
+                ClientQueryMessage queryMessage;
                 try
                 {
                     var settings = _client._settings;
@@ -176,7 +177,7 @@ namespace Octonica.ClickHouseClient
                     messageBuilder.ProtocolRevision = Math.Min(ClickHouseProtocolRevisions.CurrentRevision, _client.ServerInfo.Revision);
                     messageBuilder.CompressionEnabled = _client._settings.Compress;
 
-                    var queryMessage = messageBuilder.Build();
+                    queryMessage = messageBuilder.Build();
                     if (queryMessage.Settings != null)
                     {
                         if (_client.ServerInfo.Revision < ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings)
@@ -195,6 +196,27 @@ namespace Octonica.ClickHouseClient
                             WriteTable(table);
                     }
 
+                    WriteTable(ClickHouseEmptyTableWriter.Instance);
+                }
+                catch (Exception ex)
+                {
+                    writer.Discard();
+                    throw ClickHouseHandledException.Wrap(ex);
+                }
+
+                await WithCancellationToken(cancellationToken, ct => writer.Flush(async, ct));
+
+                return queryMessage;
+            }
+
+            public async ValueTask SendQuery(ClientQueryMessage queryMessage, bool async, CancellationToken cancellationToken)
+            {
+                CheckDisposed();
+
+                var writer = _client._writer;
+                try
+                {
+                    queryMessage.Write(writer);
                     WriteTable(ClickHouseEmptyTableWriter.Instance);
                 }
                 catch (Exception ex)

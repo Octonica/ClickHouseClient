@@ -395,38 +395,12 @@ namespace Octonica.ClickHouseClient
                 session = await connectionState.TcpClient.OpenSession(async, null, CancellationToken.None, cancellationToken);
 
                 var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand};
-                await session.SendQuery(messageBuilder, null, async, cancellationToken);
+                var query = await session.SendQuery(messageBuilder, null, async, cancellationToken);
 
                 cancelOnFailure = true;
-                var msg = await session.ReadMessage(async, cancellationToken);
-                switch (msg.MessageCode)
-                {
-                    case ServerMessageCode.Error:
-                        throw ((ServerErrorMessage) msg).Exception.CopyWithQuery(insertFormatCommand);
+                var data = await ClickHouseColumnWriter.ReadTableMetadata(session, query.Query, async, cancellationToken);
 
-                    case ServerMessageCode.TableColumns:
-                        break;
-                        
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
-                }
-
-                msg = await session.ReadMessage(async, cancellationToken);
-                ClickHouseTable data;
-                switch (msg.MessageCode)
-                {
-                    case ServerMessageCode.Error:
-                        throw ((ServerErrorMessage) msg).Exception.CopyWithQuery(insertFormatCommand);
-
-                    case ServerMessageCode.Data:
-                        data = await session.ReadTable((ServerDataMessage) msg, null, async, cancellationToken);
-                        break;
-
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
-                }
-
-                return new ClickHouseColumnWriter(session, data.Header.Columns);
+                return new ClickHouseColumnWriter(session, query, data.Header.Columns);
             }
             catch (ClickHouseServerException)
             {
