@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -256,6 +256,16 @@ namespace Octonica.ClickHouseClient
             set => this[nameof(ParametersMode)] = value == DefaultParametersMode ? null : value.ToString("G");
         }
 
+        /// <summary>
+        /// Gets the 'quota key' passed with the query. This key is used by the ClickHouse server for tracking quotas.
+        /// </summary>
+        /// <returns>The value of 'quota key' passed with the query.</returns>
+        public string? QuotaKey
+        {
+            get => GetString(nameof(QuotaKey));
+            set => this[nameof(QuotaKey)] = value;
+        }
+
         static ClickHouseConnectionStringBuilder()
         {
             var asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
@@ -278,7 +288,8 @@ namespace Octonica.ClickHouseClient
                 nameof(TlsMode),
                 nameof(RootCertificate),
                 nameof(ServerCertificateHash),
-                nameof(ParametersMode)
+                nameof(ParametersMode),
+                nameof(QuotaKey)
             };
         }
 
@@ -320,6 +331,7 @@ namespace Octonica.ClickHouseClient
             RootCertificate = settings.RootCertificate;
             ServerCertificateHash = HashToString(settings.ServerCertificateHash);
             ParametersMode = settings.ParametersMode;
+            QuotaKey = settings.QuotaKey;
 
             if (settings.ClientName != DefaultClientName)
                 ClientName = settings.ClientName;

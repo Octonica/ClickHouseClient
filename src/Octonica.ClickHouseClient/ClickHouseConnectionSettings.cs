@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,6 +103,11 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public ClickHouseParameterMode ParametersMode { get; }
 
+        /// <summary>
+        /// Gets the 'quota key' passed with the query. This key is used by the ClickHouse server for tracking quotas.
+        /// </summary>
+        public string? QuotaKey { get; }
+
         internal readonly int CompressionBlockSize = 1024 * 8; // Maybe it should be configurable
 
         internal ClickHouseConnectionSettings(ClickHouseConnectionStringBuilder builder)
@@ -128,6 +133,7 @@ namespace Octonica.ClickHouseClient
             RootCertificate = builder.RootCertificate;
             ServerCertificateHash = ParseHashString(builder.ServerCertificateHash);
             ParametersMode = builder.ParametersMode;
+            QuotaKey = string.IsNullOrEmpty(builder.QuotaKey) ? null : builder.QuotaKey;
         }
 
         private static byte[]? ParseHashString(string? hashString)

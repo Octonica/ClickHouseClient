@@ -604,6 +604,9 @@ namespace Octonica.ClickHouseClient
                         }
 
                         var serverInfo = helloMessage.ServerInfo;
+                        if (serverInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithAddendum)
+                            await SendAddendum(writer, connectionSettings.QuotaKey, async, cancellationToken);
+
                         var configuredTypeInfoProvider = (_typeInfoProvider ?? ClickHouseTypeInfoProvider.Instance).Configure(serverInfo);
                         var tcpClient = new ClickHouseTcpClient(client, reader, writer, connectionSettings, serverInfo, configuredTypeInfoProvider, sslStream);
                         
@@ -686,6 +689,12 @@ namespace Octonica.ClickHouseClient
             stateChangeEx = onStateChanged.Invoke(this);
             if (stateChangeEx != null)
                 throw new ClickHouseException(ClickHouseErrorCodes.CallbackError, "External callback error. See the inner exception for details.", stateChangeEx);
+        }
+
+        private static ValueTask SendAddendum(ClickHouseBinaryProtocolWriter writer, string? quotaKey, bool async, CancellationToken cancellationToken)
+        {
+            writer.WriteString(quotaKey ?? string.Empty);
+            return writer.Flush(async, cancellationToken);
         }
 
         /// <summary>
