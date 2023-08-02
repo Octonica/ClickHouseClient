@@ -193,7 +193,7 @@ namespace Octonica.ClickHouseClient
         /// <remarks>Please note that the method always commits a transaction. No subsequent call of <see cref="Commit"/> is required.</remarks>
         public void WriteRow(params object?[] values)
         {
-            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: false, async: false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: true, async: false, CancellationToken.None));
         }
 
         /// <summary>
@@ -201,10 +201,10 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="values">The list of column values.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
-        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="Commit"/> is required.</remarks>
+        /// <remarks>Please note that the method always commits a transaction. No subsequent call of <see cref="Commit"/> is required.</remarks>
         public void WriteRow(IReadOnlyCollection<object?> values)
         {
-            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: false, async: false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(WriteRow(values, commit: true, async: false, CancellationToken.None));
         }
 
         /// <summary>
@@ -226,10 +226,10 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="values">The list of column values.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
-        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
+        /// <remarks>Please note that the method always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values)
         {
-            await WriteRow(values, commit: false, async: true, CancellationToken.None);
+            await WriteRow(values, commit: true, async: true, CancellationToken.None);
         }
 
 
@@ -253,10 +253,10 @@ namespace Octonica.ClickHouseClient
         /// <param name="values">The list of column values.</param>
         /// <param name="cancellationToken">The cancellation instruction.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
-        /// <remarks>Please note that the method is always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
+        /// <remarks>Please note that the method always commits a transaction. No subsequent call of <see cref="CommitAsync(CancellationToken)"/> is required.</remarks>
         public async Task WriteRowAsync(IReadOnlyCollection<object?> values, CancellationToken cancellationToken)
         {
-            await WriteRow(values, commit: false, async: true, cancellationToken);
+            await WriteRow(values, commit: true, async: true, cancellationToken);
         }
 
         /// <summary>
@@ -571,7 +571,7 @@ namespace Octonica.ClickHouseClient
                 await _session.SendTable(table, async, cancellationToken);
 
                 if (commit)
-                    await EndWrite(disposing: false, closeSession: false, async, cancellationToken);
+                    await EndWrite(TerminationMode.Confirm, closeSession: false, async, cancellationToken);
             }
             catch (ClickHouseHandledException)
             {
@@ -638,11 +638,11 @@ namespace Octonica.ClickHouseClient
             {
                 try
                 {
-                    await EndWrite(disposing: true, closeSession: true, async, cancellationToken);
+                    await EndWrite(TerminationMode.Cancel, closeSession: true, async, cancellationToken);
                 }
-                catch (Exception disposingEx)
+                catch (Exception cancellationEx)
                 {
-                    throw new AggregateException(ex, disposingEx);
+                    throw new AggregateException(ex, cancellationEx);
                 }
 
                 var hEx = ClickHouseHandledException.Wrap(ex);
@@ -660,7 +660,7 @@ namespace Octonica.ClickHouseClient
         /// <remarks>A subsequent writing operation will send a new INSERT query to the server.</remarks>
         public void Commit()
         {
-            TaskHelper.WaitNonAsyncTask(EndWrite(disposing: false, closeSession: false, async: false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(EndWrite(TerminationMode.Confirm, closeSession: false, async: false, CancellationToken.None));
         }
 
         /// <summary>
@@ -672,7 +672,7 @@ namespace Octonica.ClickHouseClient
         /// <remarks>A subsequent writing operation will send a new INSERT query to the server.</remarks>
         public async Task CommitAsync(CancellationToken cancellationToken)
         {
-            await EndWrite(disposing: false, closeSession: false, async: true, cancellationToken);
+            await EndWrite(TerminationMode.Confirm, closeSession: false, async: true, cancellationToken);
         }
 
         /// <summary>
@@ -680,7 +680,28 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public void EndWrite()
         {
-            TaskHelper.WaitNonAsyncTask(EndWrite(disposing: false, closeSession: true, false, CancellationToken.None));
+            TaskHelper.WaitNonAsyncTask(EndWrite(TerminationMode.Confirm, closeSession: true, false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Notifies the server that non-commited rows shoud be discarded. This method takes an effect
+        /// only if the pervious operation was made in the <see cref="ClickHouseTransactionMode.Manual"/> mode.
+        /// </summary>
+        public void Rollback()
+        {
+            TaskHelper.WaitNonAsyncTask(EndWrite(TerminationMode.Cancel, closeSession: false, async: false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Asyncronously notifies the server that non-commited rows shoud be discarded. This method takes an effect
+        /// only if the pervious operation was made in the <see cref="ClickHouseTransactionMode.Manual"/> mode.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>A subsequent writing operation will send a new INSERT query to the server.</remarks>
+        public async Task RollbackAsync(CancellationToken cancellationToken)
+        {
+            await EndWrite(TerminationMode.Cancel, closeSession: false, async: true, cancellationToken);
         }
 
         /// <summary>
@@ -690,13 +711,13 @@ namespace Octonica.ClickHouseClient
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
         public async Task EndWriteAsync(CancellationToken cancellationToken)
         {
-            await EndWrite(disposing: false, closeSession: true, true, cancellationToken);
+            await EndWrite(TerminationMode.Confirm, closeSession: true, true, cancellationToken);
         }
 
-        private async ValueTask EndWrite(bool disposing, bool closeSession, bool async, CancellationToken cancellationToken)
+        private async ValueTask EndWrite(TerminationMode mode, bool closeSession, bool async, CancellationToken cancellationToken)
         {
-            // The session should not be in the open state after disposing
-            Debug.Assert(closeSession || !disposing);
+            // If the writer is dispesed the session should also be disposed
+            Debug.Assert(closeSession || mode != TerminationMode.Dispose);
 
             if (IsClosed)
                 return;
@@ -711,10 +732,21 @@ namespace Octonica.ClickHouseClient
 
             try
             {
-                if (disposing)
-                    await _session.SendCancel(async);
-                else
-                    await _session.SendTable(ClickHouseEmptyTableWriter.Instance, async, cancellationToken);
+                switch (mode)
+                {
+                    case TerminationMode.None:
+                        break;
+                    case TerminationMode.Cancel:
+                    case TerminationMode.Dispose:
+                        await _session.SendCancel(async);
+                        break;
+                    case TerminationMode.Confirm:
+                        await _session.SendTable(ClickHouseEmptyTableWriter.Instance, async, cancellationToken);
+                        break;
+                    default:
+                        Debug.Fail($"Unexpected termination mode: {mode}.");
+                        break;
+                }
 
                 bool isProfileEvents;
                 do
@@ -734,7 +766,7 @@ namespace Octonica.ClickHouseClient
                             // Connection state can't be resotred if the server raised an exception.
                             // This error is probably caused by the wrong formatted data.
                             var exception = ((ServerErrorMessage)message).Exception;
-                            if (disposing)
+                            if (mode == TerminationMode.Dispose)
                             {
                                 await _session.SetFailed(exception, false, async);
                                 break;
@@ -755,7 +787,7 @@ namespace Octonica.ClickHouseClient
             }
             catch (ClickHouseHandledException ex)
             {
-                if (!disposing)
+                if (mode != TerminationMode.Dispose)
                     throw;
 
                 // Connection state can't be restored
@@ -790,7 +822,7 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask Dispose(bool async)
         {
-            await EndWrite(disposing: true, closeSession: true, async, CancellationToken.None);
+            await EndWrite(TerminationMode.Dispose, closeSession: true, async, CancellationToken.None);
         }
 
         internal static async ValueTask<IClickHouseColumnWriterFactory> CreateColumnWriterFactory(ColumnInfo columnInfo, object? column, int columnIndex, int rowCount, ClickHouseColumnSettings? settings, bool async, CancellationToken cancellationToken)
@@ -1396,6 +1428,29 @@ namespace Octonica.ClickHouseClient
                 var rows = new ConstantReadOnlyList<T>((T) _value, 1);
                 return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
             }
+        }
+
+        private enum TerminationMode
+        {
+            /// <summary>
+            /// Send nothing and wait for EndOfStream
+            /// </summary>
+            None = 0,
+
+            /// <summary>
+            /// Send Cancel and wait for EndOfStream
+            /// </summary>
+            Cancel = 1,
+
+            /// <summary>
+            /// Send confirmation message (completely empty talbe) and wait for EndOfStream
+            /// </summary>
+            Confirm = 2,
+
+            /// <summary>
+            /// Send Cancel and then release all resources associated with the writer
+            /// </summary>
+            Dispose = 3
         }
     }
 }

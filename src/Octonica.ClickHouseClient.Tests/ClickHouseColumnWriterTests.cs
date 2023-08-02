@@ -15,6 +15,8 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -1336,6 +1338,161 @@ namespace Octonica.ClickHouseClient.Tests
                 }
 
                 Assert.Equal(100, count);
+            }
+        }
+
+        [Fact]
+        public Task TransactionModeBlock()
+        {
+            return WithTemporaryTable("tran_block", "id Int32", Test);
+
+            async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                var list = MappedReadOnlyList<int, int>.Map(Enumerable.Range(0, 48).ToList(), i => i < 47 ? i : throw new IndexOutOfRangeException("Too long!"));
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    // There will be three blocks in the list. The last block will produce an error, but first two blocks must be commited.
+                    writer.MaxBlockSize = 16;
+
+                    var ex = await Assert.ThrowsAnyAsync<ClickHouseHandledException>(() => writer.WriteTableAsync(new[] { list }, list.Count, ClickHouseTransactionMode.Block, ct));
+                    Assert.NotNull(ex.InnerException);
+                    Assert.IsType<IndexOutOfRangeException>(ex.InnerException);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT * FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int expected = 0;
+
+                while (await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    Assert.Equal(expected++, id);
+                }
+
+                Assert.Equal(32, expected);
+            }
+        }
+
+        [Fact]
+        public Task TransactionModeManual()
+        {
+            return WithTemporaryTable("tran_manual", "id Int32", Test);
+
+            static async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(0, 10) }, 10, ClickHouseTransactionMode.Manual, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(10, 10) }, 10, ClickHouseTransactionMode.Manual, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(20, 10) }, 10, ClickHouseTransactionMode.Manual, ct);
+                }
+
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteRowAsync(new object?[] { 18 }, false, ct);
+                    await writer.WriteRowAsync(new object?[] { 19 }, false, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 20 }, false, ct);
+                    await writer.WriteRowAsync(new object?[] { 21 }, true, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 22 }, false, ct);
+                    await writer.WriteRowAsync(new object?[] { 23 }, false, ct);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT * FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int expected = 10;
+
+                while (await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    Assert.Equal(expected++, id);
+                }
+
+                Assert.Equal(22, expected);
+            }
+        }
+
+        [Theory]
+        [InlineData(ClickHouseTransactionMode.Default)]
+        [InlineData(ClickHouseTransactionMode.Auto)]
+        public Task TransactionModeAuto(ClickHouseTransactionMode mode)
+        {
+            return WithTemporaryTable("tran_auto", "id Int32", Test);
+
+            async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(0, 10) }, 10, mode, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(10, 10) }, 10, mode, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(20, 10) }, 10, mode, ct);
+                }
+
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteRowAsync(new object?[] { 30 }, true, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 31 }, true, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 32 }, true, ct);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT * FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int expected = 0;
+
+                while (await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    Assert.Equal(expected++, id);
+                }
+
+                Assert.Equal(33, expected);
+            }
+        }
+
+        [Fact]
+        public Task TransactionModeAutoBackwardCompatibility()
+        {
+            // Check that the default transaction mode is 'Auto' when not specified
+            return WithTemporaryTable("tran_auto_bc", "id Int32", Test);
+
+            async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(0, 10) }, 10, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(10, 10) }, 10, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteTableAsync(new[] { Enumerable.Range(20, 10) }, 10, ct);
+                }
+
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id) VALUES", ct))
+                {
+                    await writer.WriteRowAsync(new object?[] { 30 }, ct);
+                    await writer.RollbackAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 31 }, ct);
+                    await writer.CommitAsync(ct);
+                    await writer.WriteRowAsync(new object?[] { 32 }, ct);
+                }
+
+                var cmd = connection.CreateCommand($"SELECT * FROM {tableName} ORDER BY id");
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int expected = 0;
+
+                while (await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    Assert.Equal(expected++, id);
+                }
+
+                Assert.Equal(33, expected);
             }
         }
 
