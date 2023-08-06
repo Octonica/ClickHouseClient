@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -214,8 +214,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(str, strResult);
         }
 
-        [Fact]
-        public async Task ReadStringParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadStringParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var strings = new[] {null, "", "abcde", "fghi", "jklm", "nopq", "rst", "uvwxy","z"};
 
@@ -226,7 +227,7 @@ namespace Octonica.ClickHouseClient.Tests
             var charArray = strings[8]!.ToCharArray();
             var values = new object?[] {strings[0], strings[1], strings[2], strings[3].AsMemory(), byteArray, byteMemory, byteRoMemory, charMemory, charArray};
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
             await using var cmd = connection.CreateCommand("SELECT {val}");
             var param = cmd.Parameters.AddWithValue("val", "some_value", DbType.String);
             for (var i = 0; i < values.Length; i++)
@@ -376,10 +377,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)), resultDateTime);
         }
 
-        [Fact]
-        public async Task ReadDateTime64ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateTime64ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
             var timeZone = connection.GetServerTimeZone();
             var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
 
@@ -465,22 +467,23 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadDateTimeParameterWithTimezoneScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateTimeParameterWithTimezoneScalar(ClickHouseParameterMode parameterMode)
         {
             var valueShort = new DateTime(2014, 7, 5, 12, 13, 14);
             var value = valueShort.Add(TimeSpan.FromMilliseconds(123.4567));
 
             const string targetTzCode = "Asia/Magadan";
             var targetTz = TimeZoneHelper.GetTimeZoneInfo(targetTzCode);
-            
-            await using var connection = await OpenConnectionAsync();
+
+            await using var connection = await OpenConnectionAsync(parameterMode);
             await using var cmd = connection.CreateCommand($"SELECT toTimeZone({{d}}, '{targetTzCode}')");
             var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TimeZoneHelper.GetTimeZoneInfo("Pacific/Niue"), Precision = 4};
             cmd.Parameters.Add(parameter);
             var deltaOffset = targetTz.GetUtcOffset(valueShort) - parameter.TimeZone.GetUtcOffset(valueShort);
 
-            object resultObj;
+            object? resultObj;
             DateTimeOffset result;
             foreach (var parameterType in new ClickHouseDbType?[] {null, ClickHouseDbType.DateTime, ClickHouseDbType.DateTimeOffset})
             {
@@ -662,10 +665,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(new object[3], resultArr);
         }
 
-        [Fact]
-        public async Task ReadArrayParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadArrayParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {p}");
             var expectedResult = new[] {4, 8, 15, 16, 23, 42};
@@ -685,10 +689,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(expectedResult.Select(v => (decimal) v), decResult);
         }
 
-        [Fact]
-        public async Task ReadArrayOfArraysParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadArrayOfArraysParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {p}");
             var expectedResult = new List<uint[]> {new uint[] {4, 8}, new uint[] {15, 16, 23}, new uint[] {42}};
@@ -713,10 +718,11 @@ namespace Octonica.ClickHouseClient.Tests
                 Assert.Equal(expectedResult[i].Select(v => (ulong?) v), decResult[i]);
         }
 
-        [Fact]
-        public async Task ReadMultidimensionalArrayParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadMultidimensionalArrayParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {p}");
             var expectedResult = new List<int?[,]> {new[,] {{(int?) 4, 8}, {15, 16}, {23, 42}}, new[,] {{1}, {(int?) null}, {3}}, new[,] {{(int?) -4, -8, -15}, {-16, -23, -42}}};
@@ -1649,12 +1655,13 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadFixedStringParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadFixedStringParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var values = new[] {string.Empty, "0", "12345678", "abcdefg", "1234", "abcd", "абвг"};
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") {DbType = DbType.StringFixedLength, Size = 8};
@@ -1672,19 +1679,20 @@ namespace Octonica.ClickHouseClient.Tests
 
             param.Value = "123456789";
             var exception = await Assert.ThrowsAnyAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync<byte[]>());
-            Assert.Equal(exception.ErrorCode, ClickHouseErrorCodes.InvalidQueryParameterConfiguration);
+            Assert.Equal(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, exception.ErrorCode);
 
             param.Value = "абвг0";
             exception = await Assert.ThrowsAnyAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync<byte[]>());
-            Assert.Equal(exception.ErrorCode, ClickHouseErrorCodes.InvalidQueryParameterConfiguration);
+            Assert.Equal(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, exception.ErrorCode);
         }
 
-        [Fact]
-        public async Task ReadGuidParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadGuidParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var parameterValue = Guid.Parse("7FCFFE2D-E9A6-49E0-B8ED-9617603F5584");
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") { DbType = DbType.Guid };
@@ -1695,8 +1703,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(parameterValue, result);
         }
 
-        [Fact]
-        public async Task ReadDecimalParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDecimalParameterScalar(ClickHouseParameterMode parameterMode)
         {
             // The default ClickHouse type for decimal is Decimal128(9)
             const decimal minValueByDefault = 1m / 1_000_000_000;
@@ -1708,7 +1717,7 @@ namespace Octonica.ClickHouseClient.Tests
                 minValueByDefault, -minValueByDefault, minValueByDefault / 10, -minValueByDefault / 10, binarySparseValue, -binarySparseValue
             };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") {DbType = DbType.Decimal};
@@ -1728,8 +1737,9 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadCurrencyParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadCurrencyParameterScalar(ClickHouseParameterMode parameterMode)
         {
             const decimal maxCurrencyValue = 922_337_203_685_477.5807m, minCurrencyValue = -922_337_203_685_477.5808m, binarySparseValue = 7_205_759_833_289.5232m, currencyEpsilon = 0.0001m;
 
@@ -1739,7 +1749,7 @@ namespace Octonica.ClickHouseClient.Tests
                 binarySparseValue, -binarySparseValue, currencyEpsilon, -currencyEpsilon, currencyEpsilon / 10, -currencyEpsilon / 10
             };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") { DbType = DbType.Currency };
@@ -1767,10 +1777,11 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadVarNumericParameter()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadVarNumericParameter(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param} AS p, toString(p)");
             var param = new ClickHouseParameter("param") {DbType = DbType.VarNumeric, Precision = 7, Scale = 3};
@@ -1902,10 +1913,11 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ClickHouseDecimalTypeNames()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ClickHouseDecimalTypeNames(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT toTypeName({param})");
             var param = new ClickHouseParameter("param") {DbType = DbType.Decimal, Value = 0m};
@@ -1949,15 +1961,16 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadDateTimeParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateTimeParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var now = DateTime.Now;
             now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
 
             var testData = new[] {now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55)};
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param");
@@ -1980,8 +1993,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
 
-        [Fact]
-        public async Task ReadDateTimeOffsetParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateTimeOffsetParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var now = DateTime.Now;
             now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
@@ -1993,7 +2007,7 @@ namespace Octonica.ClickHouseClient.Tests
                 new DateTimeOffset(DateTime.UnixEpoch.AddSeconds(uint.MaxValue)).ToOffset(new TimeSpan(0, 11, 0, 0))
             };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param");
@@ -2020,13 +2034,14 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
 
-        [Fact]
-        public async Task ReadFloatParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadFloatParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var testData = new[]
                 {float.MinValue, float.MaxValue, float.Epsilon * 2, -float.Epsilon * 2, 1, -1, (float) Math.PI, (float) Math.Exp(1)};
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT CAST({param}/2 AS Float32)");
             var param = new ClickHouseParameter("param") { DbType = DbType.Single };
@@ -2043,13 +2058,14 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadDoubleParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDoubleParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var testData = new[]
                 {double.MinValue, double.MaxValue, double.Epsilon * 2, -double.Epsilon * 2, 1, -1, Math.PI, Math.Exp(1)};
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}/2");
             var param = new ClickHouseParameter("param") { DbType = DbType.Double };
@@ -2066,10 +2082,11 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
-        [Fact]
-        public async Task ReadNothingParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadNothingParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param");
@@ -2079,10 +2096,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(DBNull.Value, result);
         }
 
-        [Fact]
-        public async Task ReadIpV4ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadIpV4ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") {Value = IPAddress.Parse("10.0.121.1")};
@@ -2098,10 +2116,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal("192.0.2.1", result);
         }
 
-        [Fact]
-        public async Task ReadIpV6ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadIpV6ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param}");
             var param = new ClickHouseParameter("param") { Value = IPAddress.Parse("2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d") };
@@ -2121,8 +2140,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(DBNull.Value, result);
         }
 
-        [Fact]
-        public async Task ReadIntegerParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadIntegerParameterScalar(ClickHouseParameterMode parameterMode)
         {
             object[] values =
             {
@@ -2136,7 +2156,7 @@ namespace Octonica.ClickHouseClient.Tests
                 ulong.MinValue, ulong.MaxValue
             };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {integerParam}");
             var param = new ClickHouseParameter("integerParam");
@@ -2390,10 +2410,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(strValues.Length, count);
         }
 
-        [Fact]
-        public async Task ReadInt128ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadInt128ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT {v}");
             var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.Int128 };
@@ -2473,10 +2494,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(strValues.Length, count);
         }
 
-        [Fact]
-        public async Task ReadUInt128ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadUInt128ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT {v}");
             var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.UInt128 };
@@ -2546,10 +2568,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(strValues.Length, count);
         }
 
-        [Fact]
-        public async Task ReadInt256ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadInt256ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT {v}");
             var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.Int256 };
@@ -2633,10 +2656,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(strValues.Length, count);
         }
 
-        [Fact]
-        public async Task ReadUInt256ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadUInt256ParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT {v}");
             var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.UInt256 };
@@ -2644,7 +2668,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             var pairs = new (object value, BigInteger expected)[]
             {
-                (0u, 0u),                
+                (0u, 0u),
                 (1u, 1u),
                 (byte.MaxValue, byte.MaxValue),
                 (ushort.MaxValue, ushort.MaxValue),
@@ -2764,15 +2788,16 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(expectedDateTime, resultDateTime);
         }
 
-        [Fact]
-        public async Task ReadDateParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var now = DateTime.Now;
             now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
 
             var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55) };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param} v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date };
@@ -2805,15 +2830,16 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         }
 
 #if NET6_0_OR_GREATER
-        [Fact]
-        public async Task ReadDateParameterScalarNet6()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDateParameterScalarNet6(ClickHouseParameterMode parameterMode)
         {
             var nowDateTime = DateTime.Now;
             var now = new DateOnly(nowDateTime.Year, nowDateTime.Month, nowDateTime.Day);
 
             var testData = new[] { now, default, new DateOnly(1980, 12, 15), new DateOnly(2015, 1, 1) };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = connection.CreateCommand("SELECT {param} v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date };
@@ -2888,8 +2914,9 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal(expectedDateTime, resultDateTime);
         }
 
-        [Fact]
-        public async Task ReadDate32ParameterScalar()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDate32ParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var now = DateTime.Now;
             var minValue = new DateTime(1925, 1, 1);
@@ -2898,7 +2925,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), minValue.AddDays(1), maxValue, DateTime.UnixEpoch };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
             await using var cmd = connection.CreateCommand("SELECT {param} v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
@@ -2932,8 +2959,9 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         }
 
 #if NET6_0_OR_GREATER
-        [Fact]
-        public async Task ReadDate32ParameterScalarNet6()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadDate32ParameterScalarNet6(ClickHouseParameterMode parameterMode)
         {
             var nowDateTime = DateTime.Now;
             var now = new DateOnly(nowDateTime.Year, nowDateTime.Month, nowDateTime.Day);
@@ -2941,7 +2969,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             var maxValue = new DateOnly(2283, 11, 11);
             var testData = new[] { now, default, new DateOnly(1980, 12, 15), new DateOnly(2015, 1, 1), minValue.AddDays(1), maxValue, DateOnly.FromDateTime(DateTime.UnixEpoch) };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
             await using var cmd = connection.CreateCommand("SELECT {param} AS v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
@@ -3065,12 +3093,13 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.Equal((object?)expectedValue ?? DBNull.Value, result);
         }
 
-        [Fact]
-        public async Task ReadBoolParameter()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadBoolParameter(ClickHouseParameterMode parameterMode)
         {
             var testData = new[] { false, true, (object?)null, DBNull.Value };
 
-            await using var connection = await OpenConnectionAsync();
+            await using var connection = await OpenConnectionAsync(parameterMode);
 
             var sb = new StringBuilder("SELECT ");
             var cmd = connection.CreateCommand();

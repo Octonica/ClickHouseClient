@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020 Octonica
+/* Copyright 2020, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,10 +36,12 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.IsAssignableFrom<ClickHouseParameter>(p);
 
             var cmd = Factory.CreateCommand();
+            Assert.NotNull(cmd);
             Assert.IsAssignableFrom<ClickHouseCommand>(cmd);
             cmd.Dispose();
 
             var cn = Factory.CreateConnection();
+            Assert.NotNull(cn);
             Assert.IsAssignableFrom<ClickHouseConnection>(cn);
             cn.Dispose();
 
@@ -47,10 +49,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.IsAssignableFrom<ClickHouseConnectionStringBuilder>(sb);
         }
 
-        [Fact]
-        public void CreateCommand()
+        [Theory]
+        [MemberData(nameof(ClickHouseTestsBase.ParameterModes), MemberType = typeof(ClickHouseTestsBase))]
+        public void CreateCommand(ClickHouseParameterMode parameterMode)
         {
-            var connectionString = ConnectionSettingsHelper.GetConnectionString();
+            var connectionString = ConnectionSettingsHelper.GetConnectionString(csb => csb.ParametersMode = parameterMode);
             var sb = Factory.CreateConnectionStringBuilder();
             Assert.NotNull(sb);
             sb.ConnectionString = connectionString;

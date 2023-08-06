@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,6 +25,12 @@ namespace Octonica.ClickHouseClient.Tests
     public abstract class ClickHouseTestsBase
     {
         private ClickHouseConnectionSettings? _settings;
+
+        public static readonly IReadOnlyCollection<object[]> ParameterModes = new[]
+        {
+            new object[] { ClickHouseParameterMode.Binary },
+            new object[] { ClickHouseParameterMode.Interpolate }
+        };
 
         public ClickHouseConnectionSettings GetDefaultConnectionSettings(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
         {
@@ -44,9 +51,14 @@ namespace Octonica.ClickHouseClient.Tests
             return connection;
         }
 
-        public async Task<ClickHouseConnection> OpenConnectionAsync(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
+        public Task<ClickHouseConnection> OpenConnectionAsync(ClickHouseParameterMode parameterMode, CancellationToken cancellationToken = default)
         {
-            return await OpenConnectionAsync(GetDefaultConnectionSettings(updateSettings), CancellationToken.None);
+            return OpenConnectionAsync(builder => builder.ParametersMode = parameterMode, cancellationToken);
+        }
+
+        public async Task<ClickHouseConnection> OpenConnectionAsync(Action<ClickHouseConnectionStringBuilder>? updateSettings = null, CancellationToken cancellationToken = default)
+        {
+            return await OpenConnectionAsync(GetDefaultConnectionSettings(updateSettings), cancellationToken);
         }
 
         public ClickHouseConnection OpenConnection(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)

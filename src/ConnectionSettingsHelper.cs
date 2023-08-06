@@ -1,5 +1,5 @@
 #region License Apache 2.0
-/* Copyright 2020-2022 Octonica
+/* Copyright 2020-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,9 +27,16 @@ namespace Octonica.ClickHouseClient
             return GetConnectionSettingsInternal(updateSettings).settings;
         }
 
-        public static string GetConnectionString(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)
+        public static string GetConnectionString()
         {
-            return GetConnectionSettingsInternal(updateSettings).connectionString;
+            return GetConnectionSettingsInternal(null).connectionString;
+        }
+
+        public static string GetConnectionString(Action<ClickHouseConnectionStringBuilder> updateSettings)
+        {
+            var settings = GetConnectionSettings(updateSettings);
+            var builder = new ClickHouseConnectionStringBuilder(settings);
+            return builder.ConnectionString;
         }
 
         private static (ClickHouseConnectionSettings settings, string connectionString) GetConnectionSettingsInternal(Action<ClickHouseConnectionStringBuilder>? updateSettings)

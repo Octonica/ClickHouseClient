@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,10 +61,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal<byte>(44, byteValue);
         }
 
-        [Fact]
-        public async Task Params()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task Params(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
             await using var cmd = cn.CreateCommand();
 
             cmd.CommandText =
@@ -101,10 +102,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.False(await reader.ReadAsync());
         }
 
-        [Fact]
-        public async Task MsSqlLikeParams()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task MsSqlLikeParams(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
             await using var cmd = cn.CreateCommand();
 
             cmd.CommandText =
@@ -141,12 +143,13 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.False(await reader.ReadAsync());
         }
 
-        [Fact]
-        public async Task EmptyStringParam()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task EmptyStringParam(ClickHouseParameterMode parameterMode)
         {
             const string query = @"select {url}, {data}";
 
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
             await using var cmd = cn.CreateCommand(query);
 
             cmd.Parameters.AddWithValue("url", "");
@@ -161,10 +164,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.False(await reader.ReadAsync());
         }
 
-        [Fact]
-        public async Task TypedParams()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task TypedParams(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             await using var cmd = cn.CreateCommand();
 
@@ -388,10 +392,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Empty(expectedValues);
         }
 
-        [Fact]
-        public async Task TableParameterAndScalarParameter()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task TableParameterAndScalarParameter(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT toInt32(number) FROM numbers(100000) WHERE number IN (SELECT {val}*val FROM param_table)");
 
@@ -414,10 +419,11 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Empty(expectedValues);
         }
 
-        [Fact]
-        public async Task MultipleTableParameters()
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task MultipleTableParameters(ClickHouseParameterMode parameterMode)
         {
-            await using var cn = await OpenConnectionAsync();
+            await using var cn = await OpenConnectionAsync(parameterMode);
 
             var cmd = cn.CreateCommand("SELECT T2.id AS id, T1.id AS user_id, T1.value AS user, T2.value AS ip FROM q_user AS T1 LEFT JOIN q_addr AS T2 ON T1.id = T2.user_id WHERE T2.id%{param} != 0 ORDER BY T2.id");
 
