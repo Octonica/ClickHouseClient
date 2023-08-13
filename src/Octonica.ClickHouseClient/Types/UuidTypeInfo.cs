@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -51,14 +50,16 @@ namespace Octonica.ClickHouseClient.Types
             return new UuidWriter(columnName, ComplexTypeName, (IReadOnlyList<Guid>)rows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
-            else if (value is Guid uuidValue)
-                queryStringBuilder.Append("'").Append(uuidValue).Append("'");
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+
+            if (type == typeof(Guid))
+                return (IClickHouseLiteralWriter<T>)(object)new StringLiteralWriter<Guid>(this, uuidValue => uuidValue.ToString().AsMemory());
+
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public override Type GetFieldType()

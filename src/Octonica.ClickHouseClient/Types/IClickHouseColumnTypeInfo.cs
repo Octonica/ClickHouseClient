@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,17 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         /// <param name="queryStringBuilder">Destination string builder</param>
         /// <param name="value">Value (or null) to be formatted. Value is of compatible type but not necessarily of exact type.</param>
-        void FormatValue(StringBuilder queryStringBuilder, object? value);
+        void FormatValue(StringBuilder queryStringBuilder, object? value)
+        {
+            var writer = ClickHouseParameterWriter.Dispatch(this, value);
+            writer.Interpolate(queryStringBuilder);
+        }
+
+        /// <summary>
+        /// Creates an instance of <see cref="IClickHouseLiteralWriter{T}"/> capable of writing a value of the type <typeparamref name="T"/>
+        /// as a literal of the ClickHouse type.
+        /// </summary>
+        /// <returns>The <see cref="IClickHouseLiteralWriter{T}"/> that can writer the value of the type <typeparamref name="T"/> as a literal.</returns>
+        IClickHouseLiteralWriter<T> CreateLiteralWriter<T>();
     }
 }

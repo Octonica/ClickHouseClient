@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,6 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -36,23 +34,28 @@ namespace Octonica.ClickHouseClient.Types
             return new DateWriter(columnName, ComplexTypeName, (IReadOnlyList<DateTime>)rows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            DateTime dateTimeValue = value switch
-            {
-                DateTime theValue => theValue,
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
-            };
-            
-            var days = dateTimeValue == default ? 0 : (dateTimeValue - DateTime.UnixEpoch).TotalDays;
-            
+            if (type == typeof(DateTime))
+                return (IClickHouseLiteralWriter<T>)(object)new SimpleLiteralWriter<DateTime, ushort>(this, DateTimeToDays);
+
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+        }
+
+        private static ushort DateTimeToDays(DateTime value)
+        {
+            if (value == default)
+                return 0;
+
+            var days = (value - DateTime.UnixEpoch).TotalDays;
             if (days < 0 || days > ushort.MaxValue)
                 throw new OverflowException("The value must be in range [1970-01-01, 2149-06-06].");
 
-            queryStringBuilder.Append(days.ToString(CultureInfo.InvariantCulture));
+            return (ushort)days;
         }
 
         public override Type GetFieldType()
@@ -88,14 +91,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ushort Convert(DateTime value)
             {
-                if (value == default)
-                    return 0;
-
-                var days = (value - DateTime.UnixEpoch).TotalDays;
-                if (days < 0 || days > ushort.MaxValue)
-                    throw new OverflowException("The value must be in range [1970-01-01, 2149-06-06].");
-
-                return (ushort)days;
+                return DateTimeToDays(value);
             }
         }
     }

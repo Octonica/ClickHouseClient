@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2022 Octonica
+/* Copyright 2020-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -190,66 +190,21 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            var precision = _precision ?? DefaultPrecision;
-            var _ticksScale = DateTimeTicksScales[precision];
-            var _ticksMaxValue = DateTimeTicksMaxValues[precision];
-
-            ulong ticks;
-            if (value is ulong tickValue)
+            object? converter = default(T) switch
             {
-                ticks = tickValue;
-            }
-            else if (value is DateTime dateTimeValue)
-            {
-                if (dateTimeValue == default)
-                {
-                    ticks = 0;
-                }
-                else
-                {
-                    var dateTimeTicks = (dateTimeValue - DateTime.UnixEpoch - GetTimeZone().GetUtcOffset(dateTimeValue)).Ticks;
-                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
-                        throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch:O}, {DateTime.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
+                ulong _ => null,
+                DateTime _ => new DateTimeWriter("dummy", ComplexTypeName, _precision ?? DefaultPrecision, GetTimeZone(), Array.Empty<DateTime>()),
+                DateTimeOffset _ => new DateTimeOffsetWriter("dummy", ComplexTypeName, _precision ?? DefaultPrecision, GetTimeZone(), Array.Empty<DateTimeOffset>()),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+            };
 
-                    if (_ticksScale < 0)
-                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
-                    else
-                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
-                }
-            }
-            else if (value is DateTimeOffset dateTimeOffsetValue)
-            {
-                if (value == default)
-                {
-                    ticks = 0;
-                }
-                else
-                {
-                    var offset = GetTimeZone().GetUtcOffset(dateTimeOffsetValue);
-                    var valueWithOffset = dateTimeOffsetValue.ToOffset(offset);
-                    var dateTimeTicks = (valueWithOffset - DateTimeOffset.UnixEpoch).Ticks;
-                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
-                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch:O}, {DateTimeOffset.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
-
-                    if (_ticksScale < 0)
-                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
-                    else
-                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
-                }
-            }
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
-            queryStringBuilder.Append("reinterpret(cast(");
-            queryStringBuilder.Append(ticks.ToString(CultureInfo.InvariantCulture));
-            queryStringBuilder.Append(",'Int64'),'");
-            queryStringBuilder.Append(ComplexTypeName.Replace("'", "''"));
-            queryStringBuilder.Append("')");
+            return new DateTime64LiteralWriter<T>(this, (IConverter<T, ulong>?)converter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -313,7 +268,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeWriter : StructureWriterBase<DateTime, ulong>
+        private sealed class DateTimeWriter : StructureWriterBase<DateTime, ulong>, IConverter<DateTime, ulong>
         {
             private readonly int _ticksScale;
             private readonly long _ticksMaxValue;
@@ -326,6 +281,8 @@ namespace Octonica.ClickHouseClient.Types
                 _ticksMaxValue = DateTimeTicksMaxValues[precision];
                 _timeZone = timeZone;
             }
+
+            ulong IConverter<DateTime, ulong>.Convert(DateTime value) => Convert(value);
 
             protected override ulong Convert(DateTime value)
             {
@@ -350,7 +307,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, ulong>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, ulong>, IConverter<DateTimeOffset, ulong>
         {
             private readonly int _ticksScale;
             private readonly long _ticksMaxValue;
@@ -363,6 +320,8 @@ namespace Octonica.ClickHouseClient.Types
                 _ticksMaxValue = DateTimeTicksMaxValues[precision];
                 _timeZone = timeZone;
             }
+
+            ulong IConverter<DateTimeOffset, ulong>.Convert(DateTimeOffset value) => Convert(value);
 
             protected override ulong Convert(DateTimeOffset value)
             {
@@ -386,6 +345,63 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 return ticks;
+            }
+        }
+
+        private sealed class DateTime64LiteralWriter<T> : IClickHouseLiteralWriter<T>
+        {
+            private readonly DateTime64TypeInfo _typeInfo;
+            private readonly IConverter<T, ulong>? _converter;
+
+            public DateTime64LiteralWriter(DateTime64TypeInfo typeInfo, IConverter<T, ulong>? converter)
+            {
+                Debug.Assert(converter != null || typeof(T) == typeof(ulong));
+
+                _typeInfo = typeInfo;
+                _converter = converter;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                var ticks = Convert(value);
+
+                queryBuilder.Append("reinterpret(cast(");
+                queryBuilder.Append(ticks.ToString(CultureInfo.InvariantCulture));
+                queryBuilder.Append(",'Int64'),'");
+                queryBuilder.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
+                queryBuilder.Append("')");
+
+                return queryBuilder;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                var ticksType = typeInfoProvider.GetTypeInfo("Int64");
+
+                queryBuilder.Append("reinterpret(");
+                writeValue(queryBuilder, ticksType);
+                queryBuilder.Append(",'");
+                queryBuilder.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
+                queryBuilder.Append("')");
+
+                return queryBuilder;
+            }
+
+            public SequenceSize Write(Memory<byte> buffer, T value)
+            {
+                throw new NotImplementedException();
+            }
+
+            private ulong Convert(T value)
+            {
+                if (_converter == null)
+                {
+                    Debug.Assert(typeof(T) == typeof(ulong));
+                    Debug.Assert(value != null);
+                    return (ulong)(object)value;
+                }
+
+                return _converter.Convert(value);
             }
         }
     }

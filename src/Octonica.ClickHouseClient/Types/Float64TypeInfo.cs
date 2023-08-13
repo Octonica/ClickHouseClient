@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -56,19 +54,20 @@ namespace Octonica.ClickHouseClient.Types
             return new Float64Writer(columnName, ComplexTypeName, doubleRows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
+            var type = typeof(T);
+            if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
 
-            double outputValue = value switch
+            object writer = default(T) switch
             {
-                double theValue => theValue,
-                float theValue => theValue,
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+                double _ => HexStringLiteralWriter.Create<double>(this),
+                float _ => HexStringLiteralWriter.Create<float, double>(this, v => v),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
 
-            queryStringBuilder.Append('\'').Append(outputValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override Type GetFieldType()

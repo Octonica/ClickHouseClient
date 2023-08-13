@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,48 +84,20 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            uint seconds;
-            if (value is DateTime dateTimeValue)
+            object converter = default(T) switch
             {
-                if (dateTimeValue == default)
-                {
-                    seconds = 0;
-                }
-                else
-                {
-                    var doubleSeconds = (dateTimeValue - DateTime.UnixEpoch).TotalSeconds - GetTimeZone().GetUtcOffset(dateTimeValue).TotalSeconds;
-                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
-                        throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
-                    
-                    seconds = (uint) doubleSeconds;
-                }
-            }
-            else if (value is DateTimeOffset dateTimeOffsetValue)
-            {
-                if (dateTimeOffsetValue == default)
-                {
-                    seconds = 0;
-                }
-                else
-                {
-                    var offset = GetTimeZone().GetUtcOffset(dateTimeOffsetValue);
-                    var valueWithOffset = dateTimeOffsetValue.ToOffset(offset);
-                    var doubleSeconds = (valueWithOffset - DateTimeOffset.UnixEpoch).TotalSeconds;
-                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
-                        throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
-                    
-                    seconds = (uint)doubleSeconds;
-                }
-            }
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+                DateTime _ => new DateTimeWriter("dummy", ComplexTypeName, GetTimeZone(), Array.Empty<DateTime>()),
+                DateTimeOffset _ => new DateTimeOffsetWriter("dummy", ComplexTypeName, GetTimeZone(), Array.Empty<DateTimeOffset>()),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+            };
 
-            queryStringBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
+            return new DateTimeLiteralWriter<T>(this, (IConverter<T, uint>)converter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -203,7 +175,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeWriter : StructureWriterBase<DateTime, uint>
+        private sealed class DateTimeWriter : StructureWriterBase<DateTime, uint>, IConverter<DateTime, uint>
         {
             private readonly TimeZoneInfo _timeZone;
 
@@ -211,6 +183,11 @@ namespace Octonica.ClickHouseClient.Types
                 : base(columnName, columnType, sizeof(uint), rows)
             {
                 _timeZone = timeZone;
+            }
+
+            uint IConverter<DateTime, uint>.Convert(DateTime value)
+            {
+                return Convert(value);
             }
 
             protected override uint Convert(DateTime value)
@@ -233,7 +210,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, uint>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, uint>, IConverter<DateTimeOffset, uint>
         {
             private readonly TimeZoneInfo _timeZone;
 
@@ -241,6 +218,11 @@ namespace Octonica.ClickHouseClient.Types
                 : base(columnName, columnType, sizeof(uint), rows)
             {
                 _timeZone = timeZone;
+            }
+
+            uint IConverter<DateTimeOffset, uint>.Convert(DateTimeOffset value)
+            {
+                return Convert(value);
             }
 
             protected override uint Convert(DateTimeOffset value)
@@ -262,6 +244,37 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 return seconds;
+            }
+        }
+
+        private sealed class DateTimeLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        {
+            private readonly DateTimeTypeInfo _typeInfo;
+            private readonly IConverter<T, uint> _converter;
+
+            public DateTimeLiteralWriter(DateTimeTypeInfo typeInfo, IConverter<T, uint> converter)
+            {
+                _typeInfo = typeInfo;
+                _converter = converter;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                var seconds = _converter.Convert(value);
+                queryBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
+                return queryBuilder;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                var ticksType = typeInfoProvider.GetTypeInfo("UInt32");
+                writeValue(queryBuilder, ticksType);
+                return queryBuilder;
+            }
+
+            public SequenceSize Write(Memory<byte> buffer, T value)
+            {
+                throw new NotImplementedException();
             }
         }
     }

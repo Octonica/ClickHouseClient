@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
+using System.Runtime.CompilerServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -59,41 +60,23 @@ namespace Octonica.ClickHouseClient.Types
 
             return new IpV6Writer(columnName, TypeName, preparedRows);
         }
-        
-        const string HexDigits = "0123456789ABCDEF";
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (typeof(T) == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            IPAddress ipAddress = value switch
-            {
-                IPAddress theValue => theValue,
-                string theValue => ParseIpAddress(theValue),
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
-            };
+            var binaryTypeName = $"FixedString({AddressSize.ToString(CultureInfo.InvariantCulture)})";
+            object writer;
+            if (type == typeof(IPAddress))
+                writer = new HexStringLiteralWriter<IPAddress>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(theValue));
+            else if (type == typeof(string))
+                writer = new HexStringLiteralWriter<string>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(ParseIpAddress(theValue)));
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
-                ipAddress = ipAddress.MapToIPv6();
-
-            if (ipAddress.AddressFamily != AddressFamily.InterNetworkV6)
-                throw new InvalidCastException($"The network address \"{ipAddress}\" is not a IPv6 address.");
-
-            Span<byte> buffer = stackalloc byte[AddressSize];
-
-            if (!ipAddress.TryWriteBytes(buffer, out var bytesWritten) || bytesWritten != AddressSize)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: IPv6 address writing error.");
-
-            queryStringBuilder.Append('\'');
-            foreach (var byteValue in buffer)
-            {
-                queryStringBuilder.Append("\\x");
-                queryStringBuilder.Append(HexDigits[byteValue >> 4]);
-                queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
-            }
-            
-            queryStringBuilder.Append('\'');
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override Type GetFieldType()
@@ -116,6 +99,26 @@ namespace Octonica.ClickHouseClient.Types
                 throw new InvalidCastException($"The string \"{address}\" is not a valid IPv4 address.");
 
             return ipAddress;
+        }
+
+        private static byte[] GetBytes(IPAddress ipAddress)
+        {
+            var buffer = new byte[AddressSize];
+            WriteBytes(buffer, ipAddress);
+            return buffer;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteBytes(Span<byte> writeTo, IPAddress ipAddress)
+        {
+            if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
+                ipAddress = ipAddress.MapToIPv6();
+
+            if (ipAddress.AddressFamily != AddressFamily.InterNetworkV6)
+                throw new InvalidCastException($"The network address \"{ipAddress}\" is not a IPv6 address.");
+
+            if (!ipAddress.TryWriteBytes(writeTo, out var bytesWritten) || bytesWritten != AddressSize)
+                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: IPv6 address writing error.");
         }
 
         private sealed class IpV6Reader : IpColumnReaderBase
@@ -161,14 +164,7 @@ namespace Octonica.ClickHouseClient.Types
                         continue;
                     }
 
-                    if (ipAddress.AddressFamily == AddressFamily.InterNetwork)
-                        ipAddress = ipAddress.MapToIPv6();
-
-                    if (ipAddress.AddressFamily != AddressFamily.InterNetworkV6)
-                        throw new InvalidCastException($"The network address \"{ipAddress}\" is not a IPv6 address.");
-
-                    if (!ipAddress.TryWriteBytes(writeTo.Slice(i * AddressSize), out var bytesWritten) || bytesWritten != AddressSize)
-                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: IPv6 address writing error.");
+                    WriteBytes(writeTo.Slice(i * AddressSize), ipAddress);
                 }
 
                 return new SequenceSize(elementsCount * AddressSize, elementsCount);

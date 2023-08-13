@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -64,25 +62,25 @@ namespace Octonica.ClickHouseClient.Types
             return new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             // TODO: ClickHouseDbType.Enum is not supported in DefaultTypeInfoProvider.GetTypeInfo
-            
             if (_enumMap == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
-            
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
 
-            sbyte outputValue = value switch
-            {
-                string theValue => _enumMap.TryGetValue(theValue, out var tmp) ? tmp :
-                    throw new InvalidCastException($"The value \"{theValue}\" can't be converted to {ComplexTypeName}."),
-                sbyte theValue => theValue,
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
-            };
+            var type = typeof(T);
+            if (typeof(T) == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            queryStringBuilder.Append(outputValue.ToString(CultureInfo.InvariantCulture));
+            object writer;
+            if (type == typeof(string))
+                writer = new EnumLiteralWriter(this);
+            else if (type == typeof(sbyte))
+                writer = new SimpleLiteralWriter<sbyte>(this);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         protected override bool TryParse(ReadOnlySpan<char> text, out sbyte value)

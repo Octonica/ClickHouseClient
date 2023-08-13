@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,62 +76,32 @@ namespace Octonica.ClickHouseClient.Types
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
-        
-        const string HexDigits = "0123456789ABCDEF";
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
-            else if (value is string stringValue)
-                FormatCharString(stringValue);
-            else if (value is char[] charArrValue)
-                FormatCharString(charArrValue);
-            else if (value is ReadOnlyMemory<char> charRoMemValue)
-                FormatCharString(charRoMemValue.Span);
-            else if (value is Memory<char> charMemValue)
-                FormatCharString(charMemValue.Span);
-            else if (value is byte[] byteArrValue)
-                FormatByteString(byteArrValue);
-            else if (value is ReadOnlyMemory<byte> byteRoMemValue)
-                FormatByteString(byteRoMemValue.Span);
-            else if (value is Memory<byte> byteMemValue)
-                FormatByteString(byteMemValue.Span);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            void FormatCharString(ReadOnlySpan<char> data)
-            {
-                queryStringBuilder.Append('\'');
-                foreach (var charValue in data)
-                {
-                    switch (charValue)
-                    {
-                        case '\\':
-                            queryStringBuilder.Append("\\\\");
-                            break;
-                        case '\'':
-                            queryStringBuilder.Append("''");
-                            break;
-                        default:
-                            queryStringBuilder.Append(charValue);
-                            break;
-                    }
-                }
-                queryStringBuilder.Append('\'');
-            }
-            
-            void FormatByteString(ReadOnlySpan<byte> data)
-            {
-                queryStringBuilder.Append('\'');
-                foreach (var byteValue in data)
-                {
-                    queryStringBuilder.Append("\\x");
-                    queryStringBuilder.Append(HexDigits[byteValue >> 4]);
-                    queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
-                }
-                queryStringBuilder.Append('\'');
-            }
+            object writer;
+            if (type == typeof(string))
+                writer = new StringLiteralWriter<string>(this, str => str.AsMemory());
+            else if (type == typeof(char[]))
+                writer = new StringLiteralWriter<char[]>(this, arr => arr);
+            else if (type == typeof(ReadOnlyMemory<char>))
+                writer = new StringLiteralWriter(this);
+            else if (type == typeof(Memory<char>))
+                writer = new StringLiteralWriter<Memory<char>>(this, mem => mem);
+            else if (type == typeof(byte[]))
+                writer = new HexStringLiteralWriter<byte[]>(this, arr => arr);
+            else if (type == typeof(ReadOnlyMemory<byte>))
+                writer = new HexStringLiteralWriter(this);
+            else if (type == typeof(Memory<byte>))
+                writer = new HexStringLiteralWriter<Memory<byte>>(this, mem => mem);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override Type GetFieldType()

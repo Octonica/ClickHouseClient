@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -49,28 +47,33 @@ namespace Octonica.ClickHouseClient.Types
             return new Date32Writer(columnName, ComplexTypeName, dateOnlyRows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            int days;
-
-            if (value is DateOnly dateOnlyValue)
-                days = dateOnlyValue == default ?
-                    MinValue :
-                    dateOnlyValue.DayNumber - UnixEpoch.DayNumber;
-            else if (value is DateTime dateTimeValue)
-                days = dateTimeValue == default ?
-                    MinValue :
-                    DateOnly.FromDateTime(dateTimeValue).DayNumber - UnixEpoch.DayNumber;
+            object writer;
+            if (type == typeof(DateOnly))
+                writer = new SimpleLiteralWriter<DateOnly, int>(this, DateOnlyToDays);
+            else if (type == typeof(DateTime))
+                writer = new SimpleLiteralWriter<DateTime, int>(this, dt => DateOnlyToDays(DateOnly.FromDateTime(dt)));
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            return (IClickHouseLiteralWriter<T>)writer;
+        }
+
+        private static int DateOnlyToDays(DateOnly value)
+        {
+            if (value == default)
+                return MinValue;
+
+            var days = value.DayNumber - UnixEpoch.DayNumber;
             if (days < MinValue || days > MaxValue)
                 throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
 
-            queryStringBuilder.Append(days.ToString(CultureInfo.InvariantCulture));
+            return days;
         }
 
         partial class Date32Reader : StructureReaderBase<int, DateOnly>
@@ -90,14 +93,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override int Convert(DateOnly value)
             {
-                if (value == default)
-                    return MinValue;
-
-                var days = value.DayNumber - UnixEpoch.DayNumber;
-                if (days < MinValue || days > MaxValue)
-                    throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
-
-                return days;
+                return DateOnlyToDays(value);
             }
         }
     }

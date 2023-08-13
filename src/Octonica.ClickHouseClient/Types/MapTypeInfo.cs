@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -30,7 +31,7 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class MapTypeInfo : IClickHouseColumnTypeInfo
     {
         // Map(key, value) is the alias for Array(Tuple(key, value))
-        private KeyValuePair<IClickHouseColumnTypeInfo, IClickHouseColumnTypeInfo>? _typeArgs;        
+        private readonly KeyValuePair<IClickHouseColumnTypeInfo, IClickHouseColumnTypeInfo>? _typeArgs;
         private readonly IClickHouseColumnTypeInfo? _underlyingType;
 
         public string ComplexTypeName { get; }
@@ -104,18 +105,19 @@ namespace Octonica.ClickHouseClient.Types
             return new MapColumnWriter(underlyingWriter);
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             // TODO: ClickHouseDbType.Map is not supported in DefaultTypeInfoProvider.GetTypeInfo
-            
+
             if (_underlyingType == null || _typeArgs == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-            
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             Type? dictionaryItf = null;
-            foreach (var itf in value.GetType().GetInterfaces())
+            foreach (var itf in type.GetInterfaces())
             {
                 if (itf.IsGenericType && itf.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
                 {
@@ -128,63 +130,16 @@ namespace Octonica.ClickHouseClient.Types
                     dictionaryItf = itf;
                 }
             }
+
             if (dictionaryItf == null)
-            {
-                _underlyingType.FormatValue(queryStringBuilder, value);
-            }
-            else
-            {
-                if (!(_underlyingType is ArrayTypeInfo arrayTypeInfo) ||
-                    !(arrayTypeInfo.GetGenericArgument(0) is TupleTypeInfo tupleTypeInfo) ||
-                    tupleTypeInfo.GenericArgumentsCount != 2)
-                {
-                    
-                }
-                var mapFormatter = (MapFormatterBase) Activator.CreateInstance(typeof(MapFormatter<,>).MakeGenericType(dictionaryItf.GetGenericArguments()))!;
-                queryStringBuilder.Append("{");
-                var keyType = _typeArgs.Value.Key;
-                var valueType = _typeArgs.Value.Value;
-                mapFormatter.Format(keyType, valueType, queryStringBuilder, value);
-                queryStringBuilder.Append("}");
-            }
-        }
+                return _underlyingType.CreateLiteralWriter<T>();
 
-        abstract class MapFormatterBase
-        {
-            public abstract void Format(IClickHouseColumnTypeInfo keyType, IClickHouseColumnTypeInfo valueType, StringBuilder queryStringBuilder, object map);
-        }
+            var dispatcherTypeArgs = new[] { type }.Concat(dictionaryItf.GetGenericArguments()).ToArray();
+            var dispatcherType = typeof(LiteralDictionaryDispatcher<,,>).MakeGenericType(dispatcherTypeArgs);
+            var dispatcher = (IDictionaryLiteralWirterDispatcher?)Activator.CreateInstance(dispatcherType);
+            Debug.Assert(dispatcher != null);
 
-        class MapFormatter<TKey, TValue> : MapFormatterBase where TKey : notnull
-        {
-            public override void Format(IClickHouseColumnTypeInfo keyType, IClickHouseColumnTypeInfo valueType, StringBuilder queryStringBuilder, object untypedMap)
-            {
-                var map = (IReadOnlyDictionary<TKey, TValue>) untypedMap;
-                queryStringBuilder.Append("tuple([");
-                {
-                    var needComma = false;
-                    foreach (var (key, _) in map)
-                    {
-                        if (needComma)
-                            queryStringBuilder.Append(',');
-                        else
-                            needComma = true;
-                        keyType.FormatValue(queryStringBuilder, key);
-                    }
-                }
-                queryStringBuilder.Append("],[");
-                {
-                    var needComma = false;
-                    foreach (var (_, value) in map)
-                    {
-                        if (needComma)
-                            queryStringBuilder.Append(',');
-                        else
-                            needComma = true;
-                        keyType.FormatValue(queryStringBuilder, value);
-                    }
-                }
-                queryStringBuilder.Append("])");
-            }
+            return dispatcher.Dispatch<T>(this);
         }
 
         public ClickHouseDbType GetDbType()
@@ -324,6 +279,77 @@ namespace Octonica.ClickHouseClient.Types
                     listOfLists[i] = ((IEnumerable<KeyValuePair<TKey, TValue>>)dictionaryList[i]).ToArray();
                     
                 return underlyingType.CreateColumnWriter(columnName, listOfLists, columnSettings);
+            }
+        }
+
+        private interface IDictionaryLiteralWirterDispatcher
+        {
+            IClickHouseLiteralWriter<T> Dispatch<T>(MapTypeInfo typeInfo);
+        }
+
+        private sealed class LiteralDictionaryDispatcher<TDictionary, TKey, TValue> : IDictionaryLiteralWirterDispatcher
+            where TKey : notnull
+            where TDictionary: IReadOnlyDictionary<TKey, TValue>
+        {
+            public IClickHouseLiteralWriter<T> Dispatch<T>(MapTypeInfo typeInfo)
+            {
+                Debug.Assert(typeof(T) == typeof(TDictionary));
+                Debug.Assert(typeInfo._typeArgs != null);
+                var (keyType, valueType) = typeInfo._typeArgs.Value;
+
+                var keyWriter = keyType.CreateLiteralWriter<TKey>();
+                var valueWriter = valueType.CreateLiteralWriter<TValue>();
+                var writer = new MapLiteralWriter<TDictionary, TKey, TValue>(typeInfo, keyWriter, valueWriter);
+
+                return (IClickHouseLiteralWriter<T>)(object)writer;
+            }
+        }
+
+        private sealed class MapLiteralWriter<TDictionary, TKey, TValue> : IClickHouseLiteralWriter<TDictionary>
+            where TKey : notnull
+            where TDictionary : IReadOnlyDictionary<TKey, TValue>
+        {
+            private readonly MapTypeInfo _mapType;
+            private readonly IClickHouseLiteralWriter<TKey> _keyWriter;
+            private readonly IClickHouseLiteralWriter<TValue> _valueWriter;
+
+            public MapLiteralWriter(MapTypeInfo mapType, IClickHouseLiteralWriter<TKey> keyWriter, IClickHouseLiteralWriter<TValue> valueWriter)
+            {
+                _mapType = mapType;
+                _keyWriter = keyWriter;
+                _valueWriter = valueWriter;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, TDictionary dictionary)
+            {
+                queryBuilder.Append("{tuple([");
+                var valuesBuilder = new StringBuilder();
+
+                var isFirst = true;
+                foreach (var (key, value) in dictionary)
+                {
+                    if (isFirst)
+                        isFirst = false;
+                    else
+                        queryBuilder.Append(',');
+
+                    _keyWriter.Interpolate(queryBuilder, key);
+                    _valueWriter.Interpolate(valuesBuilder, value);
+                }
+
+                queryBuilder.Append("],[");
+                queryBuilder.Append(valuesBuilder);
+                return queryBuilder.Append("])}");
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                throw new NotImplementedException();
+            }
+
+            public SequenceSize Write(Memory<byte> buffer, TDictionary dictionary)
+            {
+                throw new NotImplementedException();
             }
         }
     }

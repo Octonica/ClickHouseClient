@@ -15,8 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -47,6 +49,8 @@ namespace Octonica.ClickHouseClient.Protocol
         // https://github.com/ClickHouse/ClickHouse/blob/master/dbms/src/Core/Settings.h
         public IReadOnlyCollection<KeyValuePair<string, string>>? Settings { get; }
 
+        public IReadOnlyCollection<KeyValuePair<string, ClickHouseParameterWriter>>? Parameters { get; }
+
         private ClientQueryMessage(Builder builder)
         {
             QueryKind = builder.QueryKind ?? throw new ArgumentException("The kind of the query is required.", nameof(QueryKind));
@@ -60,6 +64,7 @@ namespace Octonica.ClickHouseClient.Protocol
             Query = builder.Query ?? throw new ArgumentException("The query is required.", nameof(Query));
             CompressionEnabled = builder.CompressionEnabled ?? throw new ArgumentException("Unknown compression mode.", nameof(CompressionEnabled));
             Settings = builder.Settings == null || builder.Settings.Count == 0 ? null : builder.Settings;
+            Parameters = builder.Parameters == null || builder.Parameters.Count == 0 ? null : builder.Parameters;
         }
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
@@ -146,6 +151,32 @@ namespace Octonica.ClickHouseClient.Protocol
             writer.WriteBool(CompressionEnabled);
 
             writer.WriteString(Query);
+
+            if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParameters)
+            {
+                if (Parameters != null)
+                {
+                    const int isCustomFlag = 0x2;
+                    foreach (var pair in Parameters)
+                    {
+                        writer.WriteString(pair.Key);
+                        writer.Write7BitInt32(isCustomFlag);
+                        var size = writer.WriteRaw(pair.Value.Write);
+                        Debug.Assert(size.Elements == 1);
+                    }
+                }
+
+                writer.WriteString(string.Empty); // empty string is a marker of the end of parameters
+            }
+            else if (Parameters != null)
+            {
+                var errMsg =
+                    "The server doesn't support parameters in the query. " +
+                    $"This error is caused by one or more parameters passed in the mode \"{nameof(ClickHouseParameterMode.Literal)}\". " +
+                    $"Only \"{nameof(ClickHouseParameterMode.Binary)}\" or \"{nameof(ClickHouseParameterMode.Interpolate)}\" modes are supported.";
+
+                throw new ClickHouseException(ClickHouseErrorCodes.ProtocolRevisionNotSupported, errMsg);
+            }
         }
 
         public class Builder
@@ -204,6 +235,11 @@ namespace Octonica.ClickHouseClient.Protocol
             /// Optional
             /// </summary>
             public IReadOnlyCollection<KeyValuePair<string, string>>? Settings { get; set; }
+
+            /// <summary>
+            /// Optional
+            /// </summary>
+            public IReadOnlyCollection<KeyValuePair<string, ClickHouseParameterWriter>>? Parameters { get; set; }
 
             public ClientQueryMessage Build()
             {

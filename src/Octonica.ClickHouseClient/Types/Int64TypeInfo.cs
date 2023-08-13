@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,23 +67,24 @@ namespace Octonica.ClickHouseClient.Types
             return new Int64Writer(columnName, ComplexTypeName, longRows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            long outputValue = value switch
+            object writer = default(T) switch
             {
-                long theValue => theValue,
-                int theValue => theValue,
-                short theValue => theValue,
-                ushort theValue => theValue,
-                sbyte theValue => theValue,
-                byte theValue => theValue,
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+                long _ => new SimpleLiteralWriter<long>(this),
+                int _ => new SimpleLiteralWriter<int>(this),
+                short _ => new SimpleLiteralWriter<short>(this),
+                ushort _ => new SimpleLiteralWriter<ushort>(this),
+                sbyte _ => new SimpleLiteralWriter<sbyte>(this),
+                byte _ => new SimpleLiteralWriter<byte>(this),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
-            
-            queryStringBuilder.Append(outputValue.ToString(CultureInfo.InvariantCulture));
+
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override Type GetFieldType()

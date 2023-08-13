@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2022 Octonica
+/* Copyright 2022-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// This value indicates that the mode should be inherited.
         /// <see cref="ClickHouseParameter">Parameters</see> inherit the mode from a <see cref="ClickHouseCommand">command</see>.
-        /// A <see cref="ClickHouseCommand">command</see> inherits the mode from a <see cref="ClickHouseCommand">connection</see>.
-        /// For a <see cref="ClickHouseCommand">connection</see> this value is equivalent to <see cref="Default"/>.
+        /// A <see cref="ClickHouseCommand">command</see> inherits the mode from a <see cref="ClickHouseConnection">connection</see>.
+        /// For a <see cref="ClickHouseConnection">connection</see> this value is equivalent to <see cref="Default"/>.
         /// </summary>
         Inherit = 1,
 
@@ -50,7 +50,17 @@ namespace Octonica.ClickHouseClient
         /// <remarks>
         /// In this mode parameters' values will be interpolated to the query string as constant literals.
         /// This mode allows to use parameters in any part of the query where a constant is allowed.
+        /// For sending parameters without modifying the query use the mode <see cref="Literal"/>.
         /// </remarks>
-        Interpolate = 3
+        Interpolate = 3,
+
+        /// <summary>
+        /// This value indicates that parameters should be passed as key-value pairs where values are literals.
+        /// Parameters will not be inlined to the query.
+        /// </summary>
+        /// <remarks>
+        /// Unlike other modes this one relies on the server-side support. An error will be raised if the server doesn't support this mode.
+        /// </remarks>
+        Literal = 4,
     }
 }

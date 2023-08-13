@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,15 +86,12 @@ namespace Octonica.ClickHouseClient.Types
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-            
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
 
-            _baseType.FormatValue(queryStringBuilder, value);
+            return _baseType.CreateLiteralWriter<T>();
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

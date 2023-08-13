@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,9 +47,13 @@ namespace Octonica.ClickHouseClient.Types
             return new NothingColumnWriter(columnName, ComplexTypeName, rows.Count);
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"The ClickHouse type \"{ComplexTypeName}\" does not have any values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                return (IClickHouseLiteralWriter<T>)(object)NothingLiteralWriter.Instance;
+
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -124,6 +128,30 @@ namespace Octonica.ClickHouseClient.Types
 
                 _position += size;
                 return new SequenceSize(size, size);
+            }
+        }
+
+        internal sealed class NothingLiteralWriter : IClickHouseLiteralWriter<DBNull>
+        {
+            public static readonly NothingLiteralWriter Instance = new NothingLiteralWriter();
+
+            private NothingLiteralWriter()
+            {
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DBNull value)
+            {
+                return queryBuilder.Append("null");
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                return queryBuilder.Append("null");
+            }
+
+            public SequenceSize Write(Memory<byte> buffer, DBNull value)
+            {
+                throw new NotImplementedException();
             }
         }
     }

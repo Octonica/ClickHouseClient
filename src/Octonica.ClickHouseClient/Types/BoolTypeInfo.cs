@@ -20,7 +20,6 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -62,20 +61,21 @@ namespace Octonica.ClickHouseClient.Types
             return new BoolWriter(columnName, ComplexTypeName, typedList);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
+            var type = typeof(T);
+            if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            if (!(value is bool val))
-            {
-                if (value is byte b)
-                    val = b != 0;
-                else 
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            }
+            object writer;
+            if (type == typeof(bool))
+                writer = new SimpleLiteralWriter<bool, byte>(this, appendTypeCast: true, boolValue => boolValue ? (byte)1 : (byte)0);
+            else if (type == typeof(byte))
+                writer = new SimpleLiteralWriter<byte>(this, appendTypeCast: true);
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            queryStringBuilder.Append(val ? '1' : '0').Append("::Bool");
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override ClickHouseDbType GetDbType()
