@@ -17,6 +17,7 @@
 
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -357,8 +358,13 @@ namespace Octonica.ClickHouseClient.Types
             protected override void WriteElement(Span<byte> writeTo, in decimal value)
             {
                 var rescaledValue = Math.Round(value, Math.Min(_scale, MaxDecimalScale), MidpointRounding.AwayFromZero);
+                
+#if NET5_0_OR_GREATER
+                Span<int> bits = stackalloc int[4];
+                decimal.GetBits(rescaledValue, bits);
+#else
                 var bits = decimal.GetBits(rescaledValue);
-
+#endif
                 uint lowLow = unchecked((uint) bits[0]);
                 uint lowHigh = unchecked((uint) bits[1]);
                 uint highLow = unchecked((uint) bits[2]);
