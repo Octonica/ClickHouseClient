@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -361,6 +362,14 @@ namespace Octonica.ClickHouseClient.Types
                 _converter = converter;
             }
 
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var ticks = Convert(value);
+                var str = ticks.ToString(CultureInfo.InvariantCulture);
+                valueWriter = new SimpleLiteralValueWriter(str.AsMemory());
+                return true;
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
                 var ticks = Convert(value);
@@ -385,11 +394,6 @@ namespace Octonica.ClickHouseClient.Types
                 queryBuilder.Append("')");
 
                 return queryBuilder;
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                throw new NotImplementedException();
             }
 
             private ulong Convert(T value)

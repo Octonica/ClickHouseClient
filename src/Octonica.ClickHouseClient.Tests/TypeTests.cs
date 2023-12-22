@@ -1688,6 +1688,37 @@ namespace Octonica.ClickHouseClient.Tests
 
         [Theory]
         [MemberData(nameof(ParameterModes))]
+        public async Task ReadRandomFixedStringParameterScalar(ClickHouseParameterMode parameterMode)
+        {
+            Memory<byte> parameterValue = new byte[11];
+
+            await using var connection = await OpenConnectionAsync(parameterMode);
+
+            await using var cmd = connection.CreateCommand("SELECT {param}");
+            var param = new ClickHouseParameter("param") { DbType = DbType.StringFixedLength, Size = parameterValue.Length, Value = parameterValue };
+            cmd.Parameters.Add(param);
+
+            var random = new Random();
+            for (int i = 0; i < 512;)
+            {
+                if (i <= 256)
+                {
+                    for (int j = 0; j < parameterValue.Length; j++)
+                        parameterValue.Span[j] = (byte)(i++ % 256);
+                }
+                else
+                {
+                    for (int j = 0; j < parameterValue.Length; i++, j++)
+                        parameterValue.Span[j] = (byte)random.Next(257);
+                }
+
+                var value = await cmd.ExecuteScalarAsync<byte[]>();
+                Assert.Equal(parameterValue.ToArray(), value);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
         public async Task ReadGuidParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var parameterValue = Guid.Parse("7FCFFE2D-E9A6-49E0-B8ED-9617603F5584");
@@ -1698,7 +1729,7 @@ namespace Octonica.ClickHouseClient.Tests
             var param = new ClickHouseParameter("param") { DbType = DbType.Guid };
             cmd.Parameters.Add(param);
             param.Value = parameterValue;
-            
+             
             var result = await cmd.ExecuteScalarAsync<Guid>();
             Assert.Equal(parameterValue, result);
         }
@@ -2063,7 +2094,7 @@ namespace Octonica.ClickHouseClient.Tests
         public async Task ReadDoubleParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var testData = new[]
-                {double.MinValue, double.MaxValue, double.Epsilon * 2, -double.Epsilon * 2, 1, -1, Math.PI, Math.Exp(1)};
+                {Math.Exp(1), double.MinValue, double.MaxValue, double.Epsilon * 2, -double.Epsilon * 2, 1, -1, Math.PI, };
 
             await using var connection = await OpenConnectionAsync(parameterMode);
 
@@ -2147,12 +2178,24 @@ namespace Octonica.ClickHouseClient.Tests
             object[] values =
             {
                 sbyte.MinValue, sbyte.MaxValue, (sbyte) 0,
-                byte.MinValue, byte.MaxValue, 
+                (short) sbyte.MinValue, (short) sbyte.MaxValue,
+                (int) sbyte.MinValue, (int) sbyte.MaxValue,
+                (long) sbyte.MinValue, (long) sbyte.MaxValue,
+                byte.MinValue, byte.MaxValue,
+                (ushort) byte.MaxValue,
+                (uint) byte.MaxValue,
+                (ulong) byte.MaxValue,
                 short.MinValue, short.MaxValue, (short) 0,
+                (int) short.MinValue, (int) short.MaxValue,
+                (long) short.MinValue, (long) short.MaxValue,
                 ushort.MinValue, ushort.MaxValue,
+                (uint) ushort.MaxValue,
+                (ulong) ushort.MaxValue,
                 int.MinValue, int.MaxValue, (int) 0,
+                (long) int.MinValue, (long) int.MaxValue,
                 uint.MinValue, uint.MaxValue,
-                long.MinValue, long.MaxValue, (long) 0, 
+                (ulong) uint.MaxValue,
+                long.MinValue, long.MaxValue, (long) 0,
                 ulong.MinValue, ulong.MaxValue
             };
 
@@ -2167,7 +2210,7 @@ namespace Octonica.ClickHouseClient.Tests
                 var result = await cmd.ExecuteScalarAsync();
 
                 Assert.IsType(value.GetType(), result);
-                Assert.Equal(result, value);
+                Assert.Equal(value, result);
             }
         }
 
@@ -2927,8 +2970,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             await using var connection = await OpenConnectionAsync(parameterMode);
 
-            // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
-            await using var cmd = connection.CreateCommand("SELECT {param} v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
+            await using var cmd = connection.CreateCommand("SELECT {param} v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
             cmd.Parameters.Add(param);
 
@@ -2946,7 +2988,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
                     continue;
 
                 var resultStr = reader.GetString(1);
-                Assert.Equal(testValue.ToString("yyyy-M-d", CultureInfo.InvariantCulture), resultStr);
+                Assert.Equal(testValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = minValue.AddMonths(-1);
@@ -2971,8 +3013,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
             await using var connection = await OpenConnectionAsync(parameterMode);
 
-            // toString(Date32) doesn't work well for all range https://github.com/ClickHouse/ClickHouse/issues/31924
-            await using var cmd = connection.CreateCommand("SELECT {param} AS v, concat(toString(year(v)), '-', toString(month(v)), '-', toString(day(v)))");
+            await using var cmd = connection.CreateCommand("SELECT {param} AS v, toString(v)");
             var param = new ClickHouseParameter("param") { ClickHouseDbType = ClickHouseDbType.Date32 };
             cmd.Parameters.Add(param);
 
@@ -2991,7 +3032,7 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
                     continue;
 
                 var resultStr = reader.GetString(1);
-                Assert.Equal(testValue.ToString("yyyy-M-d", CultureInfo.InvariantCulture), resultStr);
+                Assert.Equal(testValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), resultStr);
             }
 
             param.Value = minValue.AddMonths(-1);

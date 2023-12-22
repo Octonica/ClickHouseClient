@@ -15,10 +15,11 @@
  */
 #endregion
 
-
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -27,13 +28,18 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class HexStringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<byte>>
     {
-        private const string HexDigits = "0123456789ABCDEF";
+        private const string HexDigits = HexStringLiteralValueWriter.HexDigits;
 
         private readonly IClickHouseTypeInfo _typeInfo;
 
         public HexStringLiteralWriter(IClickHouseTypeInfo typeInfo)
         {
             _typeInfo = typeInfo;
+        }
+
+        public bool TryCreateParameterValueWriter(ReadOnlyMemory<byte> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+        {
+            return HexStringLiteralValueWriter.TryCreate(value, isNested, out valueWriter);
         }
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<byte> value)
@@ -56,16 +62,6 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
         {
             return writeValue(queryBuilder, _typeInfo);
-        }
-
-        public SequenceSize Write(Memory<byte> buffer, ReadOnlyMemory<byte> value)
-        {
-            return Write(buffer, value.Span);
-        }
-
-        public static SequenceSize Write(Memory<byte> buffer, ReadOnlySpan<byte> value)
-        {
-            throw new NotImplementedException();
         }
 
         public static HexStringLiteralWriter<T> Create<T>(IClickHouseTypeInfo typeInfo)
@@ -116,6 +112,12 @@ namespace Octonica.ClickHouseClient.Types
             _convert = convert;
         }
 
+        public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+        {
+            var bytes = _convert(value);
+            return HexStringLiteralValueWriter.TryCreate(bytes, isNested, out valueWriter);
+        }
+
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
             var bytes = _convert(value);
@@ -161,17 +163,36 @@ namespace Octonica.ClickHouseClient.Types
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
         {
-            if (this._valueType == null)
+            if (_valueType == null)
                 return writeValue(queryBuilder, _typeInfo);
 
-            var valueType = typeInfoProvider.GetTypeInfo(this._valueType);
-            return writeValue(queryBuilder, valueType);
-        }
+            var valueType = typeInfoProvider.GetTypeInfo(_valueType);
 
-        public SequenceSize Write(Memory<byte> buffer, T value)
-        {
-            var bytes = _convert(value);
-            return HexStringLiteralWriter.Write(buffer, bytes.Span);
+            var castMode = _castMode;
+            if (_typeInfo.ComplexTypeName == valueType.ComplexTypeName)
+                castMode = HexStringLiteralWriterCastMode.None;
+
+            switch (castMode)
+            {
+                case HexStringLiteralWriterCastMode.Cast:
+                    queryBuilder.Append('(');
+                    writeValue(queryBuilder, valueType);
+                    queryBuilder.Append("::").Append(_typeInfo.ComplexTypeName).Append(')');
+                    break;
+
+                case HexStringLiteralWriterCastMode.Reinterpret:
+                    queryBuilder.Append("reinterpret(");
+                    writeValue(queryBuilder, valueType);
+                    queryBuilder.Append(",'").Append(_typeInfo.ComplexTypeName.Replace("'", "''")).Append("')");
+                    break;
+
+                default:
+                    Debug.Assert(castMode == HexStringLiteralWriterCastMode.None);
+                    writeValue(queryBuilder, valueType);
+                    break;
+            }
+
+            return queryBuilder;
         }
     }
 }

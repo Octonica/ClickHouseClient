@@ -20,6 +20,7 @@ using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -344,6 +345,17 @@ namespace Octonica.ClickHouseClient.Types
                 _underlyingWritrer = underlyingWritrer;
             }
 
+            public bool TryCreateParameterValueWriter(T? value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value == null)
+                {
+                    valueWriter = new SimpleLiteralValueWriter("null".AsMemory());
+                    return true;
+                }
+
+                return _underlyingWritrer.TryCreateParameterValueWriter(value.Value, isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, T? value)
             {
                 if (value != null)
@@ -367,19 +379,6 @@ namespace Octonica.ClickHouseClient.Types
                 queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                 return queryBuilder;
             }
-
-            public SequenceSize Write(Memory<byte> buffer, T? value)
-            {
-                if (value != null)
-                    return _underlyingWritrer.Write(buffer, value.Value);
-
-                Span<byte> span = stackalloc byte[] { 4, (byte)'n', (byte)'u', (byte)'l', (byte)'l' };
-                if (buffer.Length < span.Length)
-                    return SequenceSize.Empty;
-
-                span.CopyTo(buffer.Span);
-                return new SequenceSize(span.Length, span.Length);
-            }
         }
 
         private sealed class NullableLiteralWriter<T> : IClickHouseLiteralWriter<T>
@@ -391,6 +390,17 @@ namespace Octonica.ClickHouseClient.Types
             {
                 _typeIfno = typeIfno;
                 _underlyingWritrer = underlyingWritrer;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value == null)
+                {
+                    valueWriter = new SimpleLiteralValueWriter("null".AsMemory());
+                    return true;
+                }
+
+                return _underlyingWritrer.TryCreateParameterValueWriter(value, isNested, out valueWriter);
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
@@ -415,19 +425,6 @@ namespace Octonica.ClickHouseClient.Types
                 _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
                 queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                 return queryBuilder;
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                if (value != null)
-                    return _underlyingWritrer.Write(buffer, value);
-
-                Span<byte> span = stackalloc byte[] { 4, (byte)'n', (byte)'u', (byte)'l', (byte)'l' };
-                if (buffer.Length < span.Length)
-                    return SequenceSize.Empty;
-
-                span.CopyTo(buffer.Span);
-                return new SequenceSize(span.Length, span.Length);
             }
         }
     }

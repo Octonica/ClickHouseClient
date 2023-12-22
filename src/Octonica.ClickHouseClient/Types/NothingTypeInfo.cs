@@ -18,6 +18,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -139,6 +140,12 @@ namespace Octonica.ClickHouseClient.Types
             {
             }
 
+            public bool TryCreateParameterValueWriter(DBNull value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                valueWriter = EmptyParameterValueWriter.Instance;
+                return true;
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, DBNull value)
             {
                 return queryBuilder.Append("null");
@@ -147,11 +154,6 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
                 return queryBuilder.Append("null");
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, DBNull value)
-            {
-                throw new NotImplementedException();
             }
         }
     }

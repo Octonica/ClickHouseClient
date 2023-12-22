@@ -66,9 +66,9 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                uint _ => new SimpleLiteralWriter<uint>(this),
-                ushort _ => new SimpleLiteralWriter<ushort, uint>(this, v => v),
-                byte _ => new SimpleLiteralWriter<byte, uint>(this, v => v),
+                uint _ => new SimpleLiteralWriter<uint>(this, appendTypeCast: true),
+                ushort _ => new SimpleLiteralWriter<ushort, uint>(this, appendTypeCast: true, v => v),
+                byte _ => new SimpleLiteralWriter<byte, uint>(this, appendTypeCast: true, v => v),
                 _ => new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 

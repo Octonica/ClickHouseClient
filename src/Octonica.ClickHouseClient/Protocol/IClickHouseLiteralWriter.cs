@@ -17,6 +17,7 @@
 
 using Octonica.ClickHouseClient.Types;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Protocol
@@ -28,12 +29,16 @@ namespace Octonica.ClickHouseClient.Protocol
     public interface IClickHouseLiteralWriter<in T>
     {
         /// <summary>
-        /// Writes a ClickHouse literal to the list of parameters.
+        /// Creates an instance of <see cref="IClickHouseParameterValueWriter"/> which encapsulates the value.
         /// </summary>
-        /// <param name="buffer">The buffer to write data to.</param>
-        /// <param name="value">The value for writing as a ClickHouse literal.</param>
-        /// <returns>The length of written data or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.</returns>
-        SequenceSize Write(Memory<byte> buffer, T value);
+        /// <param name="value">The value of the parameter.</param>
+        /// <param name="isNested">The flag which indicates whether the value is a part of parameter's full value, e.g. an element of an array.</param>
+        /// <param name="valueWriter">>When this method returns, contains the instance of <see cref="IClickHouseParameterValueWriter"/> encapsulating the value.</param>
+        /// <returns>
+        /// <see langword="false"/> if the value can't be represented in a binary format. Otherwise returns <see langword="true"/> and creates a <paramref name="valueWriter"/>.
+        /// </returns>
+        /// <remarks><see langword="false"/> returned by this method instructs a parameter's writer to interpolate the value directly to the query text.</remarks>
+        bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter);
 
         /// <summary>
         /// Appends the value to the query as a ClickHouse literal.

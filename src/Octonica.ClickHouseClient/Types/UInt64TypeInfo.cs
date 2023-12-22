@@ -68,13 +68,13 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(ulong))
-                writer = new SimpleLiteralWriter<ulong>(this);
+                writer = new SimpleLiteralWriter<ulong>(this, appendTypeCast: true);
             else if (type == typeof(uint))
-                writer = new SimpleLiteralWriter<uint, ulong>(this, v => v);
+                writer = new SimpleLiteralWriter<uint, ulong>(this, appendTypeCast: true, v => v);
             else if (type == typeof(ushort))
-                writer = new SimpleLiteralWriter<ushort, ulong>(this, v => v);
+                writer = new SimpleLiteralWriter<ushort, ulong>(this, appendTypeCast: true, v => v);
             else if (type == typeof(byte))
-                writer = new SimpleLiteralWriter<byte, ulong>(this, v => v);
+                writer = new SimpleLiteralWriter<byte, ulong>(this, appendTypeCast: true, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

@@ -17,6 +17,10 @@
 
 using Octonica.ClickHouseClient.Protocol;
 using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -24,6 +28,12 @@ namespace Octonica.ClickHouseClient.Types
     {
         public const int MinValue = -16436;
         public const int MaxValue = 114635;
+
+        private const string FormatStr = DateTypeInfo.FormatStr;
+        private const string DefaultValueStr = "1925-01-01";
+
+        private static readonly DateTime MinDateTimeValue = DateTime.UnixEpoch.AddDays(MinValue);
+        private static readonly DateTime MaxDateTimeValue = DateTime.UnixEpoch.AddDays(MaxValue);
 
         public Date32TypeInfo()
             :base("Date32")
@@ -62,6 +72,46 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed partial class Date32Writer
         {
+        }
+
+        private sealed class DateTimeLiteralWriter : IClickHouseLiteralWriter<DateTime>
+        {
+            private readonly Date32TypeInfo _typeInfo;
+
+            public DateTimeLiteralWriter(Date32TypeInfo typeInfo)
+            {
+                _typeInfo = typeInfo;
+            }
+
+            public bool TryCreateParameterValueWriter(DateTime value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var strVal = ValueToString(value);
+                valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DateTime value)
+            {
+                var strVal = ValueToString(value);
+                return queryBuilder.Append('\'').Append(strVal).Append("\'::").Append(_typeInfo.ComplexTypeName);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _typeInfo);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static string ValueToString(DateTime value)
+            {
+                if (value == default)
+                    return DefaultValueStr;
+
+                if (value < MinDateTimeValue || value > MaxDateTimeValue)
+                    throw new OverflowException($"The value must be in range [{MinDateTimeValue}, {MaxDateTimeValue}].");
+
+                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
+            }
         }
     }
 }

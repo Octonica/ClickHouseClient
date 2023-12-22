@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -258,23 +259,28 @@ namespace Octonica.ClickHouseClient.Types
                 _converter = converter;
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
                 var seconds = _converter.Convert(value);
+                var str = seconds.ToString(CultureInfo.InvariantCulture);
+                valueWriter = new SimpleLiteralValueWriter(str.AsMemory());
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                queryBuilder.Append("CAST(");
+                var seconds = _converter.Convert(value);
                 queryBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
-                return queryBuilder;
+                return queryBuilder.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
+                queryBuilder.Append("CAST(");
                 var ticksType = typeInfoProvider.GetTypeInfo("UInt32");
                 writeValue(queryBuilder, ticksType);
-                return queryBuilder;
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                throw new NotImplementedException();
+                return queryBuilder.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
             }
         }
     }

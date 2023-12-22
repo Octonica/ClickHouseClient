@@ -17,8 +17,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 
@@ -56,7 +54,7 @@ namespace Octonica.ClickHouseClient.Types
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             if (type == typeof(sbyte))
-                return (IClickHouseLiteralWriter<T>)(object)new SimpleLiteralWriter<sbyte>(this);
+                return (IClickHouseLiteralWriter<T>)(object)new SimpleLiteralWriter<sbyte>(this, appendTypeCast: true);
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }

@@ -22,7 +22,9 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
@@ -30,6 +32,7 @@ namespace Octonica.ClickHouseClient.Types
     partial class DateTypeInfo
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
+        private static readonly DateOnly MaxDateOnlyValue = UnixEpoch.AddDays(ushort.MaxValue);
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
@@ -52,8 +55,8 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                DateOnly theValue => new SimpleLiteralWriter<DateOnly, ushort>(this, DateOnlyToDays),
-                DateTime theValue => new SimpleLiteralWriter<DateTime, ushort>(this, dt => DateOnlyToDays(DateOnly.FromDateTime(dt))),
+                DateOnly => new DateOnlyLiteralWriter(this),
+                DateTime => new DateTimeLiteralWriter(this),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 
@@ -109,6 +112,49 @@ namespace Octonica.ClickHouseClient.Types
             protected override ushort Convert(DateOnly value)
             {
                 return DateOnlyToDays(value);
+            }
+        }
+
+        private sealed class DateOnlyLiteralWriter : IClickHouseLiteralWriter<DateOnly>
+        {
+            private readonly DateTypeInfo _typeInfo;
+
+            public DateOnlyLiteralWriter(DateTypeInfo typeInfo)
+            {
+                _typeInfo = typeInfo;
+            }
+
+            public bool TryCreateParameterValueWriter(DateOnly value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var strVal = ValueToString(value);
+                if (isNested)
+                    strVal = $"'{strVal}'";
+
+                valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DateOnly value)
+            {
+                var strVal = ValueToString(value);
+                return queryBuilder.Append('\'').Append(strVal).Append("'::").Append(_typeInfo.ComplexTypeName);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _typeInfo);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static string ValueToString(DateOnly value)
+            {
+                if (value == default)
+                    return DefaultValueStr;
+
+                if (value < UnixEpoch || value > MaxDateOnlyValue)
+                    throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch}, {MaxDateOnlyValue}].");
+
+                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

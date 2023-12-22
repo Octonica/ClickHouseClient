@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -317,6 +318,18 @@ namespace Octonica.ClickHouseClient.Types
                 _type = type;
             }
 
+            public bool TryCreateParameterValueWriter(ReadOnlyMemory<char> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var writer = new StringLiteralValueWriter(value, isNested);
+
+                Debug.Assert(_type._length != null);
+                if (writer.Length - 2 > _type._length.Value)
+                    ValidateLength(value); // Validate the length of the unescaped string without quota signs
+
+                valueWriter = writer;
+                return true;
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<char> value)
             {
                 ValidateLength(value);
@@ -326,12 +339,6 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
                 return writeValue(queryBuilder, _type);
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, ReadOnlyMemory<char> value)
-            {
-                ValidateLength(value);
-                return StringLiteralWriter.Write(buffer, value.Span);
             }
 
             private void ValidateLength(ReadOnlyMemory<char> value)
@@ -355,14 +362,14 @@ namespace Octonica.ClickHouseClient.Types
                 _convert = convert;
             }
 
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                return TryCreateParameterValueWriter(_convert(value), isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
                 return Interpolate(queryBuilder, _convert(value));
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                return Write(buffer, _convert(value));
             }
         }
 
@@ -375,6 +382,12 @@ namespace Octonica.ClickHouseClient.Types
                 _type = type;
             }
 
+            public bool TryCreateParameterValueWriter(ReadOnlyMemory<byte> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                ValidateLength(value);
+                return HexStringLiteralValueWriter.TryCreate(value, isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<byte> value)
             {
                 ValidateLength(value);
@@ -384,12 +397,6 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
                 return writeValue(queryBuilder, _type);
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, ReadOnlyMemory<byte> value)
-            {
-                ValidateLength(value);
-                return HexStringLiteralWriter.Write(buffer, value.Span);
             }
 
             private void ValidateLength(ReadOnlyMemory<byte> value)
@@ -411,14 +418,14 @@ namespace Octonica.ClickHouseClient.Types
                 _convert = convert;
             }
 
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                return TryCreateParameterValueWriter(_convert(value), isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
                 return Interpolate(queryBuilder, _convert(value));
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                return Write(buffer, _convert(value));
             }
         }
     }

@@ -18,8 +18,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -71,11 +69,11 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                int _ => new SimpleLiteralWriter<int>(this),
-                short _ => new SimpleLiteralWriter<short>(this),
-                ushort _ => new SimpleLiteralWriter<ushort>(this),
-                sbyte _ => new SimpleLiteralWriter<sbyte>(this),
-                byte _ => new SimpleLiteralWriter<byte>(this),
+                int _ => new SimpleLiteralWriter<int>(this, appendTypeCast: true),
+                short _ => new SimpleLiteralWriter<short>(this, appendTypeCast: true),
+                ushort _ => new SimpleLiteralWriter<ushort>(this, appendTypeCast: true),
+                sbyte _ => new SimpleLiteralWriter<sbyte>(this, appendTypeCast: true),
+                byte _ => new SimpleLiteralWriter<byte>(this, appendTypeCast: true),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 

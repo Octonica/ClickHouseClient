@@ -20,6 +20,7 @@ using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -707,17 +708,64 @@ namespace Octonica.ClickHouseClient.Types
                 _elementWriter = elementWriter;
             }
 
+            public bool TryCreateParameterValueWriter(TArray value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var enumerator = ((IEnumerable)value).GetEnumerator();
+                if (!TryCreateElementWriters((Array)(object)value, enumerator, 0, out var elementWriters))
+                {
+                    valueWriter = null;
+                    return false;
+                }
+
+                valueWriter = new ArrayLiteralValueWriter(elementWriters);
+                return true;
+            }
+
+            private bool TryCreateElementWriters(Array array, IEnumerator enumerator, int dimension, [NotNullWhen(true)] out List<IClickHouseParameterValueWriter>? writers)
+            {
+                var rankLength = array.GetLength(dimension);
+                writers = new List<IClickHouseParameterValueWriter>(rankLength);
+                if (dimension == array.Rank - 1)
+                {
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (!enumerator.MoveNext())
+                            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: unexpected iterator out of bound.");
+
+                        if (!_elementWriter.TryCreateParameterValueWriter((TElement)enumerator.Current!, true, out var elementWriter))
+                            return false;
+
+                        writers.Add(elementWriter);
+                    }
+                }
+                else
+                {
+                    var nextDimension = dimension + 1;
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (!TryCreateElementWriters(array, enumerator, nextDimension, out var elementWriters))
+                            return false;
+
+                        writers.Add(new ArrayLiteralValueWriter(elementWriters));
+                    }
+                }
+
+                return true;
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, TArray value)
             {
                 if (value is null)
                     throw new ArgumentNullException(nameof(value));
 
-                IClickHouseLiteralWriter<TElement>? elementWriter = null;
                 var enumerator = ((IEnumerable)value).GetEnumerator();
-                return Interpolate(queryBuilder, (Array)(object)value, enumerator, 0, ref elementWriter);
+                return Interpolate(queryBuilder, (Array)(object)value, enumerator, 0);
             }
 
-            private StringBuilder Interpolate(StringBuilder queryBuilder, Array array, IEnumerator enumerator, int dimension, ref IClickHouseLiteralWriter<TElement>? elementWriter)
+            private StringBuilder Interpolate(StringBuilder queryBuilder, Array array, IEnumerator enumerator, int dimension)
             {
                 var rankLength = array.GetLength(dimension);
                 queryBuilder.Append('[');
@@ -742,7 +790,7 @@ namespace Octonica.ClickHouseClient.Types
                         if (i > 0)
                             queryBuilder.Append(',');
 
-                        Interpolate(queryBuilder, array, enumerator, nextDimension, ref elementWriter);
+                        Interpolate(queryBuilder, array, enumerator, nextDimension);
                     }
                 }
 
@@ -750,11 +798,6 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
-            {
-                throw new NotImplementedException();
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, TArray value)
             {
                 throw new NotImplementedException();
             }
@@ -769,6 +812,27 @@ namespace Octonica.ClickHouseClient.Types
             {
                 _type = type;
                 _elementWriter = elementWriter;
+            }
+
+            public bool TryCreateParameterValueWriter(TArray value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var elementWriters = new List<IClickHouseParameterValueWriter>();
+                foreach(var element in (IEnumerable<TElement>)value)
+                {
+                    if (!_elementWriter.TryCreateParameterValueWriter(element, true, out var elementWriter))
+                    {
+                        valueWriter = null;
+                        return false;
+                    }
+
+                    elementWriters.Add(elementWriter);
+                }
+
+                valueWriter = new ArrayLiteralValueWriter(elementWriters);
+                return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, TArray value)
@@ -797,12 +861,45 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
-                throw new NotImplementedException();
+                return writeValue(queryBuilder, _type);
+            }
+        }
+
+        private sealed class ArrayLiteralValueWriter : IClickHouseParameterValueWriter
+        {
+            private readonly List<IClickHouseParameterValueWriter> _elementWriters;
+
+            public int Length { get; }
+
+            public ArrayLiteralValueWriter(List<IClickHouseParameterValueWriter> elementWriters)
+            {
+                Length =
+                    2 + // []
+                    elementWriters.Aggregate(0, (l, w) => w.Length + l) + // length of elements
+                    Math.Max(0, elementWriters.Count - 1); // comas
+                _elementWriters = elementWriters;
             }
 
-            public SequenceSize Write(Memory<byte> buffer, TArray value)
+            public int Write(Memory<byte> buffer)
             {
-                throw new NotImplementedException();
+                int count = 0;
+                buffer.Span[count++] = (byte)'[';
+
+                bool isFirst = true;
+                foreach (var writer in _elementWriters)
+                {
+                    if (isFirst)
+                        isFirst = false;
+                    else
+                        buffer.Span[count++] = (byte)',';
+
+                    count += writer.Write(buffer.Slice(count));
+                }
+
+                buffer.Span[count++] = (byte)']';
+                Debug.Assert(count == Length);
+
+                return count;
             }
         }
     }

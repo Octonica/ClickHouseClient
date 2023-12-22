@@ -22,11 +22,15 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
-    internal abstract class ClickHouseParameterWriter
+    internal abstract class ClickHouseParameterWriter : IClickHouseParameterValueWriter
     {
-        public abstract SequenceSize Write(Memory<byte> buffer);
+        public abstract int Length { get; }
+
+        public abstract int Write(Memory<byte> buffer);
 
         public abstract StringBuilder Interpolate(StringBuilder queryBuilder);
+
+        public abstract StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue);
 
         public static ClickHouseParameterWriter Dispatch(IClickHouseColumnTypeInfo typeInfo, object? value)
         {
@@ -49,7 +53,10 @@ namespace Octonica.ClickHouseClient.Protocol
             {
                 var value = (T)_value;
                 var writer = _typeInfo.CreateLiteralWriter<T>();
-                return new ClickHouseParameterWriter<T>(writer, value);
+                if (!writer.TryCreateParameterValueWriter(value, isNested: false, out var valueWriter))
+                    valueWriter = null;
+
+                return new ClickHouseParameterWriter<T>(writer, value, valueWriter);
             }
 
             public ClickHouseParameterWriter Dispatch()
@@ -63,11 +70,15 @@ namespace Octonica.ClickHouseClient.Protocol
     {
         private readonly IClickHouseLiteralWriter<T> _writer;
         private readonly T _value;
+        private readonly IClickHouseParameterValueWriter? _valueWriter;
 
-        public ClickHouseParameterWriter(IClickHouseLiteralWriter<T> writer, T value)
+        public override int Length => _valueWriter?.Length ?? 0;
+
+        public ClickHouseParameterWriter(IClickHouseLiteralWriter<T> writer, T value, IClickHouseParameterValueWriter? valueWriter)
         {
             _writer = writer;
             _value = value;
+            _valueWriter = valueWriter;
         }
 
         public override StringBuilder Interpolate(StringBuilder queryBuilder)
@@ -75,9 +86,20 @@ namespace Octonica.ClickHouseClient.Protocol
             return _writer.Interpolate(queryBuilder, _value);
         }
 
-        public override SequenceSize Write(Memory<byte> buffer)
+        public override StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writerValue)
         {
-            return _writer.Write(buffer, _value);
+            if (_valueWriter == null)
+            {
+                // Here we do not have a real value writer, so we can't pass the parameter to the query. We have to interpolate the value directly into the query.
+                return Interpolate(queryBuilder);
+            }
+
+            return _writer.Interpolate(queryBuilder, typeProvider, writerValue);
+        }
+
+        public override int Write(Memory<byte> buffer)
+        {
+            return _valueWriter?.Write(buffer) ?? 0;
         }
     }
 }

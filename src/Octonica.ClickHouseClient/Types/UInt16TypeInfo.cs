@@ -63,9 +63,9 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(ushort))
-                writer = new SimpleLiteralWriter<ushort>(this);
+                writer = new SimpleLiteralWriter<ushort>(this, appendTypeCast: true);
             else if (type == typeof(byte))
-                writer = new SimpleLiteralWriter<byte, ushort>(this, v => v);
+                writer = new SimpleLiteralWriter<byte, ushort>(this, appendTypeCast: true, v => v);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

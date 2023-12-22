@@ -17,7 +17,7 @@
 
 using Octonica.ClickHouseClient.Protocol;
 using System;
-using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 
@@ -30,6 +30,12 @@ namespace Octonica.ClickHouseClient.Types
         public StringLiteralWriter(IClickHouseTypeInfo type)
         {
             _type = type;
+        }
+
+        public bool TryCreateParameterValueWriter(ReadOnlyMemory<char> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+        {
+            valueWriter = new StringLiteralValueWriter(value, isNested);
+            return true;
         }
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<char> value)
@@ -69,28 +75,6 @@ namespace Octonica.ClickHouseClient.Types
             return writeValue(queryBuilder, _type);
         }
 
-        public SequenceSize Write(Memory<byte> buffer, ReadOnlyMemory<char> value)
-        {
-            return Write(buffer, value.Span);
-        }
-
-        public static SequenceSize Write(Memory<byte> buffer, ReadOnlySpan<char> stringSpan)
-        {
-            var encoding = Encoding.UTF8;
-            var length = encoding.GetByteCount(stringSpan);
-            var offset = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(buffer.Span, (ulong)length);
-            if (offset == 0)
-                return SequenceSize.Empty;
-
-            var span = buffer.Span.Slice(offset);
-            if (span.Length < length)
-                return SequenceSize.Empty;
-
-            var count = Encoding.UTF8.GetBytes(stringSpan, span);
-            Debug.Assert(count == length);
-            return new SequenceSize(length + offset, 1);
-        }
-
         public static StringLiteralWriter<T> Create<T>(IClickHouseTypeInfo typeInfo, string? format = null)
             where T : IFormattable
         {
@@ -109,6 +93,12 @@ namespace Octonica.ClickHouseClient.Types
             _toString = toString;
         }
 
+        public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+        {
+            valueWriter = new StringLiteralValueWriter(_toString(value), isNested);
+            return true;
+        }
+
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
             var str = _toString(value);
@@ -123,12 +113,6 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
         {
             return writeValue(queryBuilder, _type);
-        }
-
-        public SequenceSize Write(Memory<byte> buffer, T value)
-        {
-            var str = _toString(value);
-            return StringLiteralWriter.Write(buffer, str.Span);
         }
     }
 }

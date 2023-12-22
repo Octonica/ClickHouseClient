@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -1043,6 +1044,11 @@ namespace Octonica.ClickHouseClient.Types
                 _getItem = getItem;
             }
 
+            public bool TryCreateParameterValueWriter(TTuple value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                return _itemWriter.TryCreateParameterValueWriter(_getItem(value), isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, TTuple value)
             {
                 return _itemWriter.Interpolate(queryBuilder, _getItem(value));
@@ -1051,11 +1057,6 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
                 return _itemWriter.Interpolate(queryBuilder, typeInfoProvider, writeValue);
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, TTuple value)
-            {
-                return _itemWriter.Write(buffer, _getItem(value));
             }
         }
 
@@ -1070,6 +1071,12 @@ namespace Octonica.ClickHouseClient.Types
                 _type = type;
                 _itemWriters = itemWriters;
                 _isRest = isRest;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                valueWriter = null;
+                return false;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
@@ -1098,11 +1105,6 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(!_isRest);
                 return writeValue(queryBuilder, _type);
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                throw new NotImplementedException();
             }
         }
     }

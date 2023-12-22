@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -242,6 +243,12 @@ namespace Octonica.ClickHouseClient.Types
                 _writer = new SimpleLiteralWriter<TValue>(_type);
             }
 
+            public bool TryCreateParameterValueWriter(string value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var enumValue = Convert(value);
+                return _writer.TryCreateParameterValueWriter(enumValue, isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, string value)
             {
                 var enumValue = Convert(value);
@@ -251,12 +258,6 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
                 return _writer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, string value)
-            {
-                var enumValue = Convert(value);
-                return _writer.Write(buffer, enumValue);
             }
 
             private TValue Convert(string value)

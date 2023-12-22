@@ -69,15 +69,16 @@ namespace Octonica.ClickHouseClient.Types
             if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
+            const string valueType = "UInt32";
             object writer;
             if (type == typeof(IPAddress))
-                writer = new SimpleLiteralWriter<IPAddress, uint>(this, IpAddressToUInt32);
+                writer = new SimpleLiteralWriter<IPAddress, uint>(valueType, this, null, true, IpAddressToUInt32);
             else if (type == typeof(string))
-                writer = new SimpleLiteralWriter<string, uint>(this, IpAddressStringToUInt32);
+                writer = new SimpleLiteralWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32);
             else if (type == typeof(uint))
-                writer = new SimpleLiteralWriter<uint>(this);
+                writer = new SimpleLiteralWriter<uint>(valueType, this, appendTypeCast: true);
             else if (type == typeof(int))
-                writer = new SimpleLiteralWriter<int, uint>(this, v => unchecked((uint)v));
+                writer = new SimpleLiteralWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v));
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 

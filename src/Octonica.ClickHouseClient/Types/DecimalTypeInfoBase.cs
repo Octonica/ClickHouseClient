@@ -19,6 +19,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -504,6 +505,24 @@ namespace Octonica.ClickHouseClient.Types
                 _convert = convert;
             }
 
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                Memory<byte> binaryValue = new byte[_binaryWriter.ElementSize];
+                GetBytes(value, binaryValue.Span);
+
+                int lastNonZeroIdx = 0;
+                for (int i = 0; i < binaryValue.Length; i++)
+                {
+                    if (binaryValue.Span[i] == 0)
+                        continue;
+
+                    lastNonZeroIdx = i;
+                }
+
+                binaryValue = binaryValue.Slice(0, lastNonZeroIdx + 1);
+                return HexStringLiteralValueWriter.TryCreate(binaryValue, isNested, out valueWriter);
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
                 Span<byte> buffer = stackalloc byte[_binaryWriter.ElementSize];
@@ -515,40 +534,22 @@ namespace Octonica.ClickHouseClient.Types
                 queryBuilder.Append("reinterpret(");
                 HexStringLiteralWriter.Interpolate(queryBuilder, buffer);
 
-                queryBuilder.Append(", 'Decimal");
-                switch (_binaryWriter.ElementSize)
-                {
-                    case 4:
-                        queryBuilder.Append("32");
-                        break;
-                    case 8:
-                        queryBuilder.Append("64");
-                        break;
-                    case 16:
-                        queryBuilder.Append("128");
-                        break;
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Invalid element size.");
-                }
-
-                if (_type._scale != null)
-                {
-                    queryBuilder.Append('(');
-                    queryBuilder.Append(_type._scale.Value.ToString(CultureInfo.InvariantCulture));
-                    queryBuilder.Append(")')");
-                }
-
-                return queryBuilder;
+                queryBuilder.Append(", '");
+                queryBuilder.Append(_binaryWriter.ColumnType);
+                return queryBuilder.Append("')");
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
             {
-                throw new NotImplementedException();
-            }
+                var typeName = $"FixedString({_binaryWriter.ElementSize.ToString(CultureInfo.InvariantCulture)})";
+                var type = typeInfoProvider.GetTypeInfo(typeName);
+                queryBuilder.Append("reinterpret(");
 
-            public SequenceSize Write(Memory<byte> buffer, T value)
-            {
-                throw new NotImplementedException();
+                writeValue(queryBuilder, type);
+
+                queryBuilder.Append(", '");
+                queryBuilder.Append(_binaryWriter.ColumnType);
+                return queryBuilder.Append("')");
             }
 
             private void GetBytes(T value, Span<byte> buffer)

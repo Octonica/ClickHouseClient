@@ -22,6 +22,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -320,6 +321,12 @@ namespace Octonica.ClickHouseClient.Types
                 _valueWriter = valueWriter;
             }
 
+            public bool TryCreateParameterValueWriter(TDictionary value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                valueWriter = null;
+                return false;
+            }
+
             public StringBuilder Interpolate(StringBuilder queryBuilder, TDictionary dictionary)
             {
                 queryBuilder.Append("{tuple([");
@@ -343,11 +350,6 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
-            {
-                throw new NotImplementedException();
-            }
-
-            public SequenceSize Write(Memory<byte> buffer, TDictionary dictionary)
             {
                 throw new NotImplementedException();
             }

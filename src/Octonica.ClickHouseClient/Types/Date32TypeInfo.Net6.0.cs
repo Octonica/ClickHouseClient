@@ -22,12 +22,19 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
     partial class Date32TypeInfo
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
+
+        private static readonly DateOnly MinDateOnlyValue = UnixEpoch.AddDays(MinValue);
+        private static readonly DateOnly MaxDateOnlyValue = UnixEpoch.AddDays(MaxValue);
 
         public override Type GetFieldType()
         {
@@ -53,13 +60,12 @@ namespace Octonica.ClickHouseClient.Types
             if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            object writer;
-            if (type == typeof(DateOnly))
-                writer = new SimpleLiteralWriter<DateOnly, int>(this, DateOnlyToDays);
-            else if (type == typeof(DateTime))
-                writer = new SimpleLiteralWriter<DateTime, int>(this, dt => DateOnlyToDays(DateOnly.FromDateTime(dt)));
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            object writer = default(T) switch
+            {
+                DateOnly => new DateOnlyiteralWriter(this),
+                DateTime => new DateTimeLiteralWriter(this),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+            };
 
             return (IClickHouseLiteralWriter<T>)writer;
         }
@@ -94,6 +100,49 @@ namespace Octonica.ClickHouseClient.Types
             protected override int Convert(DateOnly value)
             {
                 return DateOnlyToDays(value);
+            }
+        }
+
+        private sealed class DateOnlyiteralWriter : IClickHouseLiteralWriter<DateOnly>
+        {
+            private readonly Date32TypeInfo _typeInfo;
+
+            public DateOnlyiteralWriter(Date32TypeInfo typeInfo)
+            {
+                _typeInfo = typeInfo;
+            }
+
+            public bool TryCreateParameterValueWriter(DateOnly value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var strVal = ValueToString(value);
+                if (isNested)
+                    strVal = $"'{strVal}'";
+
+                valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DateOnly value)
+            {
+                var strVal = ValueToString(value);
+                return queryBuilder.Append('\'').Append(strVal).Append("'::").Append(_typeInfo.ComplexTypeName);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _typeInfo);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static string ValueToString(DateOnly value)
+            {
+                if (value == default)
+                    return DefaultValueStr;
+
+                if (value < MinDateOnlyValue || value > MaxDateOnlyValue)
+                    throw new OverflowException($"The value must be in range [{MinDateOnlyValue}, {MaxDateOnlyValue}].");
+
+                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

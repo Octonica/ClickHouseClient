@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -367,23 +367,35 @@ namespace Octonica.ClickHouseClient
             parameter.ParameterMode = ParameterMode;
         }
 
+        internal ClickHouseParameterWriter CreateParameterWriter(IClickHouseTypeInfoProvider typeInfoProvider)
+        {
+            return CreateParameterWriter(typeInfoProvider, Create);
+
+            static ClickHouseParameterWriter Create(string id, object? value, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo typeInfo, Type clrType)
+            {
+                return ClickHouseParameterWriter.Dispatch(typeInfo, value);
+            }
+        }
+
         internal IClickHouseColumnWriter CreateParameterColumnWriter(IClickHouseTypeInfoProvider typeInfoProvider)
+        {
+            return CreateParameterWriter(typeInfoProvider, Create);
+
+            static IClickHouseColumnWriter Create(string id, object? value, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo typeInfo, Type clrType)
+            {
+                var columnBuilder = new ParameterColumnWriterBuilder(id, value, columnSettings, typeInfo);
+                var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
+                return column;
+            }
+        }
+
+        private T CreateParameterWriter<T>(IClickHouseTypeInfoProvider typeInfoProvider, Func<string, object?, ClickHouseColumnSettings?, IClickHouseColumnTypeInfo, Type, T> createWriter)
         {
             bool isNull = Value == DBNull.Value || Value == null;
             if (isNull && _forcedNullable == false)
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The parameter \"{ParameterName}\" is declared as non-nullable but it's value is null.");
 
-            IClickHouseColumnTypeInfo typeInfo;
-            var adapter = new ParameterColumnTypeDescriptorAdapter(this);
-            try
-            {
-                typeInfo = typeInfoProvider.GetTypeInfo(adapter);
-            }
-            catch (ClickHouseException ex)
-            {
-                throw new ClickHouseException(ex.ErrorCode, $"Parameter \"{ParameterName}\". {ex.Message}", ex);
-            }
-
+            var typeInfo = GetTypeInfo(typeInfoProvider);
             object? preparedValue = null;
             if (_forcedType == ClickHouseDbType.StringFixedLength)
             {
@@ -425,34 +437,50 @@ namespace Octonica.ClickHouseClient
             }
 
             var clrType = isNull ? typeInfo.GetFieldType() : (preparedValue ?? Value)!.GetType();
-            var columnBuilder = new ParameterColumnWriterBuilder(Id, isNull ? null : preparedValue ?? Value, adapter.Settings, typeInfo);
-            var column = TypeDispatcher.Dispatch(clrType, columnBuilder);
-            return column;
+            var columnSettings = StringEncoding == null ? null : new ClickHouseColumnSettings(StringEncoding);
+            return createWriter(Id, isNull ? null : preparedValue ?? Value, columnSettings, typeInfo, clrType);
         }
 
-        internal void OutputParameterValue(StringBuilder queryStringBuilder, ReadOnlyMemory<char> specifiedType, IClickHouseTypeInfoProvider typeInfoProvider) {
+        internal void OutputParameterValue(StringBuilder queryStringBuilder, ReadOnlyMemory<char> specifiedType, IClickHouseTypeInfoProvider typeInfoProvider)
+        {
             if (!specifiedType.IsEmpty)
                 queryStringBuilder.Append("CAST(");
             queryStringBuilder.Append("CAST(");
-            var typeInfo = typeInfoProvider.GetTypeInfo(new ParameterColumnTypeDescriptorAdapter(this));
-            
+            var typeInfo = GetTypeInfo(typeInfoProvider);
+
             typeInfo.FormatValue(queryStringBuilder, Value);
-            
+
             queryStringBuilder.Append(" as ");
             queryStringBuilder.Append(typeInfo.ComplexTypeName);
-            
+
             queryStringBuilder.Append(")");
-            if (!specifiedType.IsEmpty) {
+            if (!specifiedType.IsEmpty)
+            {
                 queryStringBuilder.Append(" as ");
                 var shouldAppendNullable = Value == null && !specifiedType.Span.StartsWith("Nullable(");
-                if (shouldAppendNullable) {
+                if (shouldAppendNullable)
+                {
                     queryStringBuilder.Append("Nullable(");
                 }
                 queryStringBuilder.Append(specifiedType.Span);
-                if (shouldAppendNullable) {
+                if (shouldAppendNullable)
+                {
                     queryStringBuilder.Append(")");
                 }
                 queryStringBuilder.Append(")");
+            }
+        }
+
+        internal IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseTypeInfoProvider typeInfoProvider)
+        {
+            var adapter = new ParameterColumnTypeDescriptorAdapter(this);
+            try
+            {
+                return typeInfoProvider.GetTypeInfo(adapter);
+            }
+            catch (ClickHouseException ex)
+            {
+                throw new ClickHouseException(ex.ErrorCode, $"Parameter \"{ParameterName}\". {ex.Message}", ex);
             }
         }
 
@@ -573,13 +601,9 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        private class ParameterColumnTypeDescriptorAdapter : IClickHouseColumnDescriptor
+        private class ParameterColumnTypeDescriptorAdapter : IClickHouseColumnTypeDescriptor
         {
             private readonly ClickHouseParameter _parameter;
-
-            public string ColumnName => _parameter.Id;
-
-            public ClickHouseColumnSettings? Settings => _parameter.StringEncoding == null ? null : new ClickHouseColumnSettings(_parameter.StringEncoding);
 
             public ClickHouseDbType? ClickHouseDbType => _parameter._forcedType ?? _parameter.GetValueDependentType()?.DbType;
 
@@ -591,11 +615,11 @@ namespace Octonica.ClickHouseClient
 
             public byte? Precision => _parameter._forcedPrecision;
 
-            public byte? Scale => _parameter._forcedScale;            
+            public byte? Scale => _parameter._forcedScale;
 
             public TimeZoneInfo? TimeZone => _parameter.TimeZone;
 
-            public int? ArrayRank => _parameter._forcedArrayRank;            
+            public int? ArrayRank => _parameter._forcedArrayRank;
 
             public ParameterColumnTypeDescriptorAdapter(ClickHouseParameter parameter)
             {

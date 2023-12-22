@@ -18,7 +18,6 @@
 using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -159,10 +158,26 @@ namespace Octonica.ClickHouseClient.Protocol
                     const int isCustomFlag = 0x2;
                     foreach (var pair in Parameters)
                     {
+                        if (pair.Value.Length < 0)
+                            continue;
+
                         writer.WriteString(pair.Key);
                         writer.Write7BitInt32(isCustomFlag);
-                        var size = writer.WriteRaw(pair.Value.Write);
-                        Debug.Assert(size.Elements == 1);
+
+                        var lenght = pair.Value.Length;
+                        writer.Write7BitInt32(lenght + 2);
+                        writer.WriteByte((byte)'\'');
+
+                        if (lenght > 0)
+                        {
+                            var size = writer.WriteRaw(lenght, buffer => new SequenceSize(pair.Value.Write(buffer), 1));
+
+                            // The lenght must be calculated by the parameter writer correctly
+                            if (size.Bytes != lenght)
+                                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The length of the parameter \"{pair.Key}\" in bytes is {lenght}, but the number of written bytes is {size.Bytes}.");
+                        }
+
+                        writer.WriteByte((byte)'\'');
                     }
                 }
 
