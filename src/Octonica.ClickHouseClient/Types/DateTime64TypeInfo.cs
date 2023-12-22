@@ -350,7 +350,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, ulong>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, long>
         {
             private readonly int _ticksScale;
             private readonly long _ticksMaxValue;
@@ -364,9 +364,9 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override ulong Convert(DateTimeOffset value)
+            protected override long Convert(DateTimeOffset value)
             {
-                ulong ticks;
+                long ticks;
                 if (value == default)
                 {
                     ticks = 0;
@@ -376,13 +376,11 @@ namespace Octonica.ClickHouseClient.Types
                     var offset = _timeZone.GetUtcOffset(value);
                     var valueWithOffset = value.ToOffset(offset);
                     var dateTimeTicks = (valueWithOffset - DateTimeOffset.UnixEpoch).Ticks;
-                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
-                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch:O}, {DateTimeOffset.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
 
                     if (_ticksScale < 0)
-                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
+                        ticks = checked(dateTimeTicks * (uint) -_ticksScale);
                     else
-                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
+                        ticks = dateTimeTicks / (uint) _ticksScale;
                 }
 
                 return ticks;
