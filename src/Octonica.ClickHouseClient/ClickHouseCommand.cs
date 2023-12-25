@@ -916,7 +916,7 @@ namespace Octonica.ClickHouseClient
                         queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
                         break;
 
-                    case ClickHouseParameterMode.Literal:
+                    case ClickHouseParameterMode.Serialize:
                     {
                         literalParameters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
                         if (!literalParameters.TryGetValue(parameter.Id, out var parameterWriter))

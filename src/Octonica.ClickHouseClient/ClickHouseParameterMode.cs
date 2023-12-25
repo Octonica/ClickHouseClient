@@ -50,7 +50,7 @@ namespace Octonica.ClickHouseClient
         /// <remarks>
         /// In this mode parameters' values will be interpolated to the query string as constant literals.
         /// This mode allows to use parameters in any part of the query where a constant is allowed.
-        /// For sending parameters without modifying the query use the mode <see cref="Literal"/>.
+        /// For sending parameters without modifying the query use the mode <see cref="Serialize"/>.
         /// </remarks>
         Interpolate = 3,
 
@@ -61,6 +61,6 @@ namespace Octonica.ClickHouseClient
         /// <remarks>
         /// Unlike other modes this one relies on the server-side support. An error will be raised if the server doesn't support this mode.
         /// </remarks>
-        Literal = 4,
+        Serialize = 4,
     }
 }

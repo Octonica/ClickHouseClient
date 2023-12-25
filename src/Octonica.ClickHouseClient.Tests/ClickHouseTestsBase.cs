@@ -30,7 +30,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             new object[] { ClickHouseParameterMode.Binary },
             new object[] { ClickHouseParameterMode.Interpolate },
-            new object[] { ClickHouseParameterMode.Literal }
+            new object[] { ClickHouseParameterMode.Serialize }
         };
 
         public ClickHouseConnectionSettings GetDefaultConnectionSettings(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)

@@ -187,7 +187,7 @@ namespace Octonica.ClickHouseClient.Protocol
             {
                 var errMsg =
                     "The server doesn't support parameters in the query. " +
-                    $"This error is caused by one or more parameters passed in the mode \"{nameof(ClickHouseParameterMode.Literal)}\". " +
+                    $"This error is caused by one or more parameters passed in the mode \"{nameof(ClickHouseParameterMode.Serialize)}\". " +
                     $"Only \"{nameof(ClickHouseParameterMode.Binary)}\" or \"{nameof(ClickHouseParameterMode.Interpolate)}\" modes are supported.";
 
                 throw new ClickHouseException(ClickHouseErrorCodes.ProtocolRevisionNotSupported, errMsg);
