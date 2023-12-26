@@ -94,7 +94,7 @@ namespace Octonica.ClickHouseClient.Protocol
                 return Interpolate(queryBuilder);
             }
 
-            return _writer.Interpolate(queryBuilder, typeProvider, writerValue);
+            return _writer.Interpolate(queryBuilder, typeProvider, (qb, t, w) => w(qb, b => writerValue(b, t)));
         }
 
         public override int Write(Memory<byte> buffer)

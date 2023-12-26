@@ -255,7 +255,7 @@ namespace Octonica.ClickHouseClient.Types
                 return _writer.Interpolate(queryBuilder, enumValue);
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
                 return _writer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
             }

@@ -520,7 +520,8 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 binaryValue = binaryValue.Slice(0, lastNonZeroIdx + 1);
-                return HexStringLiteralValueWriter.TryCreate(binaryValue, isNested, out valueWriter);
+                valueWriter = new HexStringLiteralValueWriter(binaryValue, isNested);
+                return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
@@ -539,17 +540,19 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.Append("')");
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
                 var typeName = $"FixedString({_binaryWriter.ElementSize.ToString(CultureInfo.InvariantCulture)})";
                 var type = typeInfoProvider.GetTypeInfo(typeName);
-                queryBuilder.Append("reinterpret(");
 
-                writeValue(queryBuilder, type);
-
-                queryBuilder.Append(", '");
-                queryBuilder.Append(_binaryWriter.ColumnType);
-                return queryBuilder.Append("')");
+                return writeValue(queryBuilder, type, (sb, realWrite) =>
+                {
+                    sb.Append("reinterpret(");
+                    realWrite(sb);
+                    sb.Append(", '");
+                    sb.Append(_binaryWriter.ColumnType);
+                    return queryBuilder.Append("')");
+                });
             }
 
             private void GetBytes(T value, Span<byte> buffer)

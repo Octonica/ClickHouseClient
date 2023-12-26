@@ -336,9 +336,9 @@ namespace Octonica.ClickHouseClient.Types
                 return StringLiteralWriter.Interpolate(queryBuilder, value.Span);
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                return writeValue(queryBuilder, _type);
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
             }
 
             private void ValidateLength(ReadOnlyMemory<char> value)
@@ -385,7 +385,8 @@ namespace Octonica.ClickHouseClient.Types
             public bool TryCreateParameterValueWriter(ReadOnlyMemory<byte> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
                 ValidateLength(value);
-                return HexStringLiteralValueWriter.TryCreate(value, isNested, out valueWriter);
+                valueWriter = new HexStringLiteralValueWriter(value, isNested);
+                return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<byte> value)
@@ -394,9 +395,9 @@ namespace Octonica.ClickHouseClient.Types
                 return HexStringLiteralWriter.Interpolate(queryBuilder, value.Span);
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                return writeValue(queryBuilder, _type);
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
             }
 
             private void ValidateLength(ReadOnlyMemory<byte> value)

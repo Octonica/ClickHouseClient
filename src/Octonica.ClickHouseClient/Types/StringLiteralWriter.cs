@@ -16,6 +16,7 @@
 #endregion
 
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -25,9 +26,9 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class StringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<char>>
     {
-        private readonly IClickHouseTypeInfo _type;
+        private readonly IClickHouseColumnTypeInfo _type;
 
-        public StringLiteralWriter(IClickHouseTypeInfo type)
+        public StringLiteralWriter(IClickHouseColumnTypeInfo type)
         {
             _type = type;
         }
@@ -70,12 +71,12 @@ namespace Octonica.ClickHouseClient.Types
             return queryBuilder.Append('\'');
         }
 
-        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
-            return writeValue(queryBuilder, _type);
+            return writeValue(queryBuilder, _type, FunctionHelper.Apply);
         }
 
-        public static StringLiteralWriter<T> Create<T>(IClickHouseTypeInfo typeInfo, string? format = null)
+        public static StringLiteralWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo, string? format = null)
             where T : IFormattable
         {
             return new StringLiteralWriter<T>(typeInfo, value => value.ToString(format, CultureInfo.InvariantCulture).AsMemory());
@@ -84,10 +85,10 @@ namespace Octonica.ClickHouseClient.Types
 
     internal sealed class StringLiteralWriter<T> : IClickHouseLiteralWriter<T>
     {
-        private readonly IClickHouseTypeInfo _type;
+        private readonly IClickHouseColumnTypeInfo _type;
         private readonly Func<T, ReadOnlyMemory<char>> _toString;
 
-        public StringLiteralWriter(IClickHouseTypeInfo type, Func<T, ReadOnlyMemory<char>> toString)
+        public StringLiteralWriter(IClickHouseColumnTypeInfo type, Func<T, ReadOnlyMemory<char>> toString)
         {
             _type = type;
             _toString = toString;
@@ -110,9 +111,9 @@ namespace Octonica.ClickHouseClient.Types
             return queryBuilder;
         }
 
-        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
-            return writeValue(queryBuilder, _type);
+            return writeValue(queryBuilder, _type, FunctionHelper.Apply);
         }
     }
 }

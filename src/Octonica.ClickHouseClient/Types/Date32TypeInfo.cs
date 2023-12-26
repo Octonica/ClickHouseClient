@@ -16,6 +16,7 @@
 #endregion
 
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -96,9 +97,9 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.Append('\'').Append(strVal).Append("\'::").Append(_typeInfo.ComplexTypeName);
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                return writeValue(queryBuilder, _typeInfo);
+                return writeValue(queryBuilder, _typeInfo, FunctionHelper.Apply);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]

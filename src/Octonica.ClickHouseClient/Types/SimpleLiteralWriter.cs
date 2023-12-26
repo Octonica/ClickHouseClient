@@ -16,6 +16,7 @@
 #endregion
 
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -27,16 +28,16 @@ namespace Octonica.ClickHouseClient.Types
         where T : IFormattable
     {
         private readonly string? _valueType;
-        private readonly IClickHouseTypeInfo _type;
+        private readonly IClickHouseColumnTypeInfo _type;
         private readonly string? _format;
         private readonly bool _appendTypeCast;
 
-        public SimpleLiteralWriter(IClickHouseTypeInfo type, string? format = null, bool appendTypeCast = false)
+        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
             : this(null, type, format, appendTypeCast)
         {
         }
 
-        public SimpleLiteralWriter(string? valueType, IClickHouseTypeInfo type, string? format = null, bool appendTypeCast = false)
+        public SimpleLiteralWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
         {
             _valueType = valueType;
             _type = type;
@@ -61,22 +62,16 @@ namespace Octonica.ClickHouseClient.Types
             return queryBuilder;
         }
 
-        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
-            if (_valueType != null)
-            {
-                var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
-                writeValue(queryBuilder, valueTypeInfo);
-            }
-            else
-            {
-                writeValue(queryBuilder, _type);
-            }
+            if (_valueType == null)
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
 
-            if (_appendTypeCast)
-                queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
+            if (_valueType != _type.ComplexTypeName)
+                return writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName));
 
-            return queryBuilder;
+            return writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
         }
     }
 
@@ -84,27 +79,27 @@ namespace Octonica.ClickHouseClient.Types
         where TOut : IFormattable
     {
         private readonly string? _valueType;
-        private readonly IClickHouseTypeInfo _type;
+        private readonly IClickHouseColumnTypeInfo _type;
         private readonly Func<TIn, TOut> _convert;
         private readonly string? _format;
         private readonly bool _appendTypeCast;
 
-        public SimpleLiteralWriter(IClickHouseTypeInfo type, Func<TIn, TOut> convert)
+        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, Func<TIn, TOut> convert)
             : this(null, type, null, false, convert)
         {
         }
 
-        public SimpleLiteralWriter(IClickHouseTypeInfo type, bool appendTypeCast, Func<TIn, TOut> convert)
+        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, bool appendTypeCast, Func<TIn, TOut> convert)
             : this(null, type, null, appendTypeCast, convert)
         {
         }
 
-        public SimpleLiteralWriter(IClickHouseTypeInfo type, string? format, Func<TIn, TOut> convert)
+        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, string? format, Func<TIn, TOut> convert)
             : this(null, type, format, false, convert)
         {
         }
 
-        public SimpleLiteralWriter(string? valueType, IClickHouseTypeInfo type, string? format, bool appendTypeCast, Func<TIn, TOut> convert)
+        public SimpleLiteralWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format, bool appendTypeCast, Func<TIn, TOut> convert)
         {
             _valueType = valueType;
             _type = type;
@@ -137,22 +132,16 @@ namespace Octonica.ClickHouseClient.Types
             return queryBuilder;
         }
 
-        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+        public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
-            if (_valueType != null)
-            {
-                var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
-                writeValue(queryBuilder, valueTypeInfo);
+            if (_valueType == null)
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
 
-                if (valueTypeInfo.ComplexTypeName != _type.ComplexTypeName)
-                    queryBuilder.Append("::").Append(_type.ComplexTypeName);
-            }
-            else
-            {
-                writeValue(queryBuilder, _type);
-            }
+            var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
+            if (_valueType != _type.ComplexTypeName)
+                return writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName));
 
-            return queryBuilder;
+            return writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
         }
     }
 }

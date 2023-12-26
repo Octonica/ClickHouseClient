@@ -1054,7 +1054,7 @@ namespace Octonica.ClickHouseClient.Types
                 return _itemWriter.Interpolate(queryBuilder, _getItem(value));
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
                 return _itemWriter.Interpolate(queryBuilder, typeInfoProvider, writeValue);
             }
@@ -1101,10 +1101,10 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder;
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
                 Debug.Assert(!_isRest);
-                return writeValue(queryBuilder, _type);
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
             }
         }
     }

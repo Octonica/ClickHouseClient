@@ -372,12 +372,30 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder;
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                queryBuilder.Append("CAST((");
-                _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
-                queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
-                return queryBuilder;
+                return _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    Debug.Assert(_typeIfno.UnderlyingType != null);
+                    if (typeInfo.ComplexTypeName == _typeIfno.UnderlyingType.ComplexTypeName)
+                    {
+                        // The value of the type Nullable(Nothing) can't be passed as a parameter
+                        if (typeInfo.ComplexTypeName != "Nothing")
+                            return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                    }
+
+                    var nullableTypeInfo = typeInfo;
+                    if (nullableTypeInfo.TypeName != "Nullable")
+                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+
+                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite) =>
+                    {
+                        qb2.Append("CAST((");
+                        writeElement(qb2, realWrite);
+                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        return qb2;
+                    });
+                });
             }
         }
 
@@ -419,12 +437,30 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder;
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                queryBuilder.Append("CAST((");
-                _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
-                queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
-                return queryBuilder;
+                return _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    Debug.Assert(_typeIfno.UnderlyingType != null);
+                    if (typeInfo.ComplexTypeName == _typeIfno.UnderlyingType.ComplexTypeName)
+                    {
+                        // The value of the type Nullable(Nothing) can't be passed as a parameter
+                        if (typeInfo.ComplexTypeName != "Nothing")
+                            return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                    }
+
+                    var nullableTypeInfo = typeInfo;
+                    if (nullableTypeInfo.TypeName != "Nullable")
+                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+
+                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite)=>
+                    {
+                        qb2.Append("CAST((");
+                        writeElement(qb2, realWrite);
+                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        return qb2;
+                    });
+                });
             }
         }
     }

@@ -18,7 +18,6 @@
 using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -26,17 +25,20 @@ namespace Octonica.ClickHouseClient.Types
     {
         public const string HexDigits = "0123456789ABCDEF";
 
-        private static readonly byte[] ForbiddenBytes = new[] { (byte)'\t', (byte)10, (byte)'\\' };
-
         private readonly ReadOnlyMemory<byte> _value;
         private readonly bool _includeQuotes;
 
-        public int Length => (_includeQuotes ? 2 : 0) + 4 * _value.Length;
+        public int Length { get; }
 
-        private HexStringLiteralValueWriter(ReadOnlyMemory<byte> value, bool includeQuotes)
+        public HexStringLiteralValueWriter(ReadOnlyMemory<byte> value, bool includeQuotes)
         {
             _value = value;
             _includeQuotes = includeQuotes;
+
+            if (_includeQuotes)
+                Length = 4 * value.Length + 4;
+            else
+                Length= 4 * _value.Length;
         }
 
         public int Write(Memory<byte> buffer)
@@ -45,34 +47,53 @@ namespace Octonica.ClickHouseClient.Types
 
             int count = 0;
             if (_includeQuotes)
+            {
+                buffer.Span[count++] = (byte)'\\';
                 buffer.Span[count++] = (byte)'\'';
+            }
 
             foreach (var byteValue in _value.Span)
             {
-                buffer.Span[count++] = (byte)'\\';
-                buffer.Span[count++] = (byte)'x';
-                buffer.Span[count++] = (byte)HexDigits[byteValue >> 4];
-                buffer.Span[count++] = (byte)HexDigits[byteValue & 0xF];
+                switch (byteValue)
+                {
+                    case (byte)'\t':
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\t';
+                        break;
+
+                    case (byte)'\n':
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\n';
+                        break;
+
+                    case (byte)'\\':
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'\\';
+                        break;
+
+                    default:
+                        buffer.Span[count++] = (byte)'\\';
+                        buffer.Span[count++] = (byte)'x';
+                        buffer.Span[count++] = (byte)HexDigits[byteValue >> 4];
+                        buffer.Span[count++] = (byte)HexDigits[byteValue & 0xF];
+                        break;
+                }
             }
 
             if (_includeQuotes)
+            {
+                buffer.Span[count++] = (byte)'\\';
                 buffer.Span[count++] = (byte)'\'';
+            }
 
             Debug.Assert(count == Length);
             return count;
-        }
-
-        public static bool TryCreate(ReadOnlyMemory<byte> value, bool isNested, [MaybeNullWhen(false)] out IClickHouseParameterValueWriter writer)
-        {
-            var indexOfForbidden = value.Span.IndexOfAny(ForbiddenBytes);
-            if (indexOfForbidden == -1)
-            {
-                writer = new HexStringLiteralValueWriter(value, isNested);
-                return true;
-            }
-
-            writer = null;
-            return false;
         }
     }
 }

@@ -275,12 +275,16 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                queryBuilder.Append("CAST(");
                 var ticksType = typeInfoProvider.GetTypeInfo("UInt32");
-                writeValue(queryBuilder, ticksType);
-                return queryBuilder.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
+
+                return writeValue(queryBuilder, ticksType, (qb, realWrite) =>
+                {
+                    qb.Append("CAST(");
+                    realWrite(qb);
+                    return qb.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
+                });
             }
         }
     }

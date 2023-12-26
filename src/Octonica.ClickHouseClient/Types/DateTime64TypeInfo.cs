@@ -383,17 +383,19 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder;
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
                 var ticksType = typeInfoProvider.GetTypeInfo("Int64");
 
-                queryBuilder.Append("reinterpret(");
-                writeValue(queryBuilder, ticksType);
-                queryBuilder.Append(",'");
-                queryBuilder.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
-                queryBuilder.Append("')");
-
-                return queryBuilder;
+                return writeValue(queryBuilder, ticksType, (qb, realWrite) =>
+                {
+                    qb.Append("reinterpret(");
+                    realWrite(queryBuilder);
+                    qb.Append(",'");
+                    qb.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
+                    qb.Append("')");
+                    return qb;
+                });
             }
 
             private ulong Convert(T value)

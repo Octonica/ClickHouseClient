@@ -55,11 +55,11 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <param name="queryBuilder">The builder of the SQL query</param>
         /// <param name="typeInfoProvider">The provider of type information.</param>
         /// <param name="writeValue">
-        /// The function that appends an actual value to the query. It gets the query string builder and the type of the
-        /// literal as arguments. The type of the literal may differ from the type of the value. The function must return
-        /// the same instance of the builder which it gets as an argument.
+        /// The function that appends an actual value to the query. It gets three arguments: the query string builder; the type of the
+        /// literal; the callback function for writing an external parts of the parameter. The type of the literal may differ from the type
+        /// of the value. The function must return the same instance of the builder which it gets as an argument.
         /// </param>
         /// <returns>The instance of the builder passed to the method (<paramref name="queryBuilder"/>).</returns>
-        StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue);
+        StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue);
     }
 }

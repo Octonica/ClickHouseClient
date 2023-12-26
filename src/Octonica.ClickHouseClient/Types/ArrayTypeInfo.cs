@@ -19,8 +19,10 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -797,9 +799,42 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.Append(']');
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                throw new NotImplementedException();
+                return _elementWriter.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    int rank = 1;
+                    var elementTypeInfo = _arrayType._elementTypeInfo;
+                    while (elementTypeInfo is ArrayTypeInfo elementArray)
+                    {
+                        elementTypeInfo = elementArray._elementTypeInfo;
+                        ++rank;
+                    }
+
+                    Debug.Assert(elementTypeInfo != null);
+                    if (elementTypeInfo.ComplexTypeName == typeInfo.ComplexTypeName)
+                        return writeValue(qb, _arrayType, FunctionHelper.Apply);
+
+                    var updArrayTypeInfo = new ArrayTypeInfo(typeInfo);
+                    for (int i = rank - 1; i > 0; i--)
+                        updArrayTypeInfo = new ArrayTypeInfo(updArrayTypeInfo);
+
+                    return writeValue(qb, updArrayTypeInfo, (qb2, realWrite) =>
+                    {
+                        for (int i = 1; i <= rank; i++)
+                            qb2.AppendFormat(CultureInfo.InvariantCulture, "arrayMap(_elt{0} -> ", i);
+
+                        writeElement(qb2, b => b.AppendFormat(CultureInfo.InvariantCulture, "_elt{0}", rank));
+
+                        for (int i = rank - 1; i > 0; i--)
+                            qb2.AppendFormat(CultureInfo.InvariantCulture, ", _elt{0})", i);
+
+                        qb2.Append(", ");
+                        realWrite(qb2);
+                        qb2.Append(')');
+                        return qb2;
+                    });
+                });
             }
         }
 
@@ -859,9 +894,25 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.Append(']');
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                return writeValue(queryBuilder, _type);
+                return _elementWriter.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    var elementTypeInfo = _type._elementTypeInfo;
+                    Debug.Assert(elementTypeInfo != null);
+                    if (elementTypeInfo.ComplexTypeName == typeInfo.ComplexTypeName)
+                        return writeValue(qb, _type, FunctionHelper.Apply);
+
+                    var updArrayTypeInfo = new ArrayTypeInfo(typeInfo);
+                    return writeValue(qb, updArrayTypeInfo, (qb2, realWrite) =>
+                    {
+                        qb2.Append("arrayMap(_elt -> ");
+                        writeElement(qb2, b => b.Append("_elt"));
+                        qb2.Append(", ");
+                        realWrite(qb2);
+                        return qb2.Append(')');
+                    });
+                });
             }
         }
 

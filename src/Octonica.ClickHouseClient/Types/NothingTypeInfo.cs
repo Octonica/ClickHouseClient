@@ -151,9 +151,10 @@ namespace Octonica.ClickHouseClient.Types
                 return queryBuilder.Append("null");
             }
 
-            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseTypeInfo, StringBuilder> writeValue)
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                return queryBuilder.Append("null");
+                var nothingType = typeInfoProvider.GetTypeInfo("Nothing");
+                return writeValue(queryBuilder, nothingType, (qb, _) => qb.Append("null"));
             }
         }
     }
