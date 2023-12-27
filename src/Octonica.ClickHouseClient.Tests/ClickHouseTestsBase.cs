@@ -29,7 +29,8 @@ namespace Octonica.ClickHouseClient.Tests
         public static readonly IReadOnlyCollection<object[]> ParameterModes = new[]
         {
             new object[] { ClickHouseParameterMode.Binary },
-            new object[] { ClickHouseParameterMode.Interpolate }
+            new object[] { ClickHouseParameterMode.Interpolate },
+            new object[] { ClickHouseParameterMode.Serialize }
         };
 
         public ClickHouseConnectionSettings GetDefaultConnectionSettings(Action<ClickHouseConnectionStringBuilder>? updateSettings = null)

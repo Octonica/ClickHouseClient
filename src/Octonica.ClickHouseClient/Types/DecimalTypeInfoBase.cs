@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -139,71 +140,37 @@ namespace Octonica.ClickHouseClient.Types
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
         }
 
-        const string HexDigits = "0123456789ABCDEF";
-
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             if (_precision == null && _scale == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
-            
+
             if (_scale == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
 
             if (_precision == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
-            
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
 
-            decimal outputValue = value switch
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+
+            var binaryWriter = new DecimalWriter("Value", ComplexTypeName, _precision.Value, _scale.Value, Array.Empty<decimal>());
+            object writer = default(T) switch
             {
-                decimal theValue => theValue,
-                long theValue => theValue,
-                ulong theValue => theValue,
-                int theValue => theValue,
-                uint theValue => theValue,
-                short theValue => theValue,
-                ushort theValue => theValue,
-                sbyte theValue => theValue,
-                byte theValue => theValue,
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
+                decimal _ => new DecimalLiteralWriter<decimal>(this, binaryWriter, v => v),
+                long _ => new DecimalLiteralWriter<long>(this, binaryWriter, v => v),
+                ulong _ => new DecimalLiteralWriter<ulong>(this, binaryWriter, v => v),
+                int _ => new DecimalLiteralWriter<int>(this, binaryWriter, v => v),
+                uint _ => new DecimalLiteralWriter<uint>(this, binaryWriter, v => v),
+                short _ => new DecimalLiteralWriter<short>(this, binaryWriter, v => v),
+                ushort _ => new DecimalLiteralWriter<ushort>(this, binaryWriter, v => v),
+                sbyte _ => new DecimalLiteralWriter<sbyte>(this, binaryWriter, v => v),
+                byte _ => new DecimalLiteralWriter<byte>(this, binaryWriter, v => v),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
 
-            var writer = new DecimalWriter("Value", ComplexTypeName, _precision.Value, _scale.Value, new[] { outputValue });
-            var elementSize = GetElementSize(_precision.Value);
-            Span<byte> buffer = stackalloc byte[elementSize];
-            var writeSize = writer.WriteNext(buffer);
-            if (writeSize.Bytes != elementSize)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. DecimalWrite did not write expected amount of bytes.");
-
-            // Not all decimal values can be parsed:
-            // > Real value ranges that can be stored in memory are a bit larger than specified above, which are checked only on conversion from a string.
-            // But reinterpret_cast lets obtain any Decimal value
-            queryStringBuilder.Append("reinterpret('");
-            foreach (var byteValue in buffer)
-            {
-                queryStringBuilder.Append("\\x");
-                queryStringBuilder.Append(HexDigits[byteValue >> 4]);
-                queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
-            }
-            queryStringBuilder.Append("', 'Decimal");
-            switch (elementSize)
-            {
-                case 4:
-                    queryStringBuilder.Append("32");
-                    break;
-                case 8:
-                    queryStringBuilder.Append("64");
-                    break;
-                case 16:
-                    queryStringBuilder.Append("128");
-                    break;
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Invalid element size.");
-            }
-            queryStringBuilder.Append("(");
-            queryStringBuilder.Append(_scale.Value.ToString(CultureInfo.InvariantCulture));
-            queryStringBuilder.Append(")')");
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -348,11 +315,18 @@ namespace Octonica.ClickHouseClient.Types
             private static readonly uint[] Scales = { 10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000 };
 
             private readonly byte _scale;
-            
+
+            public new int ElementSize { get => base.ElementSize; }
+
             public DecimalWriter(string columnName, string columnType, int precision, int scale, IReadOnlyList<decimal> rows)
                 : base(columnName, columnType, GetElementSize(precision), rows)
             {
                 _scale = (byte) scale;
+            }
+
+            public void WriteDecimal(Span<byte> writeTo, decimal value)
+            {
+                WriteElement(writeTo, value);
             }
 
             protected override void WriteElement(Span<byte> writeTo, in decimal value)
@@ -521,6 +495,76 @@ namespace Octonica.ClickHouseClient.Types
                 Debug.Assert(success);
                 success = BitConverter.TryWriteBytes(writeTo.Slice(12), highHigh);
                 Debug.Assert(success);
+            }
+        }
+
+        private sealed class DecimalLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        {
+            private readonly DecimalTypeInfoBase _type;
+            private readonly DecimalWriter _binaryWriter;
+            private readonly Func<T, decimal> _convert;
+
+            public DecimalLiteralWriter(DecimalTypeInfoBase type, DecimalWriter binaryWriter, Func<T, decimal> convert)
+            {
+                _type = type;
+                _binaryWriter = binaryWriter;
+                _convert = convert;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                Memory<byte> binaryValue = new byte[_binaryWriter.ElementSize];
+                GetBytes(value, binaryValue.Span);
+
+                int lastNonZeroIdx = 0;
+                for (int i = 0; i < binaryValue.Length; i++)
+                {
+                    if (binaryValue.Span[i] == 0)
+                        continue;
+
+                    lastNonZeroIdx = i;
+                }
+
+                binaryValue = binaryValue.Slice(0, lastNonZeroIdx + 1);
+                valueWriter = new HexStringLiteralValueWriter(binaryValue, isNested);
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                Span<byte> buffer = stackalloc byte[_binaryWriter.ElementSize];
+                GetBytes(value, buffer);
+
+                // Not all decimal values can be parsed:
+                // > Real value ranges that can be stored in memory are a bit larger than specified above, which are checked only on conversion from a string.
+                // But reinterpret_cast lets obtain any Decimal value
+                queryBuilder.Append("reinterpret(");
+                HexStringLiteralWriter.Interpolate(queryBuilder, buffer);
+
+                queryBuilder.Append(", '");
+                queryBuilder.Append(_binaryWriter.ColumnType);
+                return queryBuilder.Append("')");
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                var typeName = $"FixedString({_binaryWriter.ElementSize.ToString(CultureInfo.InvariantCulture)})";
+                var type = typeInfoProvider.GetTypeInfo(typeName);
+
+                return writeValue(queryBuilder, type, (sb, realWrite) =>
+                {
+                    sb.Append("reinterpret(");
+                    realWrite(sb);
+                    sb.Append(", '");
+                    sb.Append(_binaryWriter.ColumnType);
+                    return queryBuilder.Append("')");
+                });
+            }
+
+            private void GetBytes(T value, Span<byte> buffer)
+            {
+                var decValue = _convert(value);
+                _binaryWriter.WriteDecimal(buffer, decValue);
             }
         }
     }

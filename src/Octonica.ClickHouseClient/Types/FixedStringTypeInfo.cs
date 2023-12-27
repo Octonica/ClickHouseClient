@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -86,75 +88,33 @@ namespace Octonica.ClickHouseClient.Types
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
-        
-        const string HexDigits = "0123456789ABCDEF";
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             if (_length == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
-            
-            if (value == null || value is DBNull)
+
+            var type = typeof(T);
+            if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
 
-            if (value is string stringValue)
-                FormatCharString(stringValue);
-            // else if (value is char[] charArrValue)
-            //     FormatCharString(charArrValue);
-            else if (value is ReadOnlyMemory<char> charRoMemValue)
-                FormatCharString(charRoMemValue.Span);
-            else if (value is Memory<char> charMemValue)
-                FormatCharString(charMemValue.Span);
-            else if (value is byte[] byteArrValue)
-                FormatByteString(byteArrValue);
-            else if (value is ReadOnlyMemory<byte> byteRoMemValue)
-                FormatByteString(byteRoMemValue.Span);
-            else if (value is Memory<byte> byteMemValue)
-                FormatByteString(byteMemValue.Span);
+            object writer;
+            if (type == typeof(string))
+                writer = new FixedStringLiteralWriter<string>(this, s => s.AsMemory());
+            else if (type == typeof(ReadOnlyMemory<char>))
+                writer = new FixedStringLiteralWriter(this);
+            else if (type == typeof(Memory<char>))
+                writer = new FixedStringLiteralWriter<Memory<char>>(this, mem => mem);
+            else if (type == typeof(byte[]))
+                writer = new FixedStringHexLiteralWriter<byte[]>(this, a => a.AsMemory());
+            else if (type == typeof(ReadOnlyMemory<byte>))
+                writer = new FixedStringHexLiteralWriter(this);
+            else if (type == typeof(Memory<byte>))
+                writer = new FixedStringHexLiteralWriter<Memory<byte>>(this, mem => mem);
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            void FormatCharString(ReadOnlySpan<char> data)
-            {
-                var length = _length.Value;
-                var encoding = Encoding.UTF8;
-                var bytesCount = encoding.GetByteCount(data);
-                if (bytesCount > length)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the string ({bytesCount}) is greater than the maximum length ({length}).");
-                    
-                queryStringBuilder.Append('\'');
-                foreach (var charValue in data)
-                {
-                    switch (charValue)
-                    {
-                        case '\\':
-                            queryStringBuilder.Append("\\\\");
-                            break;
-                        case '\'':
-                            queryStringBuilder.Append("''");
-                            break;
-                        default:
-                            queryStringBuilder.Append(charValue);
-                            break;
-                    }
-                }
-                queryStringBuilder.Append('\'');
-            }
-            
-            void FormatByteString(ReadOnlySpan<byte> data)
-            {
-                var length = _length.Value;
-                if (data.Length > length)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the array ({data.Length}) is greater than the maximum length ({length}).");
-                queryStringBuilder.Append('\'');
-                foreach (var byteValue in data)
-                {
-                    queryStringBuilder.Append("\\x");
-                    queryStringBuilder.Append(HexDigits[byteValue >> 4]);
-                    queryStringBuilder.Append(HexDigits[byteValue & 0xF]);
-                }
-                queryStringBuilder.Append('\'');
-            }
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -347,6 +307,127 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             protected abstract int GetBytes(int position, Span<byte> buffer);
+        }
+
+        private class FixedStringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<char>>
+        {
+            private readonly FixedStringTypeInfo _type;
+
+            public FixedStringLiteralWriter(FixedStringTypeInfo type)
+            {
+                _type = type;
+            }
+
+            public bool TryCreateParameterValueWriter(ReadOnlyMemory<char> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var writer = new StringLiteralValueWriter(value, isNested);
+
+                Debug.Assert(_type._length != null);
+                if (writer.Length - 2 > _type._length.Value)
+                    ValidateLength(value); // Validate the length of the unescaped string without quota signs
+
+                valueWriter = writer;
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<char> value)
+            {
+                ValidateLength(value);
+                return StringLiteralWriter.Interpolate(queryBuilder, value.Span);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
+            }
+
+            private void ValidateLength(ReadOnlyMemory<char> value)
+            {
+                Debug.Assert(_type._length != null);
+                var length = _type._length.Value;
+                var encoding = Encoding.UTF8;
+                var bytesCount = encoding.GetByteCount(value.Span);
+                if (bytesCount > length)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the string ({bytesCount}) is greater than the maximum length ({length}).");
+            }
+        }
+
+        private sealed class FixedStringLiteralWriter<T> : FixedStringLiteralWriter, IClickHouseLiteralWriter<T>
+        {
+            private readonly Func<T, ReadOnlyMemory<char>> _convert;
+
+            public FixedStringLiteralWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<char>> convert)
+                : base(type)
+            {
+                _convert = convert;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                return TryCreateParameterValueWriter(_convert(value), isNested, out valueWriter);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                return Interpolate(queryBuilder, _convert(value));
+            }
+        }
+
+        private class FixedStringHexLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<byte>>
+        {
+            private readonly FixedStringTypeInfo _type;
+
+            public FixedStringHexLiteralWriter(FixedStringTypeInfo type)
+            {
+                _type = type;
+            }
+
+            public bool TryCreateParameterValueWriter(ReadOnlyMemory<byte> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                ValidateLength(value);
+                valueWriter = new HexStringLiteralValueWriter(value, isNested);
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<byte> value)
+            {
+                ValidateLength(value);
+                return HexStringLiteralWriter.Interpolate(queryBuilder, value.Span);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _type, FunctionHelper.Apply);
+            }
+
+            private void ValidateLength(ReadOnlyMemory<byte> value)
+            {
+                Debug.Assert(_type._length != null);
+                var length = _type._length.Value;
+                if (value.Length > length)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the array ({value.Length}) is greater than the maximum length ({length}).");
+            }
+        }
+
+        private sealed class FixedStringHexLiteralWriter<T> : FixedStringHexLiteralWriter, IClickHouseLiteralWriter<T>
+        {
+            private readonly Func<T, ReadOnlyMemory<byte>> _convert;
+
+            public FixedStringHexLiteralWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<byte>> convert)
+            : base(type)
+            {
+                _convert = convert;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                return TryCreateParameterValueWriter(_convert(value), isNested, out valueWriter);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                return Interpolate(queryBuilder, _convert(value));
+            }
         }
     }
 }

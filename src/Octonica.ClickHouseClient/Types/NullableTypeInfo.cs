@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -74,15 +76,28 @@ namespace Octonica.ClickHouseClient.Types
             return new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             if (UnderlyingType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-            
-            if (value == null || value is DBNull)
-                queryStringBuilder.Append("null");
-            else
-                UnderlyingType.FormatValue(queryStringBuilder, value);
+
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                return (IClickHouseLiteralWriter<T>)(object)new NullableLiteralWriter<DBNull>(this, NothingTypeInfo.NothingLiteralWriter.Instance);
+
+            if (type.IsValueType && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var valueType = type.GetGenericArguments()[0];
+                var dispatcherType = typeof(NullableStructLiteralWriterDispatcher<>).MakeGenericType(valueType);
+                var dispatcher = (INullableLiteralWriterDispatcher<T>?)Activator.CreateInstance(dispatcherType);
+                Debug.Assert(dispatcher != null);
+
+                return dispatcher.Dispatch(this);
+            }
+
+            // The type is either a non-value or a non-nullable stucture. In both cases it can be interpreted as non-nullable.
+            var underlyingWriter = UnderlyingType.CreateLiteralWriter<T>();
+            return new NullableLiteralWriter<T>(this, underlyingWriter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -299,6 +314,153 @@ namespace Octonica.ClickHouseClient.Types
                 var genericList = (IReadOnlyList<TValue?>) rows;
                 var listWrapper = MappedReadOnlyList<TValue?, TValue>.Map(genericList, item => item ?? default);
                 return underlyingTypeInfo.CreateColumnWriter(columnName, listWrapper, columnSettings);
+            }
+        }
+
+        private interface INullableLiteralWriterDispatcher<T>
+        {
+            IClickHouseLiteralWriter<T> Dispatch(NullableTypeInfo typeInfo);
+        }
+
+        private sealed class NullableStructLiteralWriterDispatcher<T> : INullableLiteralWriterDispatcher<T?>
+            where T : struct
+        {
+            public IClickHouseLiteralWriter<T?> Dispatch(NullableTypeInfo typeInfo)
+            {
+                Debug.Assert(typeInfo.UnderlyingType != null);
+                var underlyingWriter = typeInfo.UnderlyingType.CreateLiteralWriter<T>();
+                return new NullableStructLiteralWriter<T>(typeInfo, underlyingWriter);
+            }
+        }
+
+        private sealed class NullableStructLiteralWriter<T> : IClickHouseLiteralWriter<T?>
+            where T : struct
+        {
+            private readonly NullableTypeInfo _typeIfno;
+            private readonly IClickHouseLiteralWriter<T> _underlyingWritrer;
+
+            public NullableStructLiteralWriter(NullableTypeInfo typeIfno, IClickHouseLiteralWriter<T> underlyingWritrer)
+            {
+                _typeIfno = typeIfno;
+                _underlyingWritrer = underlyingWritrer;
+            }
+
+            public bool TryCreateParameterValueWriter(T? value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value == null)
+                {
+                    valueWriter = new SimpleLiteralValueWriter("null".AsMemory());
+                    return true;
+                }
+
+                return _underlyingWritrer.TryCreateParameterValueWriter(value.Value, isNested, out valueWriter);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T? value)
+            {
+                if (value != null)
+                {
+                    queryBuilder.Append("CAST((");
+                    _underlyingWritrer.Interpolate(queryBuilder, value.Value);
+                    queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                }
+                else
+                {
+                    queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
+                }
+
+                return queryBuilder;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    Debug.Assert(_typeIfno.UnderlyingType != null);
+                    if (typeInfo.ComplexTypeName == _typeIfno.UnderlyingType.ComplexTypeName)
+                    {
+                        // The value of the type Nullable(Nothing) can't be passed as a parameter
+                        if (typeInfo.ComplexTypeName != "Nothing")
+                            return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                    }
+
+                    var nullableTypeInfo = typeInfo;
+                    if (nullableTypeInfo.TypeName != "Nullable")
+                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+
+                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite) =>
+                    {
+                        qb2.Append("CAST((");
+                        writeElement(qb2, realWrite);
+                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        return qb2;
+                    });
+                });
+            }
+        }
+
+        private sealed class NullableLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        {
+            private readonly NullableTypeInfo _typeIfno;
+            private readonly IClickHouseLiteralWriter<T> _underlyingWritrer;
+
+            public NullableLiteralWriter(NullableTypeInfo typeIfno, IClickHouseLiteralWriter<T> underlyingWritrer)
+            {
+                _typeIfno = typeIfno;
+                _underlyingWritrer = underlyingWritrer;
+            }
+
+            public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value == null)
+                {
+                    valueWriter = new SimpleLiteralValueWriter("null".AsMemory());
+                    return true;
+                }
+
+                return _underlyingWritrer.TryCreateParameterValueWriter(value, isNested, out valueWriter);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
+            {
+                if (value != null)
+                {
+                    queryBuilder.Append("CAST((");
+                    _underlyingWritrer.Interpolate(queryBuilder, value);
+                    queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                }
+                else
+                {
+                    queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
+                }
+
+                return queryBuilder;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return _underlyingWritrer.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    Debug.Assert(_typeIfno.UnderlyingType != null);
+                    if (typeInfo.ComplexTypeName == _typeIfno.UnderlyingType.ComplexTypeName)
+                    {
+                        // The value of the type Nullable(Nothing) can't be passed as a parameter
+                        if (typeInfo.ComplexTypeName != "Nothing")
+                            return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                    }
+
+                    var nullableTypeInfo = typeInfo;
+                    if (nullableTypeInfo.TypeName != "Nullable")
+                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+
+                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite)=>
+                    {
+                        qb2.Append("CAST((");
+                        writeElement(qb2, realWrite);
+                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        return qb2;
+                    });
+                });
             }
         }
     }

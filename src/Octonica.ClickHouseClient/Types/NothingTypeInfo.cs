@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -47,9 +48,13 @@ namespace Octonica.ClickHouseClient.Types
             return new NothingColumnWriter(columnName, ComplexTypeName, rows.Count);
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"The ClickHouse type \"{ComplexTypeName}\" does not have any values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                return (IClickHouseLiteralWriter<T>)(object)NothingLiteralWriter.Instance;
+
+            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -124,6 +129,32 @@ namespace Octonica.ClickHouseClient.Types
 
                 _position += size;
                 return new SequenceSize(size, size);
+            }
+        }
+
+        internal sealed class NothingLiteralWriter : IClickHouseLiteralWriter<DBNull>
+        {
+            public static readonly NothingLiteralWriter Instance = new NothingLiteralWriter();
+
+            private NothingLiteralWriter()
+            {
+            }
+
+            public bool TryCreateParameterValueWriter(DBNull value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                valueWriter = EmptyParameterValueWriter.Instance;
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DBNull value)
+            {
+                return queryBuilder.Append("null");
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                var nothingType = typeInfoProvider.GetTypeInfo("Nothing");
+                return writeValue(queryBuilder, nothingType, (qb, _) => qb.Append("null"));
             }
         }
     }

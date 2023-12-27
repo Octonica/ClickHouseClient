@@ -18,6 +18,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -26,7 +28,7 @@ using Octonica.ClickHouseClient.Utils;
 namespace Octonica.ClickHouseClient.Types
 {
     internal abstract class EnumTypeInfoBase<TValue> : IClickHouseColumnTypeInfo
-        where TValue : struct
+        where TValue : struct, IFormattable
     {
         protected readonly Dictionary<string, TValue>? _enumMap;
         private readonly Dictionary<TValue, string>? _reversedEnumMap;
@@ -124,7 +126,7 @@ namespace Octonica.ClickHouseClient.Types
             return CreateInternalColumnWriter(columnName, rows);
         }
 
-        public abstract void FormatValue(StringBuilder queryStringBuilder, object? value);
+        public abstract IClickHouseLiteralWriter<T> CreateLiteralWriter<T>();
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
@@ -228,6 +230,46 @@ namespace Octonica.ClickHouseClient.Types
 
             protected abstract bool TryMap<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter, TValue value, string stringValue, out TEnum enumValue)
                 where TEnum : Enum;
+        }
+
+        protected sealed class EnumLiteralWriter : IClickHouseLiteralWriter<string>
+        {
+            private readonly EnumTypeInfoBase<TValue> _type;
+            private readonly SimpleLiteralWriter<TValue> _writer;
+
+            public EnumLiteralWriter(EnumTypeInfoBase<TValue> type)
+            {
+                _type = type;
+                _writer = new SimpleLiteralWriter<TValue>(_type);
+            }
+
+            public bool TryCreateParameterValueWriter(string value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var enumValue = Convert(value);
+                return _writer.TryCreateParameterValueWriter(enumValue, isNested, out valueWriter);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, string value)
+            {
+                var enumValue = Convert(value);
+                return _writer.Interpolate(queryBuilder, enumValue);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return _writer.Interpolate(queryBuilder, typeInfoProvider, writeValue);
+            }
+
+            private TValue Convert(string value)
+            {
+                var enumMap = _type._enumMap;
+                Debug.Assert(enumMap != null);
+
+                if (enumMap.TryGetValue(value, out var enumValue))
+                    return enumValue;
+
+                throw new InvalidCastException($"The value \"{value}\" can't be converted to the ClickHouse type \"{_type.ComplexTypeName}\".");
+            }
         }
     }
 }

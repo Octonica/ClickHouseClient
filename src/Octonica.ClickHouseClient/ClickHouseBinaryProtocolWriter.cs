@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -142,11 +142,16 @@ namespace Octonica.ClickHouseClient
 
         public SequenceSize WriteRaw(Func<Memory<byte>, SequenceSize> writeBytes)
         {
+            return WriteRaw(0, writeBytes);
+        }
+
+        public SequenceSize WriteRaw(int sizeHint, Func<Memory<byte>, SequenceSize> writeBytes)
+        {
             if (writeBytes == null)
                 throw new ArgumentNullException(nameof(writeBytes));
 
             SequenceSize size;
-            var memory = GetMemory();
+            var memory = sizeHint > 0 ? GetMemory(sizeHint) : GetMemory();
             if (!memory.IsEmpty)
             {
                 try

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,10 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
@@ -196,79 +199,80 @@ namespace Octonica.ClickHouseClient.Types
             return 0;
         }
 
-        public void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-            
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{ComplexTypeName}\" does not allow null values");
 
-            if (value is string || !(value is IEnumerable enumerable))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{ComplexTypeName}\" does not allow null values.");
 
-            if (value is Array array && array.Rank > 1)
+            if (type == typeof(string))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            Type? elementType = null;
+            foreach (var itf in type.GetInterfaces())
             {
-                FormatMultiDimensionalArray(array, _elementTypeInfo, 0, array.GetEnumerator());
-                
-                void FormatMultiDimensionalArray(Array array, IClickHouseColumnTypeInfo dimensionElementType, int dimension, IEnumerator enumerator)
+                if (!itf.IsGenericType)
+                    continue;
+
+                var typeDef = itf.GetGenericTypeDefinition();
+                if (typeDef == typeof(ICollection<>) || typeDef == typeof(IReadOnlyCollection<>))
                 {
-                    var rankLength = array.GetLength(dimension);
-                    queryStringBuilder.Append('[');
-                    if (dimension == array.Rank - 1)
+                    var genericArg = itf.GetGenericArguments()[0];
+                    if (elementType == null || elementType.IsAssignableFrom(genericArg))
                     {
-                        for (var i = 0; i < rankLength; ++i)
-                        {
-                            if (i > 0)
-                                queryStringBuilder.Append(',');
-                            
-                            if (!enumerator.MoveNext())
-                            {
-                                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: unexpected iterator out of bound.");
-                            }
-                            
-                            dimensionElementType.FormatValue(queryStringBuilder, enumerator.Current);
-                        }
+                        elementType = genericArg;
+                    }
+                    else if (!genericArg.IsAssignableFrom(elementType))
+                    {
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.TypeNotSupported,
+                            $"Can't detect a type of the array's element. Candidates are: \"{elementType}\" and \"{genericArg}\".");
+                    }
+                }
+            }
+
+            ArrayLiteralWriterDispatcher<T> dispatcher;
+            if (elementType == null)
+            {
+                int arrayRank;
+                if (!type.IsArray || (arrayRank = type.GetArrayRank()) == 1)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+                var elementTypeInfo = _elementTypeInfo;
+                for (int i = 1; i < arrayRank; i++)
+                {
+                    if (elementTypeInfo is NullableTypeInfo nti)
+                    {
+                        elementTypeInfo = nti.UnderlyingType;
+                        --i;
+                    }
+                    else if (elementTypeInfo is ArrayTypeInfo ati)
+                    {
+                        elementTypeInfo = ati._elementTypeInfo;
                     }
                     else
                     {
-                        var nextDimension = dimension + 1;
-                        IClickHouseColumnTypeInfo nextDimensionElementType;
-                        var tmp = dimensionElementType;
-                        while (tmp is NullableTypeInfo nti)
-                            tmp = nti.UnderlyingType;
-                        if (tmp == null)
-                            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-                        if (tmp is ArrayTypeInfo ati)
-                            nextDimensionElementType = ati._elementTypeInfo ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-                        else
-                            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The multidimensional array value can not be converted type \"{ComplexTypeName}\": dimension number mismatch.");
-                        
-                        for (var i = 0; i < rankLength; ++i)
-                        {
-                            if (i > 0)
-                                queryStringBuilder.Append(',');
-                            
-                            FormatMultiDimensionalArray(array, nextDimensionElementType, nextDimension, enumerator);
-                        }
+                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The multidimensional array value can not be converted type \"{ComplexTypeName}\": dimension number mismatch.");
                     }
-                    queryStringBuilder.Append(']');
+
+                    if (elementTypeInfo == null)
+                        throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
                 }
+
+                elementType = type.GetElementType();
+                Debug.Assert( elementType != null );
+                dispatcher = new ArrayLiteralWriterDispatcher<T>(this, elementTypeInfo, true);
             }
             else
             {
-                queryStringBuilder.Append('[');
-                var needPrecedingComma = false;
-                foreach (var element in enumerable)
-                {
-                    if (needPrecedingComma)
-                        queryStringBuilder.Append(',');
-                    else
-                        needPrecedingComma = true;
-                    _elementTypeInfo.FormatValue(queryStringBuilder, element);
-                }
-                queryStringBuilder.Append(']');
+                dispatcher = new ArrayLiteralWriterDispatcher<T>(this, _elementTypeInfo, false);
             }
+
+            var writer = TypeDispatcher.Dispatch(elementType, dispatcher);
+            return writer;
         }
 
         private abstract class ArrayColumnReaderBase<TElementColumnReader> : IClickHouseColumnReaderBase
@@ -668,6 +672,285 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseTableColumn Dispatch<T>(IClickHouseTableColumn<T> column)
             {
                 return new ArrayTableColumn<T>(column, _ranges);
+            }
+        }
+
+        private sealed class ArrayLiteralWriterDispatcher<TArray> : ITypeDispatcher<IClickHouseLiteralWriter<TArray>>
+        {
+            private readonly ArrayTypeInfo _arrayType;
+            private readonly IClickHouseColumnTypeInfo _elementType;
+            private readonly bool _isMultidimensional;
+
+            public ArrayLiteralWriterDispatcher(ArrayTypeInfo arrayType, IClickHouseColumnTypeInfo elementType, bool isMultidimensional)
+            {
+                _arrayType = arrayType;
+                _elementType = elementType;
+                _isMultidimensional = isMultidimensional;
+            }
+
+            public IClickHouseLiteralWriter<TArray> Dispatch<T>()
+            {
+                var elementWriter = _elementType.CreateLiteralWriter<T>();
+
+                if (_isMultidimensional)
+                    return new MultidimensionalArralLiteralWriter<TArray, T>(_arrayType, elementWriter);
+
+                return new ArrayLiteralWriter<TArray, T>(_arrayType, elementWriter);
+            }
+        }
+
+        private sealed class MultidimensionalArralLiteralWriter<TArray, TElement> : IClickHouseLiteralWriter<TArray>
+        {
+            private readonly ArrayTypeInfo _arrayType;
+            private readonly IClickHouseLiteralWriter<TElement> _elementWriter;
+
+            public MultidimensionalArralLiteralWriter(ArrayTypeInfo arrayType, IClickHouseLiteralWriter<TElement> elementWriter)
+            {
+                _arrayType = arrayType;
+                _elementWriter = elementWriter;
+            }
+
+            public bool TryCreateParameterValueWriter(TArray value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var enumerator = ((IEnumerable)value).GetEnumerator();
+                if (!TryCreateElementWriters((Array)(object)value, enumerator, 0, out var elementWriters))
+                {
+                    valueWriter = null;
+                    return false;
+                }
+
+                valueWriter = new ArrayLiteralValueWriter(elementWriters);
+                return true;
+            }
+
+            private bool TryCreateElementWriters(Array array, IEnumerator enumerator, int dimension, [NotNullWhen(true)] out List<IClickHouseParameterValueWriter>? writers)
+            {
+                var rankLength = array.GetLength(dimension);
+                writers = new List<IClickHouseParameterValueWriter>(rankLength);
+                if (dimension == array.Rank - 1)
+                {
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (!enumerator.MoveNext())
+                            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: unexpected iterator out of bound.");
+
+                        if (!_elementWriter.TryCreateParameterValueWriter((TElement)enumerator.Current!, true, out var elementWriter))
+                            return false;
+
+                        writers.Add(elementWriter);
+                    }
+                }
+                else
+                {
+                    var nextDimension = dimension + 1;
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (!TryCreateElementWriters(array, enumerator, nextDimension, out var elementWriters))
+                            return false;
+
+                        writers.Add(new ArrayLiteralValueWriter(elementWriters));
+                    }
+                }
+
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, TArray value)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var enumerator = ((IEnumerable)value).GetEnumerator();
+                return Interpolate(queryBuilder, (Array)(object)value, enumerator, 0);
+            }
+
+            private StringBuilder Interpolate(StringBuilder queryBuilder, Array array, IEnumerator enumerator, int dimension)
+            {
+                var rankLength = array.GetLength(dimension);
+                queryBuilder.Append('[');
+                if (dimension == array.Rank - 1)
+                {
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (!enumerator.MoveNext())
+                            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error: unexpected iterator out of bound.");
+
+                        if (i > 0)
+                            queryBuilder.Append(',');
+
+                        _elementWriter.Interpolate(queryBuilder, (TElement)enumerator.Current!);
+                    }
+                }
+                else
+                {
+                    var nextDimension = dimension + 1;
+                    for (var i = 0; i < rankLength; ++i)
+                    {
+                        if (i > 0)
+                            queryBuilder.Append(',');
+
+                        Interpolate(queryBuilder, array, enumerator, nextDimension);
+                    }
+                }
+
+                return queryBuilder.Append(']');
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return _elementWriter.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    int rank = 1;
+                    var elementTypeInfo = _arrayType._elementTypeInfo;
+                    while (elementTypeInfo is ArrayTypeInfo elementArray)
+                    {
+                        elementTypeInfo = elementArray._elementTypeInfo;
+                        ++rank;
+                    }
+
+                    Debug.Assert(elementTypeInfo != null);
+                    if (elementTypeInfo.ComplexTypeName == typeInfo.ComplexTypeName)
+                        return writeValue(qb, _arrayType, FunctionHelper.Apply);
+
+                    var updArrayTypeInfo = new ArrayTypeInfo(typeInfo);
+                    for (int i = rank - 1; i > 0; i--)
+                        updArrayTypeInfo = new ArrayTypeInfo(updArrayTypeInfo);
+
+                    return writeValue(qb, updArrayTypeInfo, (qb2, realWrite) =>
+                    {
+                        for (int i = 1; i <= rank; i++)
+                            qb2.AppendFormat(CultureInfo.InvariantCulture, "arrayMap(_elt{0} -> ", i);
+
+                        writeElement(qb2, b => b.AppendFormat(CultureInfo.InvariantCulture, "_elt{0}", rank));
+
+                        for (int i = rank - 1; i > 0; i--)
+                            qb2.AppendFormat(CultureInfo.InvariantCulture, ", _elt{0})", i);
+
+                        qb2.Append(", ");
+                        realWrite(qb2);
+                        qb2.Append(')');
+                        return qb2;
+                    });
+                });
+            }
+        }
+
+        private sealed class ArrayLiteralWriter<TArray, TElement> : IClickHouseLiteralWriter<TArray>
+        {
+            private readonly ArrayTypeInfo _type;
+            private readonly IClickHouseLiteralWriter<TElement> _elementWriter;
+
+            public ArrayLiteralWriter(ArrayTypeInfo type, IClickHouseLiteralWriter<TElement> elementWriter)
+            {
+                _type = type;
+                _elementWriter = elementWriter;
+            }
+
+            public bool TryCreateParameterValueWriter(TArray value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var elementWriters = new List<IClickHouseParameterValueWriter>();
+                foreach(var element in (IEnumerable<TElement>)value)
+                {
+                    if (!_elementWriter.TryCreateParameterValueWriter(element, true, out var elementWriter))
+                    {
+                        valueWriter = null;
+                        return false;
+                    }
+
+                    elementWriters.Add(elementWriter);
+                }
+
+                valueWriter = new ArrayLiteralValueWriter(elementWriters);
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, TArray value)
+            {
+                if (value is null)
+                    throw new ArgumentNullException(nameof(value));
+
+                var elementTypeInfo = _type._elementTypeInfo;
+                Debug.Assert(elementTypeInfo != null);
+
+                queryBuilder.Append('[');
+
+                bool isFirst = true;
+                foreach (var element in (IEnumerable<TElement>)value)
+                {
+                    if (isFirst)
+                        isFirst = false;
+                    else
+                        queryBuilder.Append(',');
+
+                    _elementWriter.Interpolate(queryBuilder, element);
+                }
+
+                return queryBuilder.Append(']');
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return _elementWriter.Interpolate(queryBuilder, typeInfoProvider, (qb, typeInfo, writeElement) =>
+                {
+                    var elementTypeInfo = _type._elementTypeInfo;
+                    Debug.Assert(elementTypeInfo != null);
+                    if (elementTypeInfo.ComplexTypeName == typeInfo.ComplexTypeName)
+                        return writeValue(qb, _type, FunctionHelper.Apply);
+
+                    var updArrayTypeInfo = new ArrayTypeInfo(typeInfo);
+                    return writeValue(qb, updArrayTypeInfo, (qb2, realWrite) =>
+                    {
+                        qb2.Append("arrayMap(_elt -> ");
+                        writeElement(qb2, b => b.Append("_elt"));
+                        qb2.Append(", ");
+                        realWrite(qb2);
+                        return qb2.Append(')');
+                    });
+                });
+            }
+        }
+
+        private sealed class ArrayLiteralValueWriter : IClickHouseParameterValueWriter
+        {
+            private readonly List<IClickHouseParameterValueWriter> _elementWriters;
+
+            public int Length { get; }
+
+            public ArrayLiteralValueWriter(List<IClickHouseParameterValueWriter> elementWriters)
+            {
+                Length =
+                    2 + // []
+                    elementWriters.Aggregate(0, (l, w) => w.Length + l) + // length of elements
+                    Math.Max(0, elementWriters.Count - 1); // comas
+                _elementWriters = elementWriters;
+            }
+
+            public int Write(Memory<byte> buffer)
+            {
+                int count = 0;
+                buffer.Span[count++] = (byte)'[';
+
+                bool isFirst = true;
+                foreach (var writer in _elementWriters)
+                {
+                    if (isFirst)
+                        isFirst = false;
+                    else
+                        buffer.Span[count++] = (byte)',';
+
+                    count += writer.Write(buffer.Slice(count));
+                }
+
+                buffer.Span[count++] = (byte)']';
+                Debug.Assert(count == Length);
+
+                return count;
             }
         }
     }

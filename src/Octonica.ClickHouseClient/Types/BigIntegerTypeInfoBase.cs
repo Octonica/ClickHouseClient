@@ -24,7 +24,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Diagnostics;
 using System.Numerics;
-using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -92,37 +91,64 @@ namespace Octonica.ClickHouseClient.Types
             return new BigIntegerColumnWriter(columnName, ComplexTypeName, _elementByteSize, bigIntegerRows, _isUnsigned);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            if (value is BigInteger bigIntegerValue)
+            object? writer = null;
+            if (type == typeof(BigInteger))
             {
-                if (_isUnsigned && bigIntegerValue.Sign < 0)
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow negative BigInteger values");
-                queryStringBuilder.Append('\'').Append(bigIntegerValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+                if (_isUnsigned)
+                {
+                    writer = new StringLiteralWriter<BigInteger>(
+                        this,
+                        bigIntegerValue =>
+                        {
+                            if (bigIntegerValue.Sign < 0)
+                                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow negative BigInteger values.");
+
+                            return bigIntegerValue.ToString(CultureInfo.InvariantCulture).AsMemory();
+                        });
+                }
+                else
+                {
+                    writer = StringLiteralWriter.Create<BigInteger>(this);
+                }
             }
-            else if (value is ulong ulongValue)
-                queryStringBuilder.Append('\'').Append(ulongValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-            else if (value is uint uintValue)
-                queryStringBuilder.Append('\'').Append(uintValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-            else if (value is ushort ushortValue)
-                queryStringBuilder.Append('\'').Append(ushortValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-            else if (value is byte byteValue)
-                queryStringBuilder.Append('\'').Append(byteValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
+            else if (type == typeof(ulong))
+            {
+                writer = StringLiteralWriter.Create<ulong>(this);
+            }
+            else if (type == typeof(uint))
+            {
+                writer = StringLiteralWriter.Create<uint>(this);
+            }
+            else if (type == typeof(ushort))
+            {
+                writer = StringLiteralWriter.Create<ushort>(this);
+            }
+            else if (type == typeof(byte))
+            {
+                writer = StringLiteralWriter.Create<byte>(this);
+            }
             else if (!_isUnsigned)
             {
-                if (value is long longValue)
-                    queryStringBuilder.Append('\'').Append(longValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-                else if (value is int intValue)
-                    queryStringBuilder.Append('\'').Append(intValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-                else if (value is short shortValue)
-                    queryStringBuilder.Append('\'').Append(shortValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-                else if (value is sbyte sbyteValue)
-                    queryStringBuilder.Append('\'').Append(sbyteValue.ToString(CultureInfo.InvariantCulture)).Append('\'');
-            } else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+                if (type == typeof(long))
+                    writer = StringLiteralWriter.Create<long>(this);
+                if (type == typeof(int))
+                    writer = StringLiteralWriter.Create<int>(this);
+                if (type == typeof(short))
+                    writer = StringLiteralWriter.Create<short>(this);
+                else if (type == typeof(sbyte))
+                    writer = StringLiteralWriter.Create<sbyte>(this);
+            }
+
+            if (writer == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public sealed override Type GetFieldType()

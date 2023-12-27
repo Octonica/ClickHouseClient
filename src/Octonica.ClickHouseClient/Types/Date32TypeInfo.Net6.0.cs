@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,9 @@ using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
@@ -30,6 +32,9 @@ namespace Octonica.ClickHouseClient.Types
     partial class Date32TypeInfo
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
+
+        private static readonly DateOnly MinDateOnlyValue = UnixEpoch.AddDays(MinValue);
+        private static readonly DateOnly MaxDateOnlyValue = UnixEpoch.AddDays(MaxValue);
 
         public override Type GetFieldType()
         {
@@ -49,28 +54,32 @@ namespace Octonica.ClickHouseClient.Types
             return new Date32Writer(columnName, ComplexTypeName, dateOnlyRows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            int days;
+            object writer = default(T) switch
+            {
+                DateOnly => new DateOnlyiteralWriter(this),
+                DateTime => new DateTimeLiteralWriter(this),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+            };
 
-            if (value is DateOnly dateOnlyValue)
-                days = dateOnlyValue == default ?
-                    MinValue :
-                    dateOnlyValue.DayNumber - UnixEpoch.DayNumber;
-            else if (value is DateTime dateTimeValue)
-                days = dateTimeValue == default ?
-                    MinValue :
-                    DateOnly.FromDateTime(dateTimeValue).DayNumber - UnixEpoch.DayNumber;
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            
+            return (IClickHouseLiteralWriter<T>)writer;
+        }
+
+        private static int DateOnlyToDays(DateOnly value)
+        {
+            if (value == default)
+                return MinValue;
+
+            var days = value.DayNumber - UnixEpoch.DayNumber;
             if (days < MinValue || days > MaxValue)
                 throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
 
-            queryStringBuilder.Append(days.ToString(CultureInfo.InvariantCulture));
+            return days;
         }
 
         partial class Date32Reader : StructureReaderBase<int, DateOnly>
@@ -90,14 +99,50 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override int Convert(DateOnly value)
             {
+                return DateOnlyToDays(value);
+            }
+        }
+
+        private sealed class DateOnlyiteralWriter : IClickHouseLiteralWriter<DateOnly>
+        {
+            private readonly Date32TypeInfo _typeInfo;
+
+            public DateOnlyiteralWriter(Date32TypeInfo typeInfo)
+            {
+                _typeInfo = typeInfo;
+            }
+
+            public bool TryCreateParameterValueWriter(DateOnly value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
+            {
+                var strVal = ValueToString(value);
+                if (isNested)
+                    strVal = $"'{strVal}'";
+
+                valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
+                return true;
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, DateOnly value)
+            {
+                var strVal = ValueToString(value);
+                return queryBuilder.Append('\'').Append(strVal).Append("'::").Append(_typeInfo.ComplexTypeName);
+            }
+
+            public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
+            {
+                return writeValue(queryBuilder, _typeInfo, FunctionHelper.Apply);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static string ValueToString(DateOnly value)
+            {
                 if (value == default)
-                    return MinValue;
+                    return DefaultValueStr;
 
-                var days = value.DayNumber - UnixEpoch.DayNumber;
-                if (days < MinValue || days > MaxValue)
-                    throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
+                if (value < MinDateOnlyValue || value > MaxDateOnlyValue)
+                    throw new OverflowException($"The value must be in range [{MinDateOnlyValue}, {MaxDateOnlyValue}].");
 
-                return days;
+                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

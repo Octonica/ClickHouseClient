@@ -750,21 +750,22 @@ namespace Octonica.ClickHouseClient
         {
             string commandText;
             List<IClickHouseTableWriter>? tableWriters = null;
+            Dictionary<string, ClickHouseParameterWriter>? literalParameters;
 
             try
             {
                 var parametersTable = $"_{Guid.NewGuid():N}";
-                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out var parameters);
+                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out var binaryParameters, out literalParameters);
 
-                if (parameters != null)
+                if (binaryParameters != null && binaryParameters.Count > 0)
                 {
-                    tableWriters = new List<IClickHouseTableWriter>(TableProviders.Count + 1);
-                    tableWriters.Add(CreateParameterTableWriter(session.TypeInfoProvider, parametersTable));
+                    var paramTableWriter = CreateParameterTableWriter(session.TypeInfoProvider, parametersTable, binaryParameters);
+                    tableWriters = new List<IClickHouseTableWriter>(TableProviders.Count + 1) { paramTableWriter };
                 }
                 if (TableProviders.Count > 0)
                 {
                     tableWriters ??= new List<IClickHouseTableWriter>(TableProviders.Count);
-                    foreach(var tableProvider in TableProviders)
+                    foreach (var tableProvider in TableProviders)
                     {
                         if (tableProvider.ColumnCount == 0)
                             continue;
@@ -798,7 +799,7 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting};
+            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting, Parameters = literalParameters };
             await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
@@ -846,9 +847,9 @@ namespace Octonica.ClickHouseClient
             return connection?.ParametersMode ?? ClickHouseParameterMode.Default;
         }
 
-        private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName)
+        private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName, HashSet<string> parameters)
         {
-            return new ClickHouseTableWriter(tableName, 1, Parameters.Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
+            return new ClickHouseTableWriter(tableName, 1, Parameters.Where(p => parameters.Contains(p.Id)).Select(p => p.CreateParameterColumnWriter(typeInfoProvider)));
         }
 
         private static async ValueTask<IClickHouseTableWriter> CreateTableWriter(IClickHouseTableProvider tableProvider, IClickHouseTypeInfoProvider typeInfoProvider, bool async, CancellationToken cancellationToken)
@@ -870,20 +871,18 @@ namespace Octonica.ClickHouseClient
             return new ClickHouseTableWriter(tableProvider.TableName, rowCount, factories.Select(f => f.Create(0, rowCount)));
         }
 
-        private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider, string parametersTable, out HashSet<string>? parameters)
+        private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider, string parametersTable, out HashSet<string>? binaryParameters, out Dictionary<string, ClickHouseParameterWriter>? literalParameters)
         {
             var query = CommandText;
             if (string.IsNullOrEmpty(query))
                 throw new InvalidOperationException("Command text is not defined.");
 
             var parameterPositions = GetParameterPositions(query);
+            binaryParameters = null;
+            literalParameters = null;
             if (parameterPositions.Count == 0)
-            {
-                parameters = null;
                 return query;
-            }
 
-            parameters = null;
             var inheritParameterMode = GetParametersMode(Connection);
             var queryStringBuilder = new StringBuilder(query.Length);
             for (int i = 0; i < parameterPositions.Count; i++)
@@ -897,34 +896,49 @@ namespace Octonica.ClickHouseClient
                 if (!Parameters.TryGetValue(parameterName, out var parameter))
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
 
+                if (typeSeparatorIdx >= 0)
+                    queryStringBuilder.Append("(CAST(");
+
                 var parameterMode = parameter.GetParameterMode(inheritParameterMode);
                 switch (parameterMode)
                 {
                     case ClickHouseParameterMode.Interpolate:
-                        var specifiedType = typeSeparatorIdx >= 0 ? query.AsMemory().Slice(offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2) : ReadOnlyMemory<char>.Empty;
-                        parameter.OutputParameterValue(queryStringBuilder, specifiedType, typeInfoProvider);
+                    {
+                        var parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
+                        parameterWriter.Interpolate(queryStringBuilder.Append(" (")).Append(") ");
                         break;
+                    }
 
                     case ClickHouseParameterMode.Default:
                     case ClickHouseParameterMode.Binary:
-                        if (parameters == null)
-                            parameters = new HashSet<string>();
-
-                        if (!parameters.Contains(parameter.ParameterName))
-                            parameters.Add(parameter.ParameterName);
-
-                        if (typeSeparatorIdx >= 0)
-                            queryStringBuilder.Append("(CAST(");
-
+                        binaryParameters ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        binaryParameters.Add(parameter.Id);
                         queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
-
-                        if (typeSeparatorIdx >= 0)
-                            queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
                         break;
+
+                    case ClickHouseParameterMode.Serialize:
+                    {
+                        literalParameters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
+                        if (!literalParameters.TryGetValue(parameter.Id, out var parameterWriter))
+                        {
+                            parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
+                            literalParameters.Add(parameter.Id, parameterWriter);
+                        }
+
+                        parameterWriter.Interpolate(
+                            queryStringBuilder,
+                            typeInfoProvider,
+                            (qb, tp) => qb.Append('{').Append(parameter.Id).Append(':').Append(tp.ComplexTypeName).Append('}'));
+
+                        break;
+                    }
 
                     default:
                         throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Unexpected parameter mode: {parameterMode}.");
                 }
+
+                if (typeSeparatorIdx >= 0)
+                    queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
             }
 
             var lastPartStart = parameterPositions[^1].offset + parameterPositions[^1].length;

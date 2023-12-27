@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -64,21 +63,26 @@ namespace Octonica.ClickHouseClient.Types
             return new IpV4Writer(columnName, TypeName, preparedRows);
         }
 
-        public override void FormatValue(StringBuilder queryStringBuilder, object? value)
+        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
         {
-            if (value == null || value is DBNull)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            var type = typeof(T);
+            if (type == typeof(DBNull))
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
-            uint outputValue = value switch
-            {
-                IPAddress theValue => IpAddressToUInt32(theValue),
-                string theValue => IpAddressStringToUInt32(theValue),
-                uint theValue => theValue,
-                int theValue => unchecked((uint) theValue),
-                _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{value.GetType()}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
-            };
+            const string valueType = "UInt32";
+            object writer;
+            if (type == typeof(IPAddress))
+                writer = new SimpleLiteralWriter<IPAddress, uint>(valueType, this, null, true, IpAddressToUInt32);
+            else if (type == typeof(string))
+                writer = new SimpleLiteralWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32);
+            else if (type == typeof(uint))
+                writer = new SimpleLiteralWriter<uint>(valueType, this, appendTypeCast: true);
+            else if (type == typeof(int))
+                writer = new SimpleLiteralWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v));
+            else
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            queryStringBuilder.Append(outputValue);
+            return (IClickHouseLiteralWriter<T>)writer;
         }
 
         public override Type GetFieldType()
