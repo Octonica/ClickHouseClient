@@ -218,7 +218,7 @@ namespace Octonica.ClickHouseClient.Tests
         [MemberData(nameof(ParameterModes))]
         public async Task ReadStringParameterScalar(ClickHouseParameterMode parameterMode)
         {
-            var strings = new[] {null, "", "abcde", "fghi", "jklm", "nopq", "rst", "uvwxy","z"};
+            var strings = new[] {null, "", "abcde", "fghi", "jklm", "ab\tc", "'abc'", "new\r\nline", "\\"};
 
             var byteArray = Encoding.UTF8.GetBytes(strings[4]!);
             var byteMemory = Encoding.UTF8.GetBytes(strings[5]!).AsMemory();
@@ -230,7 +230,7 @@ namespace Octonica.ClickHouseClient.Tests
             await using var connection = await OpenConnectionAsync(parameterMode);
             await using var cmd = connection.CreateCommand("SELECT {val}");
             var param = cmd.Parameters.AddWithValue("val", "some_value", DbType.String);
-            for (var i = 0; i < values.Length; i++)
+            for (var i = 0; i < strings.Length; i++)
             {
                 param.Value = values[i];
                 var result = await cmd.ExecuteScalarAsync(CancellationToken.None);
@@ -239,6 +239,74 @@ namespace Octonica.ClickHouseClient.Tests
                 else
                     Assert.Equal(strings[i], Assert.IsType<string>(result));
             }
+        }
+
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadStringArrayParameterScalar(ClickHouseParameterMode parameterMode)
+        {
+            var arr = new[] { "abc", "\r\n\t'\\", "\\", null, "", "ЮНИКОД", "'quoted'" };
+
+            await using var connection = await OpenConnectionAsync(parameterMode);
+            await using var cmd = connection.CreateCommand("SELECT {val} v, toTypeName(v)");
+            var param = cmd.Parameters.AddWithValue("val", arr);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+
+            var typeName = reader.GetString(1);
+            Assert.Equal("Array(Nullable(String))", typeName);
+
+            var value = reader.GetValue(0);
+            var valueArray = Assert.IsType<string?[]>(value);
+            Assert.Equal(arr.Length, valueArray.Length);
+            Assert.Equal(arr, valueArray);
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Theory]
+        [MemberData(nameof(ParameterModes))]
+        public async Task ReadMultidimensionalStringArrayParameterScalar(ClickHouseParameterMode parameterMode)
+        {
+            var arr = new List<string?[,]>()
+            {
+                new[,] { {"ab", "cd"}, {"ef", null} },
+                new[,] { {null, "foo", "\\"}, {"bar\tbaz", "new\r\nline", "rock'n'roll"} }
+            };
+
+            await using var connection = await OpenConnectionAsync(parameterMode);
+            await using var cmd = connection.CreateCommand("SELECT {val} v, toTypeName(v)");
+            var param = cmd.Parameters.AddWithValue("val", arr);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+
+            var typeName = reader.GetString(1);
+            Assert.Equal("Array(Array(Array(Nullable(String))))", typeName);
+
+            var value = reader.GetValue(0);
+            var valueArray = Assert.IsType<string?[][][]>(value);
+            Assert.Equal(arr.Count, valueArray.Length);
+            for (int i = 0; i < valueArray.Length; i++)
+            {
+                var expected = arr[i];
+                var actualArr2 = valueArray[i];
+
+                var expectedLengthI = expected.GetLength(0);
+                var expectedLengthJ = expected.GetLength(1);
+                Assert.Equal(expectedLengthI, actualArr2.Length);
+                for (int j = 0; j < expectedLengthI; j++)
+                {
+                    var actualArr = actualArr2[j];
+                    Assert.Equal(expectedLengthJ, actualArr.Length);
+
+                    for (int k = 0; k < expectedLengthJ; k++)
+                        Assert.Equal(expected[j, k], actualArr[k]);
+                }
+            }
+
+            Assert.False(await reader.ReadAsync());
         }
 
         [Fact]
