@@ -28,7 +28,9 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public ulong Bytes { get; }
 
-        public ulong Totals { get; }
+        public ulong TotalRows { get; }
+
+        public ulong TotalBytes { get; }
 
         public ulong WrittenRows { get; }
 
@@ -36,11 +38,12 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public ulong ElapsedNanoseconds { get; }
 
-        private ServerProgressMessage(ulong rows, ulong bytes, ulong totals, ulong writtenRows, ulong writtenBytes, ulong elapsedNanoseconds)
+        private ServerProgressMessage(ulong rows, ulong bytes, ulong totalRows, ulong totalBytes, ulong writtenRows, ulong writtenBytes, ulong elapsedNanoseconds)
         {
             Rows = rows;
             Bytes = bytes;
-            Totals = totals;
+            TotalRows = totalRows;
+            TotalBytes = totalBytes;
             WrittenRows = writtenRows;
             WrittenBytes = writtenBytes;
             ElapsedNanoseconds = elapsedNanoseconds;
@@ -50,7 +53,12 @@ namespace Octonica.ClickHouseClient.Protocol
         {
             ulong rows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong bytes = await reader.Read7BitUInt64(async, cancellationToken);
-            ulong totals = await reader.Read7BitUInt64(async, cancellationToken);
+            ulong totalRows = await reader.Read7BitUInt64(async, cancellationToken);
+
+            ulong totalBytes = 0;
+            if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithTotalBytesInProgress)
+                totalBytes = await reader.Read7BitUInt64(async, cancellationToken);
+
             ulong writtenRows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong writtenBytes = await reader.Read7BitUInt64(async, cancellationToken);
 
@@ -58,7 +66,7 @@ namespace Octonica.ClickHouseClient.Protocol
             if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithServerQueryTimeInProgress)
                 elapsedNanoseconds = await reader.Read7BitUInt64(async, cancellationToken);
 
-            return new ServerProgressMessage(rows, bytes, totals, writtenRows, writtenBytes, elapsedNanoseconds);
+            return new ServerProgressMessage(rows, bytes, totalRows, totalBytes, writtenRows, writtenBytes, elapsedNanoseconds);
         }
     }
 }

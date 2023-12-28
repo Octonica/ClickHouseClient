@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithInterserverSecretV2;
+        public const int CurrentRevision = MinRevisionWithTotalBytesInProgress;
+
+        /// <summary>
+        /// The number of protocol's revision with the number of total bytes in progress messages.
+        /// </summary>
+        public const int MinRevisionWithTotalBytesInProgress = 54463;
 
         /// <summary>
         /// The number of the protocol's revision that supports interserver secret (V2).
