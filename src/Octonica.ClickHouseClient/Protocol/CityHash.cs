@@ -103,7 +103,7 @@ namespace Octonica.ClickHouseClient.Protocol
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static UInt64 HashLen16(UInt64 u, UInt64 v)
         {
-            return Hash128to64(new UInt128(u, v));
+            return Hash128to64(new UInt128(v, u));
         }
 
         // Hash 128 input bits down to 64 bits of output.
@@ -115,9 +115,17 @@ namespace Octonica.ClickHouseClient.Protocol
 
             unchecked
             {
+#if NET8_0_OR_GREATER
+                var low = (UInt64)x;
+                var high = (UInt64)(x >> 64);
+                UInt64 a = (low ^ high) * kMul;
+                a ^= (a >> 47);
+                UInt64 b = (high ^ a) * kMul;
+#else
                 UInt64 a = (x.Low ^ x.High) * kMul;
                 a ^= (a >> 47);
                 UInt64 b = (x.High ^ a) * kMul;
+#endif
                 b ^= (b >> 47);
                 b *= kMul;
                 return b;
@@ -200,8 +208,13 @@ namespace Octonica.ClickHouseClient.Protocol
 
             unchecked
             {
+#if NET8_0_OR_GREATER
+                UInt64 a = (UInt64)seed;
+                UInt64 b = (UInt64)(seed >> 64);
+#else
                 UInt64 a = seed.Low;
                 UInt64 b = seed.High;
+#endif
                 UInt64 c = 0;
                 UInt64 d = 0;
                 int l = (int) len - 16;
@@ -233,7 +246,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
                 a = HashLen16(a, c);
                 b = HashLen16(d, b);
-                return new UInt128(a ^ b, HashLen16(b, a));
+                return new UInt128(HashLen16(b, a), a ^ b);
             }
         }
 
@@ -251,8 +264,13 @@ namespace Octonica.ClickHouseClient.Protocol
             unchecked
             {
                 (UInt64 first, UInt64 second) v, w;
+#if NET8_0_OR_GREATER
+                UInt64 x = (UInt64)seed;
+                UInt64 y = (UInt64)(seed>>64);
+#else
                 UInt64 x = seed.Low;
                 UInt64 y = seed.High;
+#endif
                 UInt64 z = len * k1;
                 v.first = Rotate(y ^ k1, 49) * k1 + Fetch64(s);
                 v.second = Rotate(v.first, 42) * k1 + Fetch64(s.Slice(8));
@@ -312,8 +330,8 @@ namespace Octonica.ClickHouseClient.Protocol
                 x = HashLen16(x, v.first);
                 y = HashLen16(y, w.first);
                 return new UInt128(
-                    HashLen16(x + v.second, w.second) + y,
-                    HashLen16(x + w.second, y + v.second));
+                    HashLen16(x + w.second, y + v.second),
+                    HashLen16(x + v.second, w.second) + y);
             }
         }
 
@@ -326,33 +344,35 @@ namespace Octonica.ClickHouseClient.Protocol
                 return CityHash128WithSeed(
                     s.Slice(16),
                     new UInt128(
-                        Fetch64(s) ^ k3,
-                        Fetch64(s.Slice(8))));
+                        Fetch64(s.Slice(8)),
+                        Fetch64(s) ^ k3));
             }
             else if (len >= 8)
             {
                 return CityHash128WithSeed(
                     ReadOnlySequence<byte>.Empty,
                     new UInt128(
-                        Fetch64(s) ^ unchecked(len * k0),
-                        Fetch64(s.Slice((int) len - 8)) ^ k1));
+                        Fetch64(s.Slice((int)len - 8)) ^ k1,
+                        Fetch64(s) ^ unchecked(len * k0)));
             }
             else
             {
-                return CityHash128WithSeed(s, new UInt128(k0, k1));
+                return CityHash128WithSeed(s, new UInt128(k1, k0));
             }
         }
     }
 
+#if !NET8_0_OR_GREATER
     internal readonly struct UInt128
     {
         public ulong Low { get; }
         public ulong High { get; }
 
-        public UInt128(ulong low, ulong high)
+        public UInt128(ulong high, ulong low)
         {
             Low = low;
             High = high;
         }
     }
+#endif
 }

@@ -32,7 +32,7 @@ namespace Octonica.ClickHouseClient.Tests
         const UInt64 k0 = 0xc3a5c85c97cb3127UL;
         const UInt64 kSeed0 = 1234567;
         const UInt64 kSeed1 = k0;
-        static readonly UInt128 kSeed128 = new UInt128(kSeed0, kSeed1);
+        static readonly UInt128 kSeed128 = new UInt128(kSeed1, kSeed0);
         const int kDataSize = 1 << 20;
         const int kTestSize = 300;
 
@@ -67,10 +67,15 @@ namespace Octonica.ClickHouseClient.Tests
 
             UInt128 u = CityHash.CityHash128(seq);
             UInt128 v = CityHash.CityHash128WithSeed(seq, kSeed128);
+#if NET8_0_OR_GREATER
+            Assert.Equal(new UInt128(testdata[index, 4], testdata[index, 3]), u);
+            Assert.Equal(new UInt128(testdata[index, 6], testdata[index, 5]), v);
+#else
             Assert.Equal(testdata[index, 3], u.Low);
             Assert.Equal(testdata[index, 4], u.High);
             Assert.Equal(testdata[index, 5], v.Low);
             Assert.Equal(testdata[index, 6], v.High);
+#endif
         }
 
         [Fact]
