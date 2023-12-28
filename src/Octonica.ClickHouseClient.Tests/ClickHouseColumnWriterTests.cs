@@ -814,19 +814,19 @@ namespace Octonica.ClickHouseClient.Tests
                 expectedCount = i;
             }
 
-            await WithTemporaryTable("mem", "id Array(Int32), num Array(Decimal64(6))", RunTest);
+            await WithTemporaryTable("mem", "idx Int32, id Array(Int32), num Array(Decimal64(6))", RunTest);
 
             async Task RunTest(ClickHouseConnection connection, string tableName)
             {
-                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {tableName}(num, id) VALUES"))
+                await using (var writer = connection.CreateColumnWriter($"INSERT INTO {tableName}(num, id, idx) VALUES"))
                 {
-                    var source = new object[] { numsArr, intsArr };
+                    var source = new object[] { numsArr, intsArr, Enumerable.Range(0, numsArr.Count).ToArray() };
 
                     await writer.WriteTableAsync(source, numsArr.Count, CancellationToken.None);
                     await writer.EndWriteAsync(CancellationToken.None);
                 }
 
-                var cmd = connection.CreateCommand($"SELECT id, num FROM {tableName}");
+                var cmd = connection.CreateCommand($"SELECT id, num, idx FROM {tableName}");
 
                 int count = 0;
                 await using var reader = await cmd.ExecuteReaderAsync();
@@ -835,11 +835,16 @@ namespace Octonica.ClickHouseClient.Tests
                 {
                     var idArr = reader.GetFieldValue<int[]>(0);
                     var numArr = reader.GetFieldValue<decimal[]>(1);
+                    var idx = reader.GetInt32(2);
 
                     Assert.Equal(idArr.Length, numArr.Length);
 
                     for (int i = 0; i < idArr.Length; i++)
+                    {
                         Assert.Equal(nums[idArr[i]], numArr[i]);
+                        Assert.Equal(intsArr[idx].Span[i], idArr[i]);
+                        Assert.Equal(numsArr[idx].Span[i], numArr[i]);
+                    }
 
                     count += idArr.Length;
                 }
