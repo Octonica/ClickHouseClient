@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.ObjectModel;
 
 namespace Octonica.ClickHouseClient
 {
@@ -55,6 +56,11 @@ namespace Octonica.ClickHouseClient
         public string DisplayName { get; }
 
         /// <summary>
+        /// Gets password complexity rules provided by the server when opening a connection.
+        /// </summary>
+        public ReadOnlyCollection<ClickHousePasswordComplexityRule>? PasswordComplexityRules { get; }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseServerInfo"/> with specified arguments.
         /// </summary>
         /// <param name="name">The name of the server provided by the server when opening a connection.</param>
@@ -63,7 +69,8 @@ namespace Octonica.ClickHouseClient
         /// <param name="revision">The revision of the ClickHouse binary protocol negotiated between the client and the server.</param>
         /// <param name="timezone">The default timezone of the server.</param>
         /// <param name="displayName">The display name of the server provided by the server when opening a connection.</param>
-        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName)
+        /// <param name="passwordComplexityRules">Password complexity rules provided by the server when opening a connection.</param>
+        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName, ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
@@ -71,6 +78,7 @@ namespace Octonica.ClickHouseClient
             Revision = revision;
             Timezone = timezone;
             DisplayName = displayName;
+            PasswordComplexityRules = passwordComplexityRules;
         }
     }
 }

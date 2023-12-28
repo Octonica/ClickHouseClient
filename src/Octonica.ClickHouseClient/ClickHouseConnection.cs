@@ -156,6 +156,11 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// When the connection is open gets the server info.
+        /// </summary>
+        public ClickHouseServerInfo? ServerInfo => _connectionState.TcpClient?.ServerInfo;
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseConnection"/> class.
         /// </summary>
         public ClickHouseConnection()

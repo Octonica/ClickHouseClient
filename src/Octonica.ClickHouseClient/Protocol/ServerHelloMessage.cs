@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
@@ -52,7 +53,24 @@ namespace Octonica.ClickHouseClient.Protocol
             var serverVersion = new ClickHouseVersion(mj, mr, versionPatch);
 
             var negotiatedRevision = Math.Min(rv, protocolRevision);
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName);
+            List<ClickHousePasswordComplexityRule>? complexityRules = null;
+            if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithPasswordComplexityRules)
+            {
+                var rulesCount = await reader.Read7BitInt32(async, cancellationToken);
+                if (rulesCount > 0)
+                {
+                    complexityRules = new List<ClickHousePasswordComplexityRule>(rulesCount);
+                    for (int i = 0; i < rulesCount; i++)
+                    {
+                        var pattern = await reader.ReadString(async, cancellationToken);
+                        var message = await reader.ReadString(async, cancellationToken);
+                        var rule = new ClickHousePasswordComplexityRule(pattern, message);
+                        complexityRules.Add(rule);
+                    }
+                }
+            }
+
+            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
             return new ServerHelloMessage(serverInfo);
         }
     }

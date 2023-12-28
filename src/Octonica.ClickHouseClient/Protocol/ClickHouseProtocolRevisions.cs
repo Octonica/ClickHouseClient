@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithServerQueryTimeInProgress;
+        public const int CurrentRevision = MinRevisionWithPasswordComplexityRules;
+
+        /// <summary>
+        /// The number of protocol's revision with the support of password complexity rules.
+        /// </summary>
+        public const int MinRevisionWithPasswordComplexityRules = 54461;
 
         /// <summary>
         /// The number of protocol's revision with the number of elapsed nanoseconds in progress messages.
