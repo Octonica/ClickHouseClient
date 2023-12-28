@@ -70,6 +70,9 @@ namespace Octonica.ClickHouseClient.Protocol
                 }
             }
 
+            if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecretV2)
+                await reader.SkipBytes(8, async, cancellationToken); // nonce
+
             var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
             return new ServerHelloMessage(serverInfo);
         }

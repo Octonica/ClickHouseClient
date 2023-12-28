@@ -207,6 +207,24 @@ namespace Octonica.ClickHouseClient
             return size;
         }
 
+        public async ValueTask SkipBytes(int bytesCount, bool async, CancellationToken cancellationToken)
+        {
+            if (bytesCount < 0)
+                throw new ArgumentException("The number of bytes for is negative.", nameof(bytesCount));
+
+            if (bytesCount == 0)
+                return;
+
+            var c = bytesCount;
+            while (c > 0)
+            {
+                var readResult = await Read(async, cancellationToken);
+                var consumed = Math.Min(c, (int)readResult.Length);
+                AdvanceReader(readResult, consumed);
+                c -= consumed;
+            }
+        }
+
         internal bool TryPeekByte(out byte value)
         {
             if (_currentCompression != CompressionAlgorithm.None)
