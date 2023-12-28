@@ -80,5 +80,22 @@ namespace Octonica.ClickHouseClient
             DisplayName = displayName;
             PasswordComplexityRules = passwordComplexityRules;
         }
+
+        /// <summary>
+        /// Creates a copy of the server info with the specified timezone.
+        /// </summary>
+        /// <param name="timezone">The default timezone of the server.</param>
+        /// <returns>A new instance of <see cref="ClickHouseServerInfo"/> with the specified timezone.</returns>
+        public ClickHouseServerInfo WithTimezone(string timezone)
+        {
+            return new ClickHouseServerInfo(
+                name: Name,
+                version: Version,
+                serverRevision: ServerRevision,
+                revision: Revision,
+                timezone: timezone,
+                displayName: DisplayName,
+                passwordComplexityRules: PasswordComplexityRules);
+        }
     }
 }

@@ -36,7 +36,7 @@ namespace Octonica.ClickHouseClient
 
         private readonly TcpClient _client;
         private readonly ClickHouseConnectionSettings _settings;
-        private readonly IClickHouseTypeInfoProvider _typeInfoProvider;
+        private IClickHouseTypeInfoProvider _typeInfoProvider;
         private readonly ClickHouseBinaryProtocolReader _reader;
         private readonly ClickHouseBinaryProtocolWriter _writer;
         private readonly SslStream? _sslStream;
@@ -46,7 +46,7 @@ namespace Octonica.ClickHouseClient
 
         public ClickHouseTcpClientState State => (ClickHouseTcpClientState)_state;
 
-        public ClickHouseServerInfo ServerInfo { get; }
+        public ClickHouseServerInfo ServerInfo { get; private set; }
 
         public ClickHouseTcpClient(
             TcpClient client,
@@ -107,6 +107,25 @@ namespace Octonica.ClickHouseClient
             {
                 _semaphore.Release();
                 throw;
+            }
+        }
+
+        private bool TryInterceptMessage(IServerMessage message)
+        {
+            switch (message.MessageCode)
+            {
+                case ServerMessageCode.TimezoneUpdate:
+                    var timezone = ((ServerTimeZoneUpdateMessage)message).Timezone;
+                    if (string.Equals(timezone, ServerInfo.Timezone, StringComparison.Ordinal))
+                        return true;
+
+                    var updServerInfo = ServerInfo.WithTimezone(timezone);
+                    _typeInfoProvider = _typeInfoProvider.Configure(updServerInfo);
+                    ServerInfo = updServerInfo;
+                    return true;
+
+                default:
+                    return false;
             }
         }
 
@@ -305,7 +324,18 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<IServerMessage> ReadMessage(bool async, CancellationToken cancellationToken)
             {
-                return await WithCancellationToken(cancellationToken, ct => _client._reader.ReadMessage(_client.ServerInfo.Revision, true, async, ct));
+                return await WithCancellationToken(cancellationToken, ct => ReadMessageInternal(async, ct));
+            }
+
+            private async ValueTask<IServerMessage> ReadMessageInternal(bool async, CancellationToken cancellationToken)
+            {
+                IServerMessage message;
+                do
+                {
+                    message = await _client._reader.ReadMessage(_client.ServerInfo.Revision, true, async, cancellationToken);
+                } while (_client.TryInterceptMessage(message));
+
+                return message;
             }
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)

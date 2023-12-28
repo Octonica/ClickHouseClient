@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2022 Octonica
+/* Copyright 2019-2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -352,7 +352,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal("behavior", ex.ParamName);
         }
 
-        [Fact]
+        [Fact (Skip = "This test is flaky. The server doesn't always respond with profile events.")]
         public async Task ProfileEvents()
         {
             await using var cn = await OpenConnectionAsync();

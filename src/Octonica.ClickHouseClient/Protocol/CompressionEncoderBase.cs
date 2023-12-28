@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,10 @@ using System.Diagnostics;
 using System.Linq;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Utils;
+
+#if NET8_0_OR_GREATER
+using System.Runtime.InteropServices;
+#endif
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -237,10 +241,16 @@ namespace Octonica.ClickHouseClient.Protocol
                 var dataSequence = new ReadOnlySequence<byte>(dataSegment, 0, dataSegment.LastSegment, dataSegment.LastSegment.Memory.Length);
                 var cityHash = CityHash.CityHash128(dataSequence.Slice(cityHashSize));
 
+#if NET8_0_OR_GREATER
+                var cityHashBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref cityHash, 1));
+                Debug.Assert(cityHashBytes.Length == 16);
+                cityHashBytes.CopyTo(headerSpan);
+#else
                 success = BitConverter.TryWriteBytes(headerSpan, cityHash.Low);
                 Debug.Assert(success);
                 success = BitConverter.TryWriteBytes(headerSpan.Slice(sizeof(ulong)), cityHash.High);
                 Debug.Assert(success);
+#endif
 
                 for (ReadOnlySequenceSegment<byte>? segment = dataSegment; segment != null; segment = segment.Next)
                 {
