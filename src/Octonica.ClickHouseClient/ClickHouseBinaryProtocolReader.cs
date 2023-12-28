@@ -276,10 +276,15 @@ namespace Octonica.ClickHouseClient
                 case ServerMessageCode.Log:
                 case ServerMessageCode.PartUuids:
                 case ServerMessageCode.ReadTaskRequest:
+                case ServerMessageCode.MergeTreeAllRangesAnnouncement:
+                case ServerMessageCode.MergeTreeReadTaskRequest:
                     throw new NotImplementedException($"A message of type \"{messageCode}\" is not supported.");
 
                 case ServerMessageCode.ProfileEvents:
                     return await ServerDataMessage.Read(this, messageCode, async, cancellationToken);
+
+                case ServerMessageCode.TimezoneUpdate:
+                    return await ServerTimeZoneUpdateMessage.Read(this, async, cancellationToken);
 
                 default:
                     if (throwOnUnknownMessage)

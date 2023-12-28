@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,9 @@ namespace Octonica.ClickHouseClient.Protocol
         TableColumns = 11,
         PartUuids = 12,
         ReadTaskRequest = 13,
-        ProfileEvents = 14
+        ProfileEvents = 14,
+        MergeTreeAllRangesAnnouncement = 15,
+        MergeTreeReadTaskRequest = 16,
+        TimezoneUpdate = 17
     }
 }
