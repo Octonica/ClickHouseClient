@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,16 +34,19 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public ulong WrittenBytes { get; }
 
-        private ServerProgressMessage(ulong rows, ulong bytes, ulong totals, ulong writtenRows, ulong writtenBytes)
+        public ulong ElapsedNanoseconds { get; }
+
+        private ServerProgressMessage(ulong rows, ulong bytes, ulong totals, ulong writtenRows, ulong writtenBytes, ulong elapsedNanoseconds)
         {
             Rows = rows;
             Bytes = bytes;
             Totals = totals;
             WrittenRows = writtenRows;
             WrittenBytes = writtenBytes;
+            ElapsedNanoseconds = elapsedNanoseconds;
         }
 
-        public static async ValueTask<ServerProgressMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
+        public static async ValueTask<ServerProgressMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
         {
             ulong rows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong bytes = await reader.Read7BitUInt64(async, cancellationToken);
@@ -51,7 +54,11 @@ namespace Octonica.ClickHouseClient.Protocol
             ulong writtenRows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong writtenBytes = await reader.Read7BitUInt64(async, cancellationToken);
 
-            return new ServerProgressMessage(rows, bytes, totals, writtenRows, writtenBytes);
+            ulong elapsedNanoseconds = 0;
+            if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithServerQueryTimeInProgress)
+                elapsedNanoseconds = await reader.Read7BitUInt64(async, cancellationToken);
+
+            return new ServerProgressMessage(rows, bytes, totals, writtenRows, writtenBytes, elapsedNanoseconds);
         }
     }
 }

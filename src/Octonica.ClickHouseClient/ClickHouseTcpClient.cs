@@ -174,7 +174,7 @@ namespace Octonica.ClickHouseClient
                     messageBuilder.ClientVersion = settings.ClientVersion;
                     messageBuilder.Host = settings.Host;
                     messageBuilder.RemoteAddress = ((IPEndPoint?) _client._client.Client.RemoteEndPoint)?.ToString();
-                    messageBuilder.ProtocolRevision = Math.Min(ClickHouseProtocolRevisions.CurrentRevision, _client.ServerInfo.Revision);
+                    messageBuilder.ProtocolRevision = _client.ServerInfo.Revision;
                     messageBuilder.CompressionEnabled = _client._settings.Compress;
 
                     queryMessage = messageBuilder.Build();
@@ -305,7 +305,7 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<IServerMessage> ReadMessage(bool async, CancellationToken cancellationToken)
             {
-                return await WithCancellationToken(cancellationToken, ct => _client._reader.ReadMessage(true, async, ct));
+                return await WithCancellationToken(cancellationToken, ct => _client._reader.ReadMessage(_client.ServerInfo.Revision, true, async, ct));
             }
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)

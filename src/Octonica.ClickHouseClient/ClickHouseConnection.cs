@@ -584,7 +584,7 @@ namespace Octonica.ClickHouseClient
                 await writer.Flush(async, cancellationToken);
 
                 reader = new ClickHouseBinaryProtocolReader(stream, Math.Max(connectionSettings.BufferSize, MinBufferSize));
-                var message = await reader.ReadMessage(false, async, cancellationToken);
+                var message = await reader.ReadMessage(clientHello.ProtocolRevision, false, async, cancellationToken);
 
                 switch (message.MessageCode)
                 {

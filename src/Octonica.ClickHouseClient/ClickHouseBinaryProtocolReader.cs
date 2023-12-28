@@ -223,13 +223,13 @@ namespace Octonica.ClickHouseClient
             return true;
         }
 
-        public async ValueTask<IServerMessage> ReadMessage(bool throwOnUnknownMessage, bool async, CancellationToken cancellationToken)
+        public async ValueTask<IServerMessage> ReadMessage(int protocolRevision, bool throwOnUnknownMessage, bool async, CancellationToken cancellationToken)
         {
             var messageCode = (ServerMessageCode) await Read7BitInt32(async, cancellationToken);
             switch (messageCode)
             {
                 case ServerMessageCode.Hello:
-                    return await ServerHelloMessage.Read(this, async, cancellationToken);
+                    return await ServerHelloMessage.Read(this, protocolRevision, async, cancellationToken);
 
                 case ServerMessageCode.Data:
                 case ServerMessageCode.Totals:
@@ -240,7 +240,7 @@ namespace Octonica.ClickHouseClient
                     return await ServerErrorMessage.Read(this, async, cancellationToken);
 
                 case ServerMessageCode.Progress:
-                    return await ServerProgressMessage.Read(this, async, cancellationToken);
+                    return await ServerProgressMessage.Read(this, protocolRevision, async, cancellationToken);
 
                 case ServerMessageCode.Pong:
                     return ServerPongMessage.Instance;

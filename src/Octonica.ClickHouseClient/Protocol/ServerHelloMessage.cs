@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ namespace Octonica.ClickHouseClient.Protocol
             ServerInfo = serverInfo ?? throw new ArgumentNullException(nameof(serverInfo));
         }
 
-        public static async Task<ServerHelloMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
+        public static async Task<ServerHelloMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
         {
             var serverName = await reader.ReadString(async, cancellationToken);
             var mj = await reader.Read7BitInt32(async, cancellationToken);
@@ -48,10 +48,11 @@ namespace Octonica.ClickHouseClient.Protocol
 
             var tz = await reader.ReadString(async, cancellationToken);
             var displayName = await reader.ReadString(async, cancellationToken);
-            var b = await reader.ReadByte(async, cancellationToken);
-            var serverVersion = new ClickHouseVersion(mj, mr, b);
+            var versionPatch = await reader.Read7BitInt32(async, cancellationToken);
+            var serverVersion = new ClickHouseVersion(mj, mr, versionPatch);
 
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, rv, tz, displayName);
+            var negotiatedRevision = Math.Min(rv, protocolRevision);
+            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName);
             return new ServerHelloMessage(serverInfo);
         }
     }

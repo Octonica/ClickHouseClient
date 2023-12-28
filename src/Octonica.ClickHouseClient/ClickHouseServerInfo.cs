@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,11 @@ namespace Octonica.ClickHouseClient
         public int Revision { get; }
 
         /// <summary>
+        /// Gets the revision of the ClickHouse binary protocol supported by the server. This value can't be less than the negotiated revision (<see cref="Revision"/>).
+        /// </summary>
+        public int ServerRevision { get; }
+
+        /// <summary>
         /// Gets the default timezone of the server.
         /// </summary>
         public string Timezone { get; }
@@ -54,13 +59,15 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="name">The name of the server provided by the server when opening a connection.</param>
         /// <param name="version">The version of the server.</param>
+        /// <param name="serverRevision">The revision of the ClickHouse binary protocol supported by the server.</param>
         /// <param name="revision">The revision of the ClickHouse binary protocol negotiated between the client and the server.</param>
         /// <param name="timezone">The default timezone of the server.</param>
         /// <param name="displayName">The display name of the server provided by the server when opening a connection.</param>
-        public ClickHouseServerInfo(string name, ClickHouseVersion version, int revision, string timezone, string displayName)
+        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
+            ServerRevision = serverRevision;
             Revision = revision;
             Timezone = timezone;
             DisplayName = displayName;
