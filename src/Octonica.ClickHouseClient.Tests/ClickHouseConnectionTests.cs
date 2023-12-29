@@ -131,7 +131,7 @@ namespace Octonica.ClickHouseClient.Tests
 
             var tcs = new TaskCompletionSource<bool>();
 
-            var tasks = Enumerable.Range(0, 32).Select(_ => Open()).ToList();            
+            var tasks = Enumerable.Range(0, 32).Select(_ => Task.Run(Open)).ToList();
 
             tcs.SetResult(true);
             await Assert.ThrowsAnyAsync<Exception>(() => Task.WhenAll(tasks));
