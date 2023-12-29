@@ -19,7 +19,6 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -444,7 +443,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>((IReadOnlyList<IReadOnlyList<T>?>) rows);
+                return new ArrayLinearizedList<T>(new ReadOnlyCollectionList<T>((IReadOnlyList<IReadOnlyList<T>?>) rows));
             }
         }
 
@@ -457,7 +456,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(MappedReadOnlyList<Memory<T>, IReadOnlyList<T>?>.Map((IReadOnlyList<Memory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+                return new ArrayLinearizedList<T>(new MemoryCollectionList<T>((IReadOnlyList<Memory<T>>) rows));
             }
         }
 
@@ -470,7 +469,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(MappedReadOnlyList<ReadOnlyMemory<T>, IReadOnlyList<T>?>.Map((IReadOnlyList<ReadOnlyMemory<T>>) rows, m => new ReadOnlyMemoryList<T>(m)));
+                return new ArrayLinearizedList<T>(new ReadOnlyMemoryCollectionList<T>((IReadOnlyList<ReadOnlyMemory<T>>) rows));
             }
         }
 
@@ -525,7 +524,7 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseColumnWriter Dispatch<T>()
             {
                 var mappedRows = MappedReadOnlyList<Array, IReadOnlyList<T>>.Map(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
-                var linearizedList = new ArrayLinearizedList<T>(mappedRows);
+                var linearizedList = new ArrayLinearizedList<T>(new ReadOnlyCollectionList<T>(mappedRows));
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
                 var columnType = $"Array({elementColumnWriter.ColumnType})";
                 return new ArrayColumnWriter<T>(columnType, linearizedList, elementColumnWriter);
@@ -582,24 +581,24 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(elementSize.Bytes + bytesCount, elementsCount);
             }
         }
-
+        
         private sealed class ArrayLinearizedList<T> : IReadOnlyList<T>
         {
-            private readonly IReadOnlyList<IReadOnlyList<T>?> _listOfLists;
+            private readonly ICollectionList<T> _listOfLists;
 
             public List<int> ListLengths { get; }
 
             public int Count { get; }
 
-            public ArrayLinearizedList(IReadOnlyList<IReadOnlyList<T>?> listOfLists)
+            public ArrayLinearizedList(ICollectionList<T> listOfLists)
             {
                 _listOfLists = listOfLists;
                 ListLengths = new List<int>(_listOfLists.Count);
 
                 int offset = 0;
-                foreach (var list in _listOfLists)
+                foreach (var listLength in _listOfLists.GetListLengths())
                 {
-                    offset += list?.Count ?? 0;
+                    offset += listLength;
                     ListLengths.Add(offset);
                 }
 
@@ -608,7 +607,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public IEnumerator<T> GetEnumerator()
             {
-                return _listOfLists.SelectMany(list => list ?? Enumerable.Empty<T>()).GetEnumerator();
+                return _listOfLists.GetItems().GetEnumerator();
             }
 
             IEnumerator IEnumerable.GetEnumerator()
@@ -648,9 +647,9 @@ namespace Octonica.ClickHouseClient.Types
                         if (elementIndex < 0)
                             break;
 
-                        var list = _listOfLists[listIndex];
-                        if (list != null && elementIndex < list.Count)
-                            return list[elementIndex];
+                        var listLength = _listOfLists.GetLength(listIndex);
+                        if (elementIndex < listLength)
+                            return _listOfLists[listIndex, elementIndex];
 
                         elementIndex = index - ListLengths[listIndex];
                     }
