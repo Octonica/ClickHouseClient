@@ -19,12 +19,10 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -445,7 +443,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(new ReadOnlyList<T>((IReadOnlyList<IReadOnlyList<T>?>) rows));
+                return new ArrayLinearizedList<T>(new ReadOnlyCollectionList<T>((IReadOnlyList<IReadOnlyList<T>?>) rows));
             }
         }
 
@@ -458,7 +456,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(new MemoryList<T>((IReadOnlyList<Memory<T>>) rows));
+                return new ArrayLinearizedList<T>(new MemoryCollectionList<T>((IReadOnlyList<Memory<T>>) rows));
             }
         }
 
@@ -471,7 +469,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override ArrayLinearizedList<T> ToList<T>(object rows)
             {
-                return new ArrayLinearizedList<T>(new ReadOnlyMemoryList<T>((IReadOnlyList<ReadOnlyMemory<T>>) rows));
+                return new ArrayLinearizedList<T>(new ReadOnlyMemoryCollectionList<T>((IReadOnlyList<ReadOnlyMemory<T>>) rows));
             }
         }
 
@@ -526,7 +524,7 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseColumnWriter Dispatch<T>()
             {
                 var mappedRows = MappedReadOnlyList<Array, IReadOnlyList<T>>.Map(_rows, arr => (IReadOnlyList<T>) _dispatchArray(arr));
-                var linearizedList = new ArrayLinearizedList<T>(new ReadOnlyList<T>(mappedRows));
+                var linearizedList = new ArrayLinearizedList<T>(new ReadOnlyCollectionList<T>(mappedRows));
                 var elementColumnWriter = _elementTypeInfo.CreateColumnWriter(_columnName, linearizedList, _columnSettings);
                 var columnType = $"Array({elementColumnWriter.ColumnType})";
                 return new ArrayColumnWriter<T>(columnType, linearizedList, elementColumnWriter);
@@ -583,82 +581,7 @@ namespace Octonica.ClickHouseClient.Types
                 return new SequenceSize(elementSize.Bytes + bytesCount, elementsCount);
             }
         }
-
-        private interface ICollectionList<out T>
-        {
-            IEnumerable<int> GetListLengths();
-            int Count { get; }
-            T this[int listIndex, int index] { get; }
-            int GetLength(int listIndex);
-            IEnumerable<T> SelectItems();
-        }
-
-        private sealed class ReadOnlyList<T> : ICollectionList<T>
-        {
-            private readonly IReadOnlyList<IReadOnlyList<T>?> _list;
-
-            public ReadOnlyList(IReadOnlyList<IReadOnlyList<T>?> list)
-                => _list = list;
-
-            public int GetLength(int listIndex)
-                => _list[listIndex]?.Count ?? 0;
-
-            public IEnumerable<T> SelectItems()
-                => _list.SelectMany(list => list ?? Enumerable.Empty<T>());
-
-            public IEnumerable<int> GetListLengths()
-                => _list.Select(item => item?.Count ?? 0);
-
-            public int Count => _list.Count;
-
-            public T this[int listIndex, int index]
-                => _list[listIndex]![index];
-        }
-
-        private sealed class ReadOnlyMemoryList<T> : ICollectionList<T>
-        {
-            private readonly IReadOnlyList<ReadOnlyMemory<T>> _list;
-
-            public ReadOnlyMemoryList(IReadOnlyList<ReadOnlyMemory<T>> list)
-                => _list = list;
-
-            public int GetLength(int listIndex)
-                => _list[listIndex].Length;
-
-            public IEnumerable<T> SelectItems()
-                => _list.SelectMany(MemoryMarshal.ToEnumerable);
-
-            public IEnumerable<int> GetListLengths()
-                => _list.Select(item => item.Length);
-
-            public int Count => _list.Count;
-
-            public T this[int listIndex, int index]
-                => _list[listIndex].Span[index];
-        }
-
-        private sealed class MemoryList<T> : ICollectionList<T>
-        {
-            private readonly IReadOnlyList<Memory<T>> _list;
-
-            public MemoryList(IReadOnlyList<Memory<T>> list)
-                => _list = list;
-
-            public int GetLength(int listIndex)
-                => _list[listIndex].Length;
-
-            public IEnumerable<T> SelectItems()
-                => _list.SelectMany(list => MemoryMarshal.ToEnumerable<T>(list));
-
-            public IEnumerable<int> GetListLengths()
-                => _list.Select(item => item.Length);
-
-            public int Count => _list.Count;
-
-            public T this[int listIndex, int index]
-                => _list[listIndex].Span[index];
-        }
-
+        
         private sealed class ArrayLinearizedList<T> : IReadOnlyList<T>
         {
             private readonly ICollectionList<T> _listOfLists;
@@ -684,7 +607,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public IEnumerator<T> GetEnumerator()
             {
-                return _listOfLists.SelectItems().GetEnumerator();
+                return _listOfLists.GetItems().GetEnumerator();
             }
 
             IEnumerator IEnumerable.GetEnumerator()
