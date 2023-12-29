@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,23 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
 {
     public class ClickHouseConnectionTests : ClickHouseTestsBase
     {
+        [Fact]
+        public async Task Probe()
+        {
+            // This test checks the version of the ClickHouse server specified in the connection string.
+            // Its only purpose is to check if the CI pipeline has passed suitable connection settings.
+            await using var cn = await OpenConnectionAsync();
+            Assert.NotNull(cn.ServerInfo);
+            Assert.InRange(cn.ServerInfo.ServerRevision, ClickHouseProtocolRevisions.CurrentRevision, int.MaxValue);
+        }
+
         [Fact]
         public void ShouldUnwrapConnectionOpenExceptions()
         {
