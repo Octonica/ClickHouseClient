@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ namespace Octonica.ClickHouseClient.Types
             return new BigIntegerColumnWriter(columnName, ComplexTypeName, _elementByteSize, bigIntegerRows, _isUnsigned);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -102,7 +102,7 @@ namespace Octonica.ClickHouseClient.Types
             {
                 if (_isUnsigned)
                 {
-                    writer = new StringLiteralWriter<BigInteger>(
+                    writer = new StringParameterWriter<BigInteger>(
                         this,
                         bigIntegerValue =>
                         {
@@ -114,41 +114,41 @@ namespace Octonica.ClickHouseClient.Types
                 }
                 else
                 {
-                    writer = StringLiteralWriter.Create<BigInteger>(this);
+                    writer = StringParameterWriter.Create<BigInteger>(this);
                 }
             }
             else if (type == typeof(ulong))
             {
-                writer = StringLiteralWriter.Create<ulong>(this);
+                writer = StringParameterWriter.Create<ulong>(this);
             }
             else if (type == typeof(uint))
             {
-                writer = StringLiteralWriter.Create<uint>(this);
+                writer = StringParameterWriter.Create<uint>(this);
             }
             else if (type == typeof(ushort))
             {
-                writer = StringLiteralWriter.Create<ushort>(this);
+                writer = StringParameterWriter.Create<ushort>(this);
             }
             else if (type == typeof(byte))
             {
-                writer = StringLiteralWriter.Create<byte>(this);
+                writer = StringParameterWriter.Create<byte>(this);
             }
             else if (!_isUnsigned)
             {
                 if (type == typeof(long))
-                    writer = StringLiteralWriter.Create<long>(this);
+                    writer = StringParameterWriter.Create<long>(this);
                 if (type == typeof(int))
-                    writer = StringLiteralWriter.Create<int>(this);
+                    writer = StringParameterWriter.Create<int>(this);
                 if (type == typeof(short))
-                    writer = StringLiteralWriter.Create<short>(this);
+                    writer = StringParameterWriter.Create<short>(this);
                 else if (type == typeof(sbyte))
-                    writer = StringLiteralWriter.Create<sbyte>(this);
+                    writer = StringParameterWriter.Create<sbyte>(this);
             }
 
             if (writer == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public sealed override Type GetFieldType()

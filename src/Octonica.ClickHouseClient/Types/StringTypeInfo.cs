@@ -77,7 +77,7 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -85,23 +85,23 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(string))
-                writer = new StringLiteralWriter<string>(this, str => str.AsMemory());
+                writer = new StringParameterWriter<string>(this, str => str.AsMemory());
             else if (type == typeof(char[]))
-                writer = new StringLiteralWriter<char[]>(this, arr => arr);
+                writer = new StringParameterWriter<char[]>(this, arr => arr);
             else if (type == typeof(ReadOnlyMemory<char>))
-                writer = new StringLiteralWriter(this);
+                writer = new StringParameterWriter(this);
             else if (type == typeof(Memory<char>))
-                writer = new StringLiteralWriter<Memory<char>>(this, mem => mem);
+                writer = new StringParameterWriter<Memory<char>>(this, mem => mem);
             else if (type == typeof(byte[]))
-                writer = new HexStringLiteralWriter<byte[]>(this, arr => arr);
+                writer = new HexStringParameterWriter<byte[]>(this, arr => arr);
             else if (type == typeof(ReadOnlyMemory<byte>))
-                writer = new HexStringLiteralWriter(this);
+                writer = new HexStringParameterWriter(this);
             else if (type == typeof(Memory<byte>))
-                writer = new HexStringLiteralWriter<Memory<byte>>(this, mem => mem);
+                writer = new HexStringParameterWriter<Memory<byte>>(this, mem => mem);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

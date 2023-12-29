@@ -106,7 +106,7 @@ namespace Octonica.ClickHouseClient.Types
             return new MapColumnWriter(underlyingWriter);
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             // TODO: ClickHouseDbType.Map is not supported in DefaultTypeInfoProvider.GetTypeInfo
 
@@ -133,11 +133,11 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (dictionaryItf == null)
-                return _underlyingType.CreateLiteralWriter<T>();
+                return _underlyingType.CreateParameterWriter<T>();
 
             var dispatcherTypeArgs = new[] { type }.Concat(dictionaryItf.GetGenericArguments()).ToArray();
-            var dispatcherType = typeof(LiteralDictionaryDispatcher<,,>).MakeGenericType(dispatcherTypeArgs);
-            var dispatcher = (IDictionaryLiteralWirterDispatcher?)Activator.CreateInstance(dispatcherType);
+            var dispatcherType = typeof(ParameterDictionaryDispatcher<,,>).MakeGenericType(dispatcherTypeArgs);
+            var dispatcher = (IDictionaryParameterWirterDispatcher?)Activator.CreateInstance(dispatcherType);
             Debug.Assert(dispatcher != null);
 
             return dispatcher.Dispatch<T>(this);
@@ -283,38 +283,38 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private interface IDictionaryLiteralWirterDispatcher
+        private interface IDictionaryParameterWirterDispatcher
         {
-            IClickHouseLiteralWriter<T> Dispatch<T>(MapTypeInfo typeInfo);
+            IClickHouseParameterWriter<T> Dispatch<T>(MapTypeInfo typeInfo);
         }
 
-        private sealed class LiteralDictionaryDispatcher<TDictionary, TKey, TValue> : IDictionaryLiteralWirterDispatcher
+        private sealed class ParameterDictionaryDispatcher<TDictionary, TKey, TValue> : IDictionaryParameterWirterDispatcher
             where TKey : notnull
             where TDictionary: IReadOnlyDictionary<TKey, TValue>
         {
-            public IClickHouseLiteralWriter<T> Dispatch<T>(MapTypeInfo typeInfo)
+            public IClickHouseParameterWriter<T> Dispatch<T>(MapTypeInfo typeInfo)
             {
                 Debug.Assert(typeof(T) == typeof(TDictionary));
                 Debug.Assert(typeInfo._typeArgs != null);
                 var (keyType, valueType) = typeInfo._typeArgs.Value;
 
-                var keyWriter = keyType.CreateLiteralWriter<TKey>();
-                var valueWriter = valueType.CreateLiteralWriter<TValue>();
-                var writer = new MapLiteralWriter<TDictionary, TKey, TValue>(typeInfo, keyWriter, valueWriter);
+                var keyWriter = keyType.CreateParameterWriter<TKey>();
+                var valueWriter = valueType.CreateParameterWriter<TValue>();
+                var writer = new MapParameterWriter<TDictionary, TKey, TValue>(typeInfo, keyWriter, valueWriter);
 
-                return (IClickHouseLiteralWriter<T>)(object)writer;
+                return (IClickHouseParameterWriter<T>)(object)writer;
             }
         }
 
-        private sealed class MapLiteralWriter<TDictionary, TKey, TValue> : IClickHouseLiteralWriter<TDictionary>
+        private sealed class MapParameterWriter<TDictionary, TKey, TValue> : IClickHouseParameterWriter<TDictionary>
             where TKey : notnull
             where TDictionary : IReadOnlyDictionary<TKey, TValue>
         {
             private readonly MapTypeInfo _mapType;
-            private readonly IClickHouseLiteralWriter<TKey> _keyWriter;
-            private readonly IClickHouseLiteralWriter<TValue> _valueWriter;
+            private readonly IClickHouseParameterWriter<TKey> _keyWriter;
+            private readonly IClickHouseParameterWriter<TValue> _valueWriter;
 
-            public MapLiteralWriter(MapTypeInfo mapType, IClickHouseLiteralWriter<TKey> keyWriter, IClickHouseLiteralWriter<TValue> valueWriter)
+            public MapParameterWriter(MapTypeInfo mapType, IClickHouseParameterWriter<TKey> keyWriter, IClickHouseParameterWriter<TValue> valueWriter)
             {
                 _mapType = mapType;
                 _keyWriter = keyWriter;

@@ -67,7 +67,7 @@ namespace Octonica.ClickHouseClient.Types
             return new Int64Writer(columnName, ComplexTypeName, longRows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -75,16 +75,16 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                long _ => new SimpleLiteralWriter<long>(this, appendTypeCast: true),
-                int _ => new SimpleLiteralWriter<int>(this, appendTypeCast: true),
-                short _ => new SimpleLiteralWriter<short>(this, appendTypeCast: true),
-                ushort _ => new SimpleLiteralWriter<ushort>(this, appendTypeCast: true),
-                sbyte _ => new SimpleLiteralWriter<sbyte>(this, appendTypeCast: true),
-                byte _ => new SimpleLiteralWriter<byte>(this, appendTypeCast: true),
+                long _ => new SimpleParameterWriter<long>(this, appendTypeCast: true),
+                int _ => new SimpleParameterWriter<int>(this, appendTypeCast: true),
+                short _ => new SimpleParameterWriter<short>(this, appendTypeCast: true),
+                ushort _ => new SimpleParameterWriter<ushort>(this, appendTypeCast: true),
+                sbyte _ => new SimpleParameterWriter<sbyte>(this, appendTypeCast: true),
+                byte _ => new SimpleParameterWriter<byte>(this, appendTypeCast: true),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

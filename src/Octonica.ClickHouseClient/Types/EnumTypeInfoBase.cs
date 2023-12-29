@@ -126,7 +126,7 @@ namespace Octonica.ClickHouseClient.Types
             return CreateInternalColumnWriter(columnName, rows);
         }
 
-        public abstract IClickHouseLiteralWriter<T> CreateLiteralWriter<T>();
+        public abstract IClickHouseParameterWriter<T> CreateParameterWriter<T>();
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
@@ -232,15 +232,15 @@ namespace Octonica.ClickHouseClient.Types
                 where TEnum : Enum;
         }
 
-        protected sealed class EnumLiteralWriter : IClickHouseLiteralWriter<string>
+        protected sealed class EnumParameterWriter : IClickHouseParameterWriter<string>
         {
             private readonly EnumTypeInfoBase<TValue> _type;
-            private readonly SimpleLiteralWriter<TValue> _writer;
+            private readonly SimpleParameterWriter<TValue> _writer;
 
-            public EnumLiteralWriter(EnumTypeInfoBase<TValue> type)
+            public EnumParameterWriter(EnumTypeInfoBase<TValue> type)
             {
                 _type = type;
-                _writer = new SimpleLiteralWriter<TValue>(_type);
+                _writer = new SimpleParameterWriter<TValue>(_type);
             }
 
             public bool TryCreateParameterValueWriter(string value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)

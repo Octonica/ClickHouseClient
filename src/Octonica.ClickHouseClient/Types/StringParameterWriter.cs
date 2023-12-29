@@ -24,11 +24,11 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class StringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<char>>
+    internal sealed class StringParameterWriter : IClickHouseParameterWriter<ReadOnlyMemory<char>>
     {
         private readonly IClickHouseColumnTypeInfo _type;
 
-        public StringLiteralWriter(IClickHouseColumnTypeInfo type)
+        public StringParameterWriter(IClickHouseColumnTypeInfo type)
         {
             _type = type;
         }
@@ -76,19 +76,19 @@ namespace Octonica.ClickHouseClient.Types
             return writeValue(queryBuilder, _type, FunctionHelper.Apply);
         }
 
-        public static StringLiteralWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo, string? format = null)
+        public static StringParameterWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo, string? format = null)
             where T : IFormattable
         {
-            return new StringLiteralWriter<T>(typeInfo, value => value.ToString(format, CultureInfo.InvariantCulture).AsMemory());
+            return new StringParameterWriter<T>(typeInfo, value => value.ToString(format, CultureInfo.InvariantCulture).AsMemory());
         }
     }
 
-    internal sealed class StringLiteralWriter<T> : IClickHouseLiteralWriter<T>
+    internal sealed class StringParameterWriter<T> : IClickHouseParameterWriter<T>
     {
         private readonly IClickHouseColumnTypeInfo _type;
         private readonly Func<T, ReadOnlyMemory<char>> _toString;
 
-        public StringLiteralWriter(IClickHouseColumnTypeInfo type, Func<T, ReadOnlyMemory<char>> toString)
+        public StringParameterWriter(IClickHouseColumnTypeInfo type, Func<T, ReadOnlyMemory<char>> toString)
         {
             _type = type;
             _toString = toString;
@@ -103,7 +103,7 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
             var str = _toString(value);
-            StringLiteralWriter.Interpolate(queryBuilder, str.Span);
+            StringParameterWriter.Interpolate(queryBuilder, str.Span);
 
             if (_type.ComplexTypeName != "String")
                 queryBuilder.Append("::").Append(_type.ComplexTypeName);

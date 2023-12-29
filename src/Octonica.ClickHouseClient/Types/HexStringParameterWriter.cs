@@ -27,13 +27,13 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class HexStringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<byte>>
+    internal sealed class HexStringParameterWriter : IClickHouseParameterWriter<ReadOnlyMemory<byte>>
     {
         private const string HexDigits = HexStringLiteralValueWriter.HexDigits;
 
         private readonly IClickHouseColumnTypeInfo _typeInfo;
 
-        public HexStringLiteralWriter(IClickHouseColumnTypeInfo typeInfo)
+        public HexStringParameterWriter(IClickHouseColumnTypeInfo typeInfo)
         {
             _typeInfo = typeInfo;
         }
@@ -66,22 +66,22 @@ namespace Octonica.ClickHouseClient.Types
             return writeValue(queryBuilder, _typeInfo, FunctionHelper.Apply);
         }
 
-        public static HexStringLiteralWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo)
+        public static HexStringParameterWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo)
             where T : struct
         {
             var dummy = default(T);
             var dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
             var binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
-            return new HexStringLiteralWriter<T>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, Convert);
+            return new HexStringParameterWriter<T>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, Convert);
         }
 
-        public static HexStringLiteralWriter<TIn> Create<TIn, TOut>(IClickHouseColumnTypeInfo typeInfo, Func<TIn, TOut> convert)
+        public static HexStringParameterWriter<TIn> Create<TIn, TOut>(IClickHouseColumnTypeInfo typeInfo, Func<TIn, TOut> convert)
             where TOut : struct
         {
             var dummy = default(TOut);
             var dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
             var binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
-            return new HexStringLiteralWriter<TIn>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, v => Convert(convert(v)));
+            return new HexStringParameterWriter<TIn>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, v => Convert(convert(v)));
         }
 
         private static ReadOnlyMemory<byte> Convert<T>(T value)
@@ -94,19 +94,19 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
-    internal sealed class HexStringLiteralWriter<T> : IClickHouseLiteralWriter<T>
+    internal sealed class HexStringParameterWriter<T> : IClickHouseParameterWriter<T>
     {
         private readonly IClickHouseColumnTypeInfo _typeInfo;
         private readonly HexStringLiteralWriterCastMode _castMode;
         private readonly string? _valueType;
         private readonly Func<T, ReadOnlyMemory<byte>> _convert;
 
-        public HexStringLiteralWriter(IClickHouseColumnTypeInfo typeInfo, Func<T, ReadOnlyMemory<byte>> convert)
+        public HexStringParameterWriter(IClickHouseColumnTypeInfo typeInfo, Func<T, ReadOnlyMemory<byte>> convert)
             : this(typeInfo, HexStringLiteralWriterCastMode.None, null, convert)
         {
         }
 
-        public HexStringLiteralWriter(IClickHouseColumnTypeInfo typeInfo, HexStringLiteralWriterCastMode castMode, string? valueType, Func<T, ReadOnlyMemory<byte>> convert)
+        public HexStringParameterWriter(IClickHouseColumnTypeInfo typeInfo, HexStringLiteralWriterCastMode castMode, string? valueType, Func<T, ReadOnlyMemory<byte>> convert)
         {
             _typeInfo = typeInfo;
             _castMode = castMode;
@@ -145,7 +145,7 @@ namespace Octonica.ClickHouseClient.Types
             if (_valueType != null)
                 queryBuilder.Append("CAST(");
 
-            HexStringLiteralWriter.Interpolate(queryBuilder, bytes.Span);
+            HexStringParameterWriter.Interpolate(queryBuilder, bytes.Span);
 
             if (_valueType != null)
                 queryBuilder.Append(" AS ").Append(_valueType).Append(')');

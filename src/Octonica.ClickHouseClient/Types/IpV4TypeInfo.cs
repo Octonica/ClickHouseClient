@@ -63,7 +63,7 @@ namespace Octonica.ClickHouseClient.Types
             return new IpV4Writer(columnName, TypeName, preparedRows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -72,17 +72,17 @@ namespace Octonica.ClickHouseClient.Types
             const string valueType = "UInt32";
             object writer;
             if (type == typeof(IPAddress))
-                writer = new SimpleLiteralWriter<IPAddress, uint>(valueType, this, null, true, IpAddressToUInt32);
+                writer = new SimpleParameterWriter<IPAddress, uint>(valueType, this, null, true, IpAddressToUInt32);
             else if (type == typeof(string))
-                writer = new SimpleLiteralWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32);
+                writer = new SimpleParameterWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32);
             else if (type == typeof(uint))
-                writer = new SimpleLiteralWriter<uint>(valueType, this, appendTypeCast: true);
+                writer = new SimpleParameterWriter<uint>(valueType, this, appendTypeCast: true);
             else if (type == typeof(int))
-                writer = new SimpleLiteralWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v));
+                writer = new SimpleParameterWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v));
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

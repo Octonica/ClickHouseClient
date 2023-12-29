@@ -61,7 +61,7 @@ namespace Octonica.ClickHouseClient.Types
             return new IpV6Writer(columnName, TypeName, preparedRows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (typeof(T) == typeof(DBNull))
@@ -70,13 +70,13 @@ namespace Octonica.ClickHouseClient.Types
             var binaryTypeName = $"FixedString({AddressSize.ToString(CultureInfo.InvariantCulture)})";
             object writer;
             if (type == typeof(IPAddress))
-                writer = new HexStringLiteralWriter<IPAddress>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(theValue));
+                writer = new HexStringParameterWriter<IPAddress>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(theValue));
             else if (type == typeof(string))
-                writer = new HexStringLiteralWriter<string>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(ParseIpAddress(theValue)));
+                writer = new HexStringParameterWriter<string>(this, HexStringLiteralWriterCastMode.Cast, binaryTypeName, theValue => GetBytes(ParseIpAddress(theValue)));
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

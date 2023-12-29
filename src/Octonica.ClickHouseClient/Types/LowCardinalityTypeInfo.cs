@@ -86,12 +86,12 @@ namespace Octonica.ClickHouseClient.Types
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return _baseType.CreateLiteralWriter<T>();
+            return _baseType.CreateParameterWriter<T>();
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)

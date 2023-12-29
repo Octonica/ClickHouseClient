@@ -24,7 +24,7 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class SimpleLiteralWriter<T> : IClickHouseLiteralWriter<T>
+    internal sealed class SimpleParameterWriter<T> : IClickHouseParameterWriter<T>
         where T : IFormattable
     {
         private readonly string? _valueType;
@@ -32,12 +32,12 @@ namespace Octonica.ClickHouseClient.Types
         private readonly string? _format;
         private readonly bool _appendTypeCast;
 
-        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
+        public SimpleParameterWriter(IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
             : this(null, type, format, appendTypeCast)
         {
         }
 
-        public SimpleLiteralWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
+        public SimpleParameterWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format = null, bool appendTypeCast = false)
         {
             _valueType = valueType;
             _type = type;
@@ -75,7 +75,7 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 
-    internal sealed class SimpleLiteralWriter<TIn, TOut> : IClickHouseLiteralWriter<TIn>
+    internal sealed class SimpleParameterWriter<TIn, TOut> : IClickHouseParameterWriter<TIn>
         where TOut : IFormattable
     {
         private readonly string? _valueType;
@@ -84,22 +84,22 @@ namespace Octonica.ClickHouseClient.Types
         private readonly string? _format;
         private readonly bool _appendTypeCast;
 
-        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, Func<TIn, TOut> convert)
+        public SimpleParameterWriter(IClickHouseColumnTypeInfo type, Func<TIn, TOut> convert)
             : this(null, type, null, false, convert)
         {
         }
 
-        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, bool appendTypeCast, Func<TIn, TOut> convert)
+        public SimpleParameterWriter(IClickHouseColumnTypeInfo type, bool appendTypeCast, Func<TIn, TOut> convert)
             : this(null, type, null, appendTypeCast, convert)
         {
         }
 
-        public SimpleLiteralWriter(IClickHouseColumnTypeInfo type, string? format, Func<TIn, TOut> convert)
+        public SimpleParameterWriter(IClickHouseColumnTypeInfo type, string? format, Func<TIn, TOut> convert)
             : this(null, type, format, false, convert)
         {
         }
 
-        public SimpleLiteralWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format, bool appendTypeCast, Func<TIn, TOut> convert)
+        public SimpleParameterWriter(string? valueType, IClickHouseColumnTypeInfo type, string? format, bool appendTypeCast, Func<TIn, TOut> convert)
         {
             _valueType = valueType;
             _type = type;

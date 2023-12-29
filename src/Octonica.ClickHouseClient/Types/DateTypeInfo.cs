@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2023 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,11 +61,11 @@ namespace Octonica.ClickHouseClient.Types
         {
         }
 
-        private sealed class DateTimeLiteralWriter : IClickHouseLiteralWriter<DateTime>
+        private sealed class DateTimeParameterWriter : IClickHouseParameterWriter<DateTime>
         {
             private readonly DateTypeInfo _typeInfo;
 
-            public DateTimeLiteralWriter(DateTypeInfo typeInfo)
+            public DateTimeParameterWriter(DateTypeInfo typeInfo)
             {
                 _typeInfo = typeInfo;
             }

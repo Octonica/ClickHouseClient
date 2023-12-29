@@ -58,7 +58,7 @@ namespace Octonica.ClickHouseClient.Types
         public abstract IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings);
 
         /// <inheritdoc/>
-        public abstract IClickHouseLiteralWriter<T> CreateLiteralWriter<T>();
+        public abstract IClickHouseParameterWriter<T> CreateParameterWriter<T>();
 
         /// <inheritdoc/>
         public abstract Type GetFieldType();

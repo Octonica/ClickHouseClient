@@ -48,11 +48,11 @@ namespace Octonica.ClickHouseClient.Types
             return new NothingColumnWriter(columnName, ComplexTypeName, rows.Count);
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
-                return (IClickHouseLiteralWriter<T>)(object)NothingLiteralWriter.Instance;
+                return (IClickHouseParameterWriter<T>)(object)NothingParameterWriter.Instance;
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
@@ -132,11 +132,11 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        internal sealed class NothingLiteralWriter : IClickHouseLiteralWriter<DBNull>
+        internal sealed class NothingParameterWriter : IClickHouseParameterWriter<DBNull>
         {
-            public static readonly NothingLiteralWriter Instance = new NothingLiteralWriter();
+            public static readonly NothingParameterWriter Instance = new NothingParameterWriter();
 
-            private NothingLiteralWriter()
+            private NothingParameterWriter()
             {
             }
 

@@ -62,7 +62,7 @@ namespace Octonica.ClickHouseClient.Types
             return new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             // TODO: ClickHouseDbType.Enum is not supported in DefaultTypeInfoProvider.GetTypeInfo
             if (_enumMap == null)
@@ -74,13 +74,13 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(string))
-                writer = new EnumLiteralWriter(this);
+                writer = new EnumParameterWriter(this);
             else if (type == typeof(sbyte))
-                writer = new SimpleLiteralWriter<sbyte>(this);
+                writer = new SimpleParameterWriter<sbyte>(this);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         protected override bool TryParse(ReadOnlySpan<char> text, out sbyte value)

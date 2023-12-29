@@ -47,14 +47,14 @@ namespace Octonica.ClickHouseClient.Types
             return new Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             if (type == typeof(sbyte))
-                return (IClickHouseLiteralWriter<T>)(object)new SimpleLiteralWriter<sbyte>(this, appendTypeCast: true);
+                return (IClickHouseParameterWriter<T>)(object)new SimpleParameterWriter<sbyte>(this, appendTypeCast: true);
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }

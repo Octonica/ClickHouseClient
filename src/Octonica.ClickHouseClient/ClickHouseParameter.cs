@@ -441,36 +441,6 @@ namespace Octonica.ClickHouseClient
             return createWriter(Id, isNull ? null : preparedValue ?? Value, columnSettings, typeInfo, clrType);
         }
 
-        internal void OutputParameterValue(StringBuilder queryStringBuilder, ReadOnlyMemory<char> specifiedType, IClickHouseTypeInfoProvider typeInfoProvider)
-        {
-            if (!specifiedType.IsEmpty)
-                queryStringBuilder.Append("CAST(");
-            queryStringBuilder.Append("CAST(");
-            var typeInfo = GetTypeInfo(typeInfoProvider);
-
-            typeInfo.FormatValue(queryStringBuilder, Value);
-
-            queryStringBuilder.Append(" as ");
-            queryStringBuilder.Append(typeInfo.ComplexTypeName);
-
-            queryStringBuilder.Append(")");
-            if (!specifiedType.IsEmpty)
-            {
-                queryStringBuilder.Append(" as ");
-                var shouldAppendNullable = Value == null && !specifiedType.Span.StartsWith("Nullable(");
-                if (shouldAppendNullable)
-                {
-                    queryStringBuilder.Append("Nullable(");
-                }
-                queryStringBuilder.Append(specifiedType.Span);
-                if (shouldAppendNullable)
-                {
-                    queryStringBuilder.Append(")");
-                }
-                queryStringBuilder.Append(")");
-            }
-        }
-
         internal IClickHouseColumnTypeInfo GetTypeInfo(IClickHouseTypeInfoProvider typeInfoProvider)
         {
             var adapter = new ParameterColumnTypeDescriptorAdapter(this);

@@ -48,7 +48,7 @@ namespace Octonica.ClickHouseClient.Types
             return new Float32Writer(columnName, ComplexTypeName, (IReadOnlyList<float>)rows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -56,11 +56,11 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                float _ => HexStringLiteralWriter.Create<float>(this),
+                float _ => HexStringParameterWriter.Create<float>(this),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

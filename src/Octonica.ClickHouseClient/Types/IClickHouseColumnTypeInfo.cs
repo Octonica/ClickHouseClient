@@ -17,14 +17,16 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
     /// <summary>
     /// Represents basic information about the ClickHouse type. Provides access to factory methods for creating column readers and writers.
-    /// </summary>    
+    /// </summary>
+    /// <remarks>
+    /// Being a part of the ClickHouseClient's infrastructure, the interface <see cref="IClickHouseColumnTypeInfo"/> is considered unstable. It can be changed between minor versions.
+    /// </remarks>
     public interface IClickHouseColumnTypeInfo : IClickHouseTypeInfo
     {
         /// <summary>
@@ -60,21 +62,10 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider);
 
         /// <summary>
-        /// Appends textual representation of <paramref name="value"/> as ClickHouse SQL literal into <paramref name="queryStringBuilder"/>.
+        /// Creates an instance of <see cref="IClickHouseParameterWriter{T}"/> capable of writing a value of the type <typeparamref name="T"/>
+        /// as a ClickHouse parameter.
         /// </summary>
-        /// <param name="queryStringBuilder">Destination string builder</param>
-        /// <param name="value">Value (or null) to be formatted. Value is of compatible type but not necessarily of exact type.</param>
-        void FormatValue(StringBuilder queryStringBuilder, object? value)
-        {
-            var writer = ClickHouseParameterWriter.Dispatch(this, value);
-            writer.Interpolate(queryStringBuilder);
-        }
-
-        /// <summary>
-        /// Creates an instance of <see cref="IClickHouseLiteralWriter{T}"/> capable of writing a value of the type <typeparamref name="T"/>
-        /// as a literal of the ClickHouse type.
-        /// </summary>
-        /// <returns>The <see cref="IClickHouseLiteralWriter{T}"/> that can writer the value of the type <typeparamref name="T"/> as a literal.</returns>
-        IClickHouseLiteralWriter<T> CreateLiteralWriter<T>();
+        /// <returns>The <see cref="IClickHouseParameterWriter{T}"/> that can writer the value of the type <typeparamref name="T"/> as a parameter.</returns>
+        IClickHouseParameterWriter<T> CreateParameterWriter<T>();
     }
 }

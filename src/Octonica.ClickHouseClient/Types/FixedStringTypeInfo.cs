@@ -89,7 +89,7 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_length == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
@@ -100,21 +100,21 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(string))
-                writer = new FixedStringLiteralWriter<string>(this, s => s.AsMemory());
+                writer = new FixedStringParameterWriter<string>(this, s => s.AsMemory());
             else if (type == typeof(ReadOnlyMemory<char>))
-                writer = new FixedStringLiteralWriter(this);
+                writer = new FixedStringParameterWriter(this);
             else if (type == typeof(Memory<char>))
-                writer = new FixedStringLiteralWriter<Memory<char>>(this, mem => mem);
+                writer = new FixedStringParameterWriter<Memory<char>>(this, mem => mem);
             else if (type == typeof(byte[]))
-                writer = new FixedStringHexLiteralWriter<byte[]>(this, a => a.AsMemory());
+                writer = new FixedStringHexParameterWriter<byte[]>(this, a => a.AsMemory());
             else if (type == typeof(ReadOnlyMemory<byte>))
-                writer = new FixedStringHexLiteralWriter(this);
+                writer = new FixedStringHexParameterWriter(this);
             else if (type == typeof(Memory<byte>))
-                writer = new FixedStringHexLiteralWriter<Memory<byte>>(this, mem => mem);
+                writer = new FixedStringHexParameterWriter<Memory<byte>>(this, mem => mem);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -309,11 +309,11 @@ namespace Octonica.ClickHouseClient.Types
             protected abstract int GetBytes(int position, Span<byte> buffer);
         }
 
-        private class FixedStringLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<char>>
+        private class FixedStringParameterWriter : IClickHouseParameterWriter<ReadOnlyMemory<char>>
         {
             private readonly FixedStringTypeInfo _type;
 
-            public FixedStringLiteralWriter(FixedStringTypeInfo type)
+            public FixedStringParameterWriter(FixedStringTypeInfo type)
             {
                 _type = type;
             }
@@ -333,7 +333,7 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<char> value)
             {
                 ValidateLength(value);
-                return StringLiteralWriter.Interpolate(queryBuilder, value.Span);
+                return StringParameterWriter.Interpolate(queryBuilder, value.Span);
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
@@ -352,11 +352,11 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class FixedStringLiteralWriter<T> : FixedStringLiteralWriter, IClickHouseLiteralWriter<T>
+        private sealed class FixedStringParameterWriter<T> : FixedStringParameterWriter, IClickHouseParameterWriter<T>
         {
             private readonly Func<T, ReadOnlyMemory<char>> _convert;
 
-            public FixedStringLiteralWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<char>> convert)
+            public FixedStringParameterWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<char>> convert)
                 : base(type)
             {
                 _convert = convert;
@@ -373,11 +373,11 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private class FixedStringHexLiteralWriter : IClickHouseLiteralWriter<ReadOnlyMemory<byte>>
+        private class FixedStringHexParameterWriter : IClickHouseParameterWriter<ReadOnlyMemory<byte>>
         {
             private readonly FixedStringTypeInfo _type;
 
-            public FixedStringHexLiteralWriter(FixedStringTypeInfo type)
+            public FixedStringHexParameterWriter(FixedStringTypeInfo type)
             {
                 _type = type;
             }
@@ -392,7 +392,7 @@ namespace Octonica.ClickHouseClient.Types
             public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<byte> value)
             {
                 ValidateLength(value);
-                return HexStringLiteralWriter.Interpolate(queryBuilder, value.Span);
+                return HexStringParameterWriter.Interpolate(queryBuilder, value.Span);
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
@@ -409,11 +409,11 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class FixedStringHexLiteralWriter<T> : FixedStringHexLiteralWriter, IClickHouseLiteralWriter<T>
+        private sealed class FixedStringHexParameterWriter<T> : FixedStringHexParameterWriter, IClickHouseParameterWriter<T>
         {
             private readonly Func<T, ReadOnlyMemory<byte>> _convert;
 
-            public FixedStringHexLiteralWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<byte>> convert)
+            public FixedStringHexParameterWriter(FixedStringTypeInfo type, Func<T, ReadOnlyMemory<byte>> convert)
             : base(type)
             {
                 _convert = convert;

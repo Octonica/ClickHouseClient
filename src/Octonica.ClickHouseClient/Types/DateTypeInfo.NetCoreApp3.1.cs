@@ -34,14 +34,14 @@ namespace Octonica.ClickHouseClient.Types
             return new DateWriter(columnName, ComplexTypeName, (IReadOnlyList<DateTime>)rows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             if (type == typeof(DateTime))
-                return (IClickHouseLiteralWriter<T>)(object)new DateTimeLiteralWriter(this);
+                return (IClickHouseParameterWriter<T>)(object)new DateTimeParameterWriter(this);
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }

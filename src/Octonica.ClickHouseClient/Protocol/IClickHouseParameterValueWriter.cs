@@ -20,8 +20,11 @@ using System;
 namespace Octonica.ClickHouseClient.Protocol
 {
     /// <summary>
-    /// The base interface for a parameter's value writer. When implemented writes a parameter value in the format of a ClickHouse literal.
+    /// The base interface for a parameter's value writer. When implemented writes a parameter value in a binary format.
     /// </summary>
+    /// <remarks>
+    /// Being a part of the ClickHouseClient's infrastructure, the interface <see cref="IClickHouseParameterValueWriter"/> is considered unstable. It can be changed between minor versions.
+    /// </remarks>
     public interface IClickHouseParameterValueWriter
     {
         /// <summary>

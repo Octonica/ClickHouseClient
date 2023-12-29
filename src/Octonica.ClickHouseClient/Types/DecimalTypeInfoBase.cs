@@ -140,7 +140,7 @@ namespace Octonica.ClickHouseClient.Types
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_precision == null && _scale == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
@@ -158,19 +158,19 @@ namespace Octonica.ClickHouseClient.Types
             var binaryWriter = new DecimalWriter("Value", ComplexTypeName, _precision.Value, _scale.Value, Array.Empty<decimal>());
             object writer = default(T) switch
             {
-                decimal _ => new DecimalLiteralWriter<decimal>(this, binaryWriter, v => v),
-                long _ => new DecimalLiteralWriter<long>(this, binaryWriter, v => v),
-                ulong _ => new DecimalLiteralWriter<ulong>(this, binaryWriter, v => v),
-                int _ => new DecimalLiteralWriter<int>(this, binaryWriter, v => v),
-                uint _ => new DecimalLiteralWriter<uint>(this, binaryWriter, v => v),
-                short _ => new DecimalLiteralWriter<short>(this, binaryWriter, v => v),
-                ushort _ => new DecimalLiteralWriter<ushort>(this, binaryWriter, v => v),
-                sbyte _ => new DecimalLiteralWriter<sbyte>(this, binaryWriter, v => v),
-                byte _ => new DecimalLiteralWriter<byte>(this, binaryWriter, v => v),
+                decimal _ => new DecimalParameterWriter<decimal>(this, binaryWriter, v => v),
+                long _ => new DecimalParameterWriter<long>(this, binaryWriter, v => v),
+                ulong _ => new DecimalParameterWriter<ulong>(this, binaryWriter, v => v),
+                int _ => new DecimalParameterWriter<int>(this, binaryWriter, v => v),
+                uint _ => new DecimalParameterWriter<uint>(this, binaryWriter, v => v),
+                short _ => new DecimalParameterWriter<short>(this, binaryWriter, v => v),
+                ushort _ => new DecimalParameterWriter<ushort>(this, binaryWriter, v => v),
+                sbyte _ => new DecimalParameterWriter<sbyte>(this, binaryWriter, v => v),
+                byte _ => new DecimalParameterWriter<byte>(this, binaryWriter, v => v),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
             };
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -498,13 +498,13 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DecimalLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        private sealed class DecimalParameterWriter<T> : IClickHouseParameterWriter<T>
         {
             private readonly DecimalTypeInfoBase _type;
             private readonly DecimalWriter _binaryWriter;
             private readonly Func<T, decimal> _convert;
 
-            public DecimalLiteralWriter(DecimalTypeInfoBase type, DecimalWriter binaryWriter, Func<T, decimal> convert)
+            public DecimalParameterWriter(DecimalTypeInfoBase type, DecimalWriter binaryWriter, Func<T, decimal> convert)
             {
                 _type = type;
                 _binaryWriter = binaryWriter;
@@ -539,7 +539,7 @@ namespace Octonica.ClickHouseClient.Types
                 // > Real value ranges that can be stored in memory are a bit larger than specified above, which are checked only on conversion from a string.
                 // But reinterpret_cast lets obtain any Decimal value
                 queryBuilder.Append("reinterpret(");
-                HexStringLiteralWriter.Interpolate(queryBuilder, buffer);
+                HexStringParameterWriter.Interpolate(queryBuilder, buffer);
 
                 queryBuilder.Append(", '");
                 queryBuilder.Append(_binaryWriter.ColumnType);

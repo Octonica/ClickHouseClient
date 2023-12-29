@@ -199,7 +199,7 @@ namespace Octonica.ClickHouseClient.Types
             return 0;
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
@@ -234,7 +234,7 @@ namespace Octonica.ClickHouseClient.Types
                 }
             }
 
-            ArrayLiteralWriterDispatcher<T> dispatcher;
+            ArrayParameterWriterDispatcher<T> dispatcher;
             if (elementType == null)
             {
                 int arrayRank;
@@ -264,11 +264,11 @@ namespace Octonica.ClickHouseClient.Types
 
                 elementType = type.GetElementType();
                 Debug.Assert( elementType != null );
-                dispatcher = new ArrayLiteralWriterDispatcher<T>(this, elementTypeInfo, true);
+                dispatcher = new ArrayParameterWriterDispatcher<T>(this, elementTypeInfo, true);
             }
             else
             {
-                dispatcher = new ArrayLiteralWriterDispatcher<T>(this, _elementTypeInfo, false);
+                dispatcher = new ArrayParameterWriterDispatcher<T>(this, _elementTypeInfo, false);
             }
 
             var writer = TypeDispatcher.Dispatch(elementType, dispatcher);
@@ -675,36 +675,36 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class ArrayLiteralWriterDispatcher<TArray> : ITypeDispatcher<IClickHouseLiteralWriter<TArray>>
+        private sealed class ArrayParameterWriterDispatcher<TArray> : ITypeDispatcher<IClickHouseParameterWriter<TArray>>
         {
             private readonly ArrayTypeInfo _arrayType;
             private readonly IClickHouseColumnTypeInfo _elementType;
             private readonly bool _isMultidimensional;
 
-            public ArrayLiteralWriterDispatcher(ArrayTypeInfo arrayType, IClickHouseColumnTypeInfo elementType, bool isMultidimensional)
+            public ArrayParameterWriterDispatcher(ArrayTypeInfo arrayType, IClickHouseColumnTypeInfo elementType, bool isMultidimensional)
             {
                 _arrayType = arrayType;
                 _elementType = elementType;
                 _isMultidimensional = isMultidimensional;
             }
 
-            public IClickHouseLiteralWriter<TArray> Dispatch<T>()
+            public IClickHouseParameterWriter<TArray> Dispatch<T>()
             {
-                var elementWriter = _elementType.CreateLiteralWriter<T>();
+                var elementWriter = _elementType.CreateParameterWriter<T>();
 
                 if (_isMultidimensional)
-                    return new MultidimensionalArralLiteralWriter<TArray, T>(_arrayType, elementWriter);
+                    return new MultidimensionalArralParameterWriter<TArray, T>(_arrayType, elementWriter);
 
-                return new ArrayLiteralWriter<TArray, T>(_arrayType, elementWriter);
+                return new ArrayParameterWriter<TArray, T>(_arrayType, elementWriter);
             }
         }
 
-        private sealed class MultidimensionalArralLiteralWriter<TArray, TElement> : IClickHouseLiteralWriter<TArray>
+        private sealed class MultidimensionalArralParameterWriter<TArray, TElement> : IClickHouseParameterWriter<TArray>
         {
             private readonly ArrayTypeInfo _arrayType;
-            private readonly IClickHouseLiteralWriter<TElement> _elementWriter;
+            private readonly IClickHouseParameterWriter<TElement> _elementWriter;
 
-            public MultidimensionalArralLiteralWriter(ArrayTypeInfo arrayType, IClickHouseLiteralWriter<TElement> elementWriter)
+            public MultidimensionalArralParameterWriter(ArrayTypeInfo arrayType, IClickHouseParameterWriter<TElement> elementWriter)
             {
                 _arrayType = arrayType;
                 _elementWriter = elementWriter;
@@ -838,12 +838,12 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class ArrayLiteralWriter<TArray, TElement> : IClickHouseLiteralWriter<TArray>
+        private sealed class ArrayParameterWriter<TArray, TElement> : IClickHouseParameterWriter<TArray>
         {
             private readonly ArrayTypeInfo _type;
-            private readonly IClickHouseLiteralWriter<TElement> _elementWriter;
+            private readonly IClickHouseParameterWriter<TElement> _elementWriter;
 
-            public ArrayLiteralWriter(ArrayTypeInfo type, IClickHouseLiteralWriter<TElement> elementWriter)
+            public ArrayParameterWriter(ArrayTypeInfo type, IClickHouseParameterWriter<TElement> elementWriter)
             {
                 _type = type;
                 _elementWriter = elementWriter;

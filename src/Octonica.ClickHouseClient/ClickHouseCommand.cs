@@ -750,12 +750,12 @@ namespace Octonica.ClickHouseClient
         {
             string commandText;
             List<IClickHouseTableWriter>? tableWriters = null;
-            Dictionary<string, ClickHouseParameterWriter>? literalParameters;
+            Dictionary<string, ClickHouseParameterWriter>? parameterWriters;
 
             try
             {
                 var parametersTable = $"_{Guid.NewGuid():N}";
-                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out var binaryParameters, out literalParameters);
+                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out var binaryParameters, out parameterWriters);
 
                 if (binaryParameters != null && binaryParameters.Count > 0)
                 {
@@ -799,7 +799,7 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting, Parameters = literalParameters };
+            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting, Parameters = parameterWriters };
             await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
@@ -871,7 +871,7 @@ namespace Octonica.ClickHouseClient
             return new ClickHouseTableWriter(tableProvider.TableName, rowCount, factories.Select(f => f.Create(0, rowCount)));
         }
 
-        private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider, string parametersTable, out HashSet<string>? binaryParameters, out Dictionary<string, ClickHouseParameterWriter>? literalParameters)
+        private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider, string parametersTable, out HashSet<string>? binaryParameters, out Dictionary<string, ClickHouseParameterWriter>? parameterWriters)
         {
             var query = CommandText;
             if (string.IsNullOrEmpty(query))
@@ -879,7 +879,7 @@ namespace Octonica.ClickHouseClient
 
             var parameterPositions = GetParameterPositions(query);
             binaryParameters = null;
-            literalParameters = null;
+            parameterWriters = null;
             if (parameterPositions.Count == 0)
                 return query;
 
@@ -918,11 +918,11 @@ namespace Octonica.ClickHouseClient
 
                     case ClickHouseParameterMode.Serialize:
                     {
-                        literalParameters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
-                        if (!literalParameters.TryGetValue(parameter.Id, out var parameterWriter))
+                        parameterWriters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
+                        if (!parameterWriters.TryGetValue(parameter.Id, out var parameterWriter))
                         {
                             parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
-                            literalParameters.Add(parameter.Id, parameterWriter);
+                            parameterWriters.Add(parameter.Id, parameterWriter);
                         }
 
                         parameterWriter.Interpolate(

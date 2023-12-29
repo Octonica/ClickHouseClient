@@ -47,7 +47,7 @@ namespace Octonica.ClickHouseClient.Types
             return new DateWriter(columnName, ComplexTypeName, dateOnlyRows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -55,12 +55,12 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer = default(T) switch
             {
-                DateOnly => new DateOnlyLiteralWriter(this),
-                DateTime => new DateTimeLiteralWriter(this),
+                DateOnly => new DateOnlyParameterWriter(this),
+                DateTime => new DateTimeParameterWriter(this),
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()
@@ -115,11 +115,11 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateOnlyLiteralWriter : IClickHouseLiteralWriter<DateOnly>
+        private sealed class DateOnlyParameterWriter : IClickHouseParameterWriter<DateOnly>
         {
             private readonly DateTypeInfo _typeInfo;
 
-            public DateOnlyLiteralWriter(DateTypeInfo typeInfo)
+            public DateOnlyParameterWriter(DateTypeInfo typeInfo)
             {
                 _typeInfo = typeInfo;
             }

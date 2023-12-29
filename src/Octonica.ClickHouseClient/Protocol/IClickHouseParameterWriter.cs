@@ -23,10 +23,13 @@ using System.Text;
 namespace Octonica.ClickHouseClient.Protocol
 {
     /// <summary>
-    /// The base interface for a value writer. When implemented writes a value as a ClickHouse literal.
+    /// The base interface for a value writer. When implemented writes a value as a ClickHouse parameter.
     /// </summary>
     /// <typeparam name="T">The type of a value.</typeparam>
-    public interface IClickHouseLiteralWriter<in T>
+    /// <remarks>
+    /// Being a part of the ClickHouseClient's infrastructure, the interface <see cref="IClickHouseParameterWriter{T}"/> is considered unstable. It can be changed between minor versions.
+    /// </remarks>
+    public interface IClickHouseParameterWriter<in T>
     {
         /// <summary>
         /// Creates an instance of <see cref="IClickHouseParameterValueWriter"/> which encapsulates the value.
@@ -56,7 +59,7 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <param name="typeInfoProvider">The provider of type information.</param>
         /// <param name="writeValue">
         /// The function that appends an actual value to the query. It gets three arguments: the query string builder; the type of the
-        /// literal; the callback function for writing an external parts of the parameter. The type of the literal may differ from the type
+        /// parameter; the callback function for writing an external parts of the parameter. The type of the literal may differ from the type
         /// of the value. The function must return the same instance of the builder which it gets as an argument.
         /// </param>
         /// <returns>The instance of the builder passed to the method (<paramref name="queryBuilder"/>).</returns>

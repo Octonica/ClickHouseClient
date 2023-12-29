@@ -76,28 +76,28 @@ namespace Octonica.ClickHouseClient.Types
             return new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (UnderlyingType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             var type = typeof(T);
             if (type == typeof(DBNull))
-                return (IClickHouseLiteralWriter<T>)(object)new NullableLiteralWriter<DBNull>(this, NothingTypeInfo.NothingLiteralWriter.Instance);
+                return (IClickHouseParameterWriter<T>)(object)new NullableParameterWriter<DBNull>(this, NothingTypeInfo.NothingParameterWriter.Instance);
 
             if (type.IsValueType && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
             {
                 var valueType = type.GetGenericArguments()[0];
-                var dispatcherType = typeof(NullableStructLiteralWriterDispatcher<>).MakeGenericType(valueType);
-                var dispatcher = (INullableLiteralWriterDispatcher<T>?)Activator.CreateInstance(dispatcherType);
+                var dispatcherType = typeof(NullableStructParameterWriterDispatcher<>).MakeGenericType(valueType);
+                var dispatcher = (INullableParameterWriterDispatcher<T>?)Activator.CreateInstance(dispatcherType);
                 Debug.Assert(dispatcher != null);
 
                 return dispatcher.Dispatch(this);
             }
 
             // The type is either a non-value or a non-nullable stucture. In both cases it can be interpreted as non-nullable.
-            var underlyingWriter = UnderlyingType.CreateLiteralWriter<T>();
-            return new NullableLiteralWriter<T>(this, underlyingWriter);
+            var underlyingWriter = UnderlyingType.CreateParameterWriter<T>();
+            return new NullableParameterWriter<T>(this, underlyingWriter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -317,29 +317,29 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private interface INullableLiteralWriterDispatcher<T>
+        private interface INullableParameterWriterDispatcher<T>
         {
-            IClickHouseLiteralWriter<T> Dispatch(NullableTypeInfo typeInfo);
+            IClickHouseParameterWriter<T> Dispatch(NullableTypeInfo typeInfo);
         }
 
-        private sealed class NullableStructLiteralWriterDispatcher<T> : INullableLiteralWriterDispatcher<T?>
+        private sealed class NullableStructParameterWriterDispatcher<T> : INullableParameterWriterDispatcher<T?>
             where T : struct
         {
-            public IClickHouseLiteralWriter<T?> Dispatch(NullableTypeInfo typeInfo)
+            public IClickHouseParameterWriter<T?> Dispatch(NullableTypeInfo typeInfo)
             {
                 Debug.Assert(typeInfo.UnderlyingType != null);
-                var underlyingWriter = typeInfo.UnderlyingType.CreateLiteralWriter<T>();
-                return new NullableStructLiteralWriter<T>(typeInfo, underlyingWriter);
+                var underlyingWriter = typeInfo.UnderlyingType.CreateParameterWriter<T>();
+                return new NullableStructParameterWriter<T>(typeInfo, underlyingWriter);
             }
         }
 
-        private sealed class NullableStructLiteralWriter<T> : IClickHouseLiteralWriter<T?>
+        private sealed class NullableStructParameterWriter<T> : IClickHouseParameterWriter<T?>
             where T : struct
         {
             private readonly NullableTypeInfo _typeIfno;
-            private readonly IClickHouseLiteralWriter<T> _underlyingWritrer;
+            private readonly IClickHouseParameterWriter<T> _underlyingWritrer;
 
-            public NullableStructLiteralWriter(NullableTypeInfo typeIfno, IClickHouseLiteralWriter<T> underlyingWritrer)
+            public NullableStructParameterWriter(NullableTypeInfo typeIfno, IClickHouseParameterWriter<T> underlyingWritrer)
             {
                 _typeIfno = typeIfno;
                 _underlyingWritrer = underlyingWritrer;
@@ -399,12 +399,12 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class NullableLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        private sealed class NullableParameterWriter<T> : IClickHouseParameterWriter<T>
         {
             private readonly NullableTypeInfo _typeIfno;
-            private readonly IClickHouseLiteralWriter<T> _underlyingWritrer;
+            private readonly IClickHouseParameterWriter<T> _underlyingWritrer;
 
-            public NullableLiteralWriter(NullableTypeInfo typeIfno, IClickHouseLiteralWriter<T> underlyingWritrer)
+            public NullableParameterWriter(NullableTypeInfo typeIfno, IClickHouseParameterWriter<T> underlyingWritrer)
             {
                 _typeIfno = typeIfno;
                 _underlyingWritrer = underlyingWritrer;

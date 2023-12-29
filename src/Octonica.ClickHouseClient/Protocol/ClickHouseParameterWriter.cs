@@ -52,7 +52,7 @@ namespace Octonica.ClickHouseClient.Protocol
             public ClickHouseParameterWriter Dispatch<T>()
             {
                 var value = (T)_value;
-                var writer = _typeInfo.CreateLiteralWriter<T>();
+                var writer = _typeInfo.CreateParameterWriter<T>();
                 if (!writer.TryCreateParameterValueWriter(value, isNested: false, out var valueWriter))
                     valueWriter = null;
 
@@ -68,13 +68,13 @@ namespace Octonica.ClickHouseClient.Protocol
 
     internal sealed class ClickHouseParameterWriter<T> : ClickHouseParameterWriter
     {
-        private readonly IClickHouseLiteralWriter<T> _writer;
+        private readonly IClickHouseParameterWriter<T> _writer;
         private readonly T _value;
         private readonly IClickHouseParameterValueWriter? _valueWriter;
 
         public override int Length => _valueWriter?.Length ?? 0;
 
-        public ClickHouseParameterWriter(IClickHouseLiteralWriter<T> writer, T value, IClickHouseParameterValueWriter? valueWriter)
+        public ClickHouseParameterWriter(IClickHouseParameterWriter<T> writer, T value, IClickHouseParameterValueWriter? valueWriter)
         {
             _writer = writer;
             _value = value;

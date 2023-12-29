@@ -85,7 +85,7 @@ namespace Octonica.ClickHouseClient.Types
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
-        public IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -98,7 +98,7 @@ namespace Octonica.ClickHouseClient.Types
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 
-            return new DateTimeLiteralWriter<T>(this, (IConverter<T, uint>)converter);
+            return new DateTimeParameterWriter<T>(this, (IConverter<T, uint>)converter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -248,12 +248,12 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        private sealed class DateTimeLiteralWriter<T> : IClickHouseLiteralWriter<T>
+        private sealed class DateTimeParameterWriter<T> : IClickHouseParameterWriter<T>
         {
             private readonly DateTimeTypeInfo _typeInfo;
             private readonly IConverter<T, uint> _converter;
 
-            public DateTimeLiteralWriter(DateTimeTypeInfo typeInfo, IConverter<T, uint> converter)
+            public DateTimeParameterWriter(DateTimeTypeInfo typeInfo, IConverter<T, uint> converter)
             {
                 _typeInfo = typeInfo;
                 _converter = converter;

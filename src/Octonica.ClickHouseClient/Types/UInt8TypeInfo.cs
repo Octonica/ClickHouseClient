@@ -53,7 +53,7 @@ namespace Octonica.ClickHouseClient.Types
             return new UInt8Writer(columnName, ComplexTypeName, byteRows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
@@ -61,13 +61,13 @@ namespace Octonica.ClickHouseClient.Types
 
             object writer;
             if (type == typeof(byte))
-                writer = new SimpleLiteralWriter<byte>(this);
+                writer = new SimpleParameterWriter<byte>(this);
             else if (type == typeof(bool))
-                writer = new SimpleLiteralWriter<bool, byte>(this, b => b ? (byte)1 : (byte)0);
+                writer = new SimpleParameterWriter<bool, byte>(this, b => b ? (byte)1 : (byte)0);
             else
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
 
-            return (IClickHouseLiteralWriter<T>)writer;
+            return (IClickHouseParameterWriter<T>)writer;
         }
 
         public override Type GetFieldType()

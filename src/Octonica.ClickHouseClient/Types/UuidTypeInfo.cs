@@ -50,14 +50,14 @@ namespace Octonica.ClickHouseClient.Types
             return new UuidWriter(columnName, ComplexTypeName, (IReadOnlyList<Guid>)rows);
         }
 
-        public override IClickHouseLiteralWriter<T> CreateLiteralWriter<T>()
+        public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             var type = typeof(T);
             if (type == typeof(DBNull))
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
 
             if (type == typeof(Guid))
-                return (IClickHouseLiteralWriter<T>)(object)new StringLiteralWriter<Guid>(this, uuidValue => uuidValue.ToString().AsMemory());
+                return (IClickHouseParameterWriter<T>)(object)new StringParameterWriter<Guid>(this, uuidValue => uuidValue.ToString().AsMemory());
 
             throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
