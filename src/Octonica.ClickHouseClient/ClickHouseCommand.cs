@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -905,7 +905,7 @@ namespace Octonica.ClickHouseClient
                     case ClickHouseParameterMode.Interpolate:
                     {
                         var parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
-                        parameterWriter.Interpolate(queryStringBuilder.Append(" (")).Append(") ");
+                        parameterWriter.Interpolate(queryStringBuilder.Append(' ')).Append(' ');
                         break;
                     }
 

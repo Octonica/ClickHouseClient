@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -585,6 +585,37 @@ namespace Octonica.ClickHouseClient.Tests
             var result = await cmd.ExecuteScalarAsync();
             Assert.IsType<ulong>(result);
             Assert.Equal(42UL, result);
+        }
+
+        [Fact]
+        public async Task CreateTableWithCommentParameter()
+        {
+            var tableName = GetTempTableName("with_comment");
+
+            try
+            {
+                await using var connection = await OpenConnectionAsync();
+
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+
+                const string commentText = "The comment: \\'\"\n\t\v\b\rals;kdjang";
+                cmd = connection.CreateCommand($"CREATE TABLE {tableName}(id Int32) ENGINE = Memory COMMENT {{comment}}");
+                cmd.Parameters.AddWithValue("comment", commentText).ParameterMode = ClickHouseParameterMode.Interpolate;
+                await cmd.ExecuteNonQueryAsync();
+
+                cmd = connection.CreateCommand("SELECT comment FROM system.tables WHERE name = {table}");
+                cmd.Parameters.AddWithValue("table", tableName).ParameterMode = ClickHouseParameterMode.Serialize;
+                var result = await cmd.ExecuteScalarAsync();
+                Assert.IsType<string>(result);
+                Assert.Equal(commentText, result);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync();
+                var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 }
