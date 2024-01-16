@@ -14,7 +14,7 @@
     <Version Condition="'$(ClickHouseClientVersionSuffix)' != ''">$(Version)$(ClickHouseClientVersionSuffix)</Version>
 
     <Company>Octonica</Company>
-    <Copyright>© 2019 – 2023 Octonica</Copyright>
+    <Copyright>© 2019 – 2024 Octonica</Copyright>
     <Product>Octonica.ClickHouseClient</Product>
     <PackageProjectUrl>https://github.com/Octonica/ClickHouseClient</PackageProjectUrl>
     <Description>ClickHouse .NET Core driver</Description>
