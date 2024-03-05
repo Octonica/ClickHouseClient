@@ -19,6 +19,8 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using TimeZoneConverter;
 
 namespace Octonica.ClickHouseClient.Utils
 {
@@ -27,6 +29,10 @@ namespace Octonica.ClickHouseClient.Utils
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static partial void GetTimeZoneInfoImpl(string timeZone, ref TimeZoneInfo? timeZoneInfo)
         {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                timeZone = TZConvert.IanaToWindows(timeZone);
+            }
             timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
         }
 

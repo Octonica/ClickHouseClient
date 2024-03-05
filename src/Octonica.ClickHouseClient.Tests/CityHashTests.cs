@@ -63,7 +63,7 @@ namespace Octonica.ClickHouseClient.Tests
 
         void Test(int index, int offset, int len)
         {
-            var seq = new ReadOnlySequence<byte>(data, offset, len);
+            var seq = new ReadOnlySequence<byte>(data!, offset, len);
 
             UInt128 u = CityHash.CityHash128(seq);
             UInt128 v = CityHash.CityHash128WithSeed(seq, kSeed128);

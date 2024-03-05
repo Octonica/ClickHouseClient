@@ -69,25 +69,28 @@ namespace Octonica.ClickHouseClient.Types
 
         public DateTimeOffset GetValue(int index)
         {
-            var ticks = _buffer.Span[index];
+            long ticks = (long)_buffer.Span[index];
             if (ticks == 0)
                 return default;
 
-            if (ticks > _maxValue)
+            DateTimeOffset dateTime;
+            TimeSpan offset;
+
+            // check operating system
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
-                throw new OverflowException(
-                    $"The value 0x{ticks:X} is greater than the maximal value of the type \"{typeof(DateTime)}\". " +
-                    $"It is only possible to read this value as \"{typeof(ulong)}\".");
+                // Windows
+                dateTime = DateTimeOffset.FromUnixTimeMilliseconds(ticks);
+                offset = _timeZone.GetUtcOffset(dateTime);
             }
-
-            if (_ticksScale < 0)
-                ticks /= (uint) -_ticksScale;
             else
-                ticks = checked(ticks * (uint) _ticksScale);
-
-            var dateTime = DateTime.UnixEpoch.AddTicks(checked((long) ticks));
-            var offset = _timeZone.GetUtcOffset(dateTime);
-            return new DateTimeOffset(dateTime).ToOffset(offset);
+            {
+                // Unix
+                dateTime = DateTimeOffset.FromUnixTimeSeconds(ticks);
+                offset = _timeZone.GetUtcOffset(dateTime);
+            }
+            
+            return new DateTimeOffset(dateTime.DateTime, offset);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
