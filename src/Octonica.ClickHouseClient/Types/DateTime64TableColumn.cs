@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Runtime.InteropServices;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -77,7 +78,7 @@ namespace Octonica.ClickHouseClient.Types
             TimeSpan offset;
 
             // check operating system
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 // Windows
                 dateTime = DateTimeOffset.FromUnixTimeMilliseconds(ticks);
