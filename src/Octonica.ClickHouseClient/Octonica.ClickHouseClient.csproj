@@ -23,7 +23,7 @@
     <PackageTags>ClickHouse</PackageTags>
     <RepositoryUrl>https://github.com/Octonica/ClickHouseClient.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <Title>Octonica.ClickHouseClient</Title>
     <Version>3.1.1</Version>
   </PropertyGroup>
