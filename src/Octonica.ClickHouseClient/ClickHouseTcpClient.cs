@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -347,7 +347,7 @@ namespace Octonica.ClickHouseClient
                     ct =>
                         ReadTable(
                             withDecompression,
-                            (typeInfo, rowCount) => typeInfo.CreateColumnReader(rowCount),
+                            (typeInfo, rowCount, mode) => typeInfo.CreateColumnReader(rowCount, mode),
                             (columnInfo, reader, index) => ReadTableColumn(columnInfo, reader, columnSettings == null || columnSettings.Count <= index ? null : columnSettings[index]),
                             async,
                             ct)
@@ -361,13 +361,13 @@ namespace Octonica.ClickHouseClient
             public async ValueTask<BlockHeader> SkipTable(ServerDataMessage dataMessage, bool async, CancellationToken cancellationToken)
             {
                 var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
-                var result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount) => typeInfo.CreateSkippingColumnReader(rowCount), null, async, ct));
+                var result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount, mode) => typeInfo.CreateSkippingColumnReader(rowCount, mode), null, async, ct));
                 return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
             }
 
             private async ValueTask<(List<ColumnInfo> columnInfos, List<IClickHouseTableColumn>? columns, int rowCount)> ReadTable<TReader>(
                 bool withDecompression,
-                Func<IClickHouseColumnTypeInfo, int, TReader> createColumnReader,
+                Func<IClickHouseColumnTypeInfo, int, ClickHouseColumnSerializationMode, TReader> createColumnReader,
                 Func<ColumnInfo, TReader, int, IClickHouseTableColumn>? readTableColumn,
                 bool async,
                 CancellationToken cancellationToken)
@@ -414,11 +414,12 @@ namespace Octonica.ClickHouseClient
                     var columnName = await reader.ReadString(async, cancellationToken);
                     var columnTypeName = await reader.ReadString(async, cancellationToken);
 
+                    var serializationMode = ClickHouseColumnSerializationMode.Default;
                     if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
                     {
                         var hasCustom = await reader.ReadBool(async, cancellationToken);
                         if (hasCustom)
-                            throw new NotImplementedException("TODO: add support for custom serialization.");
+                            serializationMode = ClickHouseColumnSerializationMode.Custom;
                     }
 
                     var columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
@@ -426,7 +427,7 @@ namespace Octonica.ClickHouseClient
                     columnInfos.Add(columnInfo);
 
                     var columnRowCount = rowCount;
-                    var columnReader = createColumnReader(columnType, rowCount);
+                    var columnReader = createColumnReader(columnType, rowCount, serializationMode);
                     while (columnRowCount > 0)
                     {
                         var sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);

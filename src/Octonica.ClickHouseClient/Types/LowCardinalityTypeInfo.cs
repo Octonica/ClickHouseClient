@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2023 Octonica
+/* Copyright 2020-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -54,10 +53,26 @@ namespace Octonica.ClickHouseClient.Types
             return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable);
         }
 
+        IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateColumnReader(rowCount);
+
+            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+        }
+
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             var typeInfo = GetBaseTypeInfoForColumnReader();
             return new LowCardinalitySkippingColumnReader(rowCount, typeInfo.baseType);
+        }
+
+        IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateSkippingColumnReader(rowCount);
+
+            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         private (IClickHouseColumnTypeInfo baseType, bool isNullable) GetBaseTypeInfoForColumnReader()
@@ -301,7 +316,7 @@ namespace Octonica.ClickHouseClient.Types
             private int _basePosition;
             private bool _headerSkipped;
             private int _position;
-            
+
             public LowCardinalitySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType)
             {
                 _rowCount = rowCount;

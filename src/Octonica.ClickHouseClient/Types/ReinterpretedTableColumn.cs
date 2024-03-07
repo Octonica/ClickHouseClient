@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +29,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _sourceColumn.RowCount;
 
+        public TTo DefaultValue { get; }
+
         public ReinterpretedTableColumn(IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
         {
             _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
             _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
+            DefaultValue = _reinterpret(_sourceColumn.DefaultValue);
         }
 
         public ReinterpretedTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
@@ -40,6 +43,7 @@ namespace Octonica.ClickHouseClient.Types
             _reinterpretationRoot = reinterpretationRoot ?? throw new ArgumentNullException(nameof(reinterpretationRoot));
             _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
             _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
+            DefaultValue = _reinterpret(_sourceColumn.DefaultValue);
         }
 
         public bool IsNull(int index)
@@ -88,6 +92,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<TValue> _column;
 
         public int RowCount => _column.RowCount;
+
+        public TValue DefaultValue => _column.DefaultValue;
 
         public ReinterpretedTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseTableColumn<TValue> column)
         {

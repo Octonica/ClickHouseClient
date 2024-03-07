@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -464,6 +464,68 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(0, value.Minute);
             Assert.Equal(0, value.Second);
             Assert.Equal(DateTimeKind.Unspecified, value.Kind);
+        }
+
+        [Fact]
+        public Task SparseSerializedColumns()
+        {
+            return WithTemporaryTable("sparse", Query, Test);
+
+            static string Query(string tableName) =>
+$@"CREATE TABLE {tableName}
+(
+    id UInt64,
+    s Nullable(String),
+    t Tuple(bool, String)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS ratio_of_defaults_for_sparse_serialization = 0.95";
+
+            static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
+            {
+                var cmd = cn.CreateCommand();
+                const int expectedCount = 5_000_000;
+
+                cmd.CommandText = $@"INSERT INTO {tableName}
+SELECT
+    number,
+    number % 25 = 0 ? toString(number) : '',
+    tuple(number % 33 = 0, number % 99 = 0 ? toString(number) : '')
+FROM
+    numbers({expectedCount})";
+
+                await cmd.ExecuteNonQueryAsync(ct);
+
+                cmd.CommandText = $"SELECT id, s, t FROM {tableName}";
+
+                await using (var reader = await cmd.ExecuteReaderAsync(ct))
+                {
+                    int counter = 0;
+                    while (await reader.ReadAsync(ct))
+                    {
+                        var id = reader.GetUInt64(0);
+                        var strVal = reader.GetString(1);
+                        var tuple = reader.GetFieldValue<(bool boolVal, string strVal)>(2);
+
+                        Assert.Equal(id % 25 == 0 ? id.ToString() : string.Empty, strVal);
+                        Assert.Equal(id % 33 == 0, tuple.boolVal);
+                        Assert.Equal(id % 99 == 0 ? id.ToString() : string.Empty, tuple.strVal);
+
+                        ++counter;
+                    }
+
+                    Assert.Equal(expectedCount, counter);
+                }
+
+                // Test skipping sparse values
+                await cmd.ExecuteNonQueryAsync(ct);
+
+                // Checking if the channel is in a valid state after skipping
+                cmd.CommandText = "SELECT 21*2";
+                var answer = await cmd.ExecuteScalarAsync<int>(ct);
+                Assert.Equal(42, answer);
+            }
         }
     }
 }

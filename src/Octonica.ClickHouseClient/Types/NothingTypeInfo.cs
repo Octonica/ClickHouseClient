@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,9 +38,25 @@ namespace Octonica.ClickHouseClient.Types
             return new NothingColumnReader(rowCount);
         }
 
+        IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateColumnReader(rowCount);
+
+            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+        }
+
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             return new NothingColumnReader(rowCount);
+        }
+
+        IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateSkippingColumnReader(rowCount);
+
+            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)

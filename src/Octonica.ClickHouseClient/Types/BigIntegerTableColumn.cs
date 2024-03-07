@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly bool _isUnsigned;
 
         public int RowCount { get; }
+
+        public BigInteger DefaultValue => BigInteger.Zero;
 
         public BigIntegerTableColumn(byte[] rawData, int rowCount, int elementByteSize, bool isUnsigned)
         {

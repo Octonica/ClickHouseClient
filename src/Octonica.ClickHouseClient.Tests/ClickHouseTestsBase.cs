@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,26 +75,32 @@ namespace Octonica.ClickHouseClient.Tests
             return WithTemporaryTable(tableNameSuffix, columns, (cn, tableName, _) => runTest(cn, tableName));
         }
 
-        protected async Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, CancellationToken, Task> runTest, CancellationToken ct = default)
+        protected Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, CancellationToken, Task> runTest, CancellationToken ct = default)
+        {
+            return WithTemporaryTable(tableNameSuffix, tableName => $"CREATE TABLE {tableName}({columns}) ENGINE=Memory", runTest, ct);
+        }
+
+        protected async Task WithTemporaryTable(string tableNameSuffix, Func<string, string> makeCreateTableQuery, Func<ClickHouseConnection, string, CancellationToken, Task> runTest, CancellationToken ct = default)
         {
             var tableName = GetTempTableName(tableNameSuffix);
             try
             {
-                await using var connection = await OpenConnectionAsync();
+                await using var connection = await OpenConnectionAsync(cancellationToken: ct);
 
                 var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
-                await cmd.ExecuteNonQueryAsync();
+                await cmd.ExecuteNonQueryAsync(ct);
 
-                cmd = connection.CreateCommand($"CREATE TABLE {tableName}({columns}) ENGINE=Memory");
-                await cmd.ExecuteNonQueryAsync();
+                var createTableQuery = makeCreateTableQuery(tableName);
+                cmd = connection.CreateCommand(createTableQuery);
+                await cmd.ExecuteNonQueryAsync(ct);
 
                 await runTest(connection, tableName, ct);
             }
             finally
             {
-                await using var connection = await OpenConnectionAsync();
+                await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
                 var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
-                await cmd.ExecuteNonQueryAsync();
+                await cmd.ExecuteNonQueryAsync(CancellationToken.None);
             }
         }
 

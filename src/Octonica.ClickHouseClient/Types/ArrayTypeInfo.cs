@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,12 +63,28 @@ namespace Octonica.ClickHouseClient.Types
             return new ArrayColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
         }
 
+        IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode != ClickHouseColumnSerializationMode.Default)
+                throw new NotSupportedException($"Custom serialization for {ComplexTypeName} is not supported by ClickHouseClient.");
+
+            return CreateColumnReader(rowCount);
+        }
+
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return new ArraySkippingColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
+        }
+
+        IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode != ClickHouseColumnSerializationMode.Default)
+                throw new NotSupportedException($"Custom serialization for {ComplexTypeName} is not supported by ClickHouseClient.");
+
+            return CreateSkippingColumnReader(rowCount);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -304,7 +320,7 @@ namespace Octonica.ClickHouseClient.Types
                 Ranges = new List<(int offset, int length)>(_rowCount);
             }
 
-            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            SequenceSize IClickHouseColumnReaderBase.ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (Position >= _rowCount)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");

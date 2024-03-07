@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn<TKey> _keyColumn;
         private readonly IClickHouseTableColumn<TValue> _valueColumn;
+
+        public KeyValuePair<TKey, TValue> DefaultValue => new KeyValuePair<TKey, TValue>(_keyColumn.DefaultValue, _valueColumn.DefaultValue);
 
         public KeyValuePairTableColumn(int rowCount, IClickHouseTableColumn<TKey> keyColumn, IClickHouseTableColumn<TValue> valueColumn)
             : base(rowCount)

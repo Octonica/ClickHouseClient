@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2023 Octonica
+/* Copyright 2020-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,11 +37,63 @@ namespace Octonica.ClickHouseClient.Types
         IClickHouseColumnReader CreateColumnReader(int rowCount);
 
         /// <summary>
+        /// Creates and returns a new instance of <see cref="IClickHouseColumnReader"/> configured to read the specified number of rows.
+        /// </summary>
+        /// <param name="rowCount">The number of rows that the reader should read.</param>
+        /// <param name="serializationMode">
+        /// One of supported serialization modes (see <see cref="ClickHouseColumnSerializationMode"/> for details).
+        /// When the mode is <see cref="ClickHouseColumnSerializationMode.Default"/> an implementation
+        /// of this method must call <see cref="CreateColumnReader(int)"/>.
+        /// </param>
+        /// <returns>The <see cref="IClickHouseColumnReader"/> that should read the specified number of rows.</returns>
+        IClickHouseColumnReader CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            switch (serializationMode)
+            {
+                case ClickHouseColumnSerializationMode.Default:
+                    return CreateColumnReader(rowCount);
+
+                case ClickHouseColumnSerializationMode.Sparse:
+                case ClickHouseColumnSerializationMode.Custom:
+                    return new CustomSerializationColumnReader(this, rowCount, serializationMode);
+
+                default:
+                    throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));
+            }
+        }
+
+        /// <summary>
         /// Creates and returns a new instance of <see cref="IClickHouseColumnReaderBase"/> configured to skip the specified number of rows.
         /// </summary>
         /// <param name="rowCount">The number of rows that the reader should skip.</param>
         /// <returns>The <see cref="IClickHouseColumnReaderBase"/> that should skip the specified number of rows.</returns>
         IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount);
+
+        /// <summary>
+        /// Creates and returns a new instance of <see cref="IClickHouseColumnReaderBase"/> configured to skip the specified number of rows.
+        /// </summary>
+        /// <param name="rowCount">The number of rows that the reader should skip.</param>
+        /// <param name="serializationMode">
+        /// One of supported serialization modes (see <see cref="ClickHouseColumnSerializationMode"/> for details).
+        /// When the mode is <see cref="ClickHouseColumnSerializationMode.Default"/> an implementation
+        /// of this method must call <see cref="CreateSkippingColumnReader(int)"/>.
+        /// </param>
+        /// <returns>The <see cref="IClickHouseColumnReaderBase"/> that should skip the specified number of rows.</returns>
+        IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            switch (serializationMode)
+            {
+                case ClickHouseColumnSerializationMode.Default:
+                    return CreateSkippingColumnReader(rowCount);
+
+                case ClickHouseColumnSerializationMode.Sparse:
+                case ClickHouseColumnSerializationMode.Custom:
+                    return new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode);
+
+                default:
+                    throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));
+            }
+        }
 
         /// <summary>
         /// Creates and returns a new instance of <see cref="IClickHouseColumnWriter"/> that can write specified rows to a binary stream.

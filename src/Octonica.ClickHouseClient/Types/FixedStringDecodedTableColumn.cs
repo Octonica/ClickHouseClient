@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class FixedStringDecodedTableColumn : FixedStringTableColumnBase<string>
     {
+        public override string DefaultValue => string.Empty;
+
         public FixedStringDecodedTableColumn(Memory<byte> buffer, int rowSize, Encoding encoding)
             : base(buffer, rowSize, encoding)
         {

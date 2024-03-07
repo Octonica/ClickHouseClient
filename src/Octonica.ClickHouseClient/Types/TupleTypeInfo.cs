@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,7 +60,23 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypes == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new TupleColumnReader(rowCount, _elementTypes);
+            return new TupleColumnReader(rowCount, ((IReadOnlyList<IClickHouseColumnTypeInfo>)_elementTypes).Map(t => (t, ClickHouseColumnSerializationMode.Default)));
+        }
+
+        IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateColumnReader(rowCount);
+
+            if (serializationMode == ClickHouseColumnSerializationMode.Custom)
+            {
+                if (_elementTypes == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+                return new TupleCustomSerializationColumnReader(this, rowCount);
+            }
+
+            throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -68,7 +84,23 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypes == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new TupleSkippingColumnReader(rowCount, _elementTypes);
+            return new TupleSkippingColumnReader(rowCount, ((IReadOnlyList<IClickHouseColumnTypeInfo>)_elementTypes).Map(t => (t, ClickHouseColumnSerializationMode.Default)));
+        }
+
+        IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (serializationMode == ClickHouseColumnSerializationMode.Default)
+                return CreateSkippingColumnReader(rowCount);
+
+            if (serializationMode == ClickHouseColumnSerializationMode.Custom)
+            {
+                if (_elementTypes == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+                return new TupleCustomSerializationSkippingColumnReader(this, rowCount);
+            }
+
+            throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -231,20 +263,74 @@ namespace Octonica.ClickHouseClient.Types
             return new TupleParameterWriter<TTuple>(typeInfo, itemWriters, isRest);
         }
 
+        private sealed class TupleCustomSerializationColumnReader : IClickHouseColumnReader
+        {
+            private readonly TupleTypeInfo _typeInfo;
+            private readonly int _rowCount;
+
+            private TupleColumnReader? _realReader;
+
+            public TupleCustomSerializationColumnReader(TupleTypeInfo typeInfo, int rowCount)
+            {
+                _typeInfo = typeInfo;
+                _rowCount = rowCount;
+            }
+
+            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
+            {
+                if (_realReader == null)
+                    return _typeInfo.CreateColumnReader(0).EndRead(settings);
+
+                return _realReader.EndRead(settings);
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                if (_realReader != null)
+                    return _realReader.ReadNext(sequence);
+
+                var elementTypes = _typeInfo._elementTypes;
+                Debug.Assert(elementTypes != null);
+
+                if (sequence.Length < elementTypes.Count + 1)
+                    return SequenceSize.Empty;
+
+                var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
+                if (mode != ClickHouseColumnSerializationMode.Default)
+                    throw new NotSupportedException($"The serialization mode {mode} is not supported by {_typeInfo.TypeName} type. Only the default mode is supported.");
+
+                var seq = sequence.Slice(1);
+                var typeModes = new List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)>(elementTypes.Count);
+                foreach (var type in elementTypes)
+                {
+                    mode = (ClickHouseColumnSerializationMode)seq.FirstSpan[0];
+                    if (mode != ClickHouseColumnSerializationMode.Default && mode != ClickHouseColumnSerializationMode.Sparse)
+                        throw new NotSupportedException($"Invalid serialization mode ({mode}) for an elment of tuple.");
+
+                    typeModes.Add((type, mode));
+                    seq = seq.Slice(1);
+                }
+
+                _realReader = new TupleColumnReader(_rowCount, typeModes);
+                var result = _realReader.ReadNext(seq);
+                return result.AddBytes(elementTypes.Count + 1);
+            }
+        }
+
         private sealed class TupleColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
-            private readonly List<IClickHouseColumnTypeInfo> _elementTypes;
+            private readonly IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> _elementTypes;
 
             private readonly List<IClickHouseColumnReader> _readers;
             private int _position;
 
-            public TupleColumnReader(int rowCount, List<IClickHouseColumnTypeInfo> elementTypes)
+            public TupleColumnReader(int rowCount, IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> elementTypes)
             {
                 _rowCount = rowCount;
                 _elementTypes = elementTypes;
 
-                _readers = new List<IClickHouseColumnReader>(_elementTypes.Count) {_elementTypes[0].CreateColumnReader(_rowCount)};
+                _readers = new List<IClickHouseColumnReader>(_elementTypes.Count) {_elementTypes[0].type.CreateColumnReader(_rowCount, _elementTypes[0].mode) };
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -269,7 +355,7 @@ namespace Octonica.ClickHouseClient.Types
                     }
 
                     _position = 0;
-                    currentReader = _elementTypes[_readers.Count].CreateColumnReader(_rowCount);
+                    currentReader = _elementTypes[_readers.Count].type.CreateColumnReader(_rowCount, _elementTypes[_readers.Count].mode);
                     _readers.Add(currentReader);
                     isLastColumn = _readers.Count == _elementTypes.Count;
                 }
@@ -285,7 +371,7 @@ namespace Octonica.ClickHouseClient.Types
                 var columns = new List<IClickHouseTableColumn>(_elementTypes.Count);
                 for (int i = 0; i < _elementTypes.Count; i++)
                 {
-                    var reader = i < _readers.Count ? _readers[i] : _elementTypes[i].CreateColumnReader(0);
+                    var reader = i < _readers.Count ? _readers[i] : _elementTypes[i].type.CreateColumnReader(0);
                     columns.Add(reader.EndRead(settings));
                 }
 
@@ -293,22 +379,68 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
+        private sealed class TupleCustomSerializationSkippingColumnReader : IClickHouseColumnReaderBase
+        {
+            private readonly TupleTypeInfo _typeInfo;
+            private readonly int _rowCount;
+
+            private TupleSkippingColumnReader? _realReader;
+
+            public TupleCustomSerializationSkippingColumnReader(TupleTypeInfo typeInfo, int rowCount)
+            {
+                _typeInfo = typeInfo;
+                _rowCount = rowCount;
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                if (_realReader != null)
+                    return _realReader.ReadNext(sequence);
+
+                var elementTypes = _typeInfo._elementTypes;
+                Debug.Assert(elementTypes != null);
+
+                if (sequence.Length < elementTypes.Count + 1)
+                    return SequenceSize.Empty;
+
+                var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
+                if (mode != ClickHouseColumnSerializationMode.Default)
+                    throw new NotSupportedException($"The serialization mode {mode} is not supported by {_typeInfo.TypeName} type. Only the default mode is supported.");
+
+                var seq = sequence.Slice(1);
+                var typeModes = new List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)>(elementTypes.Count);
+                foreach (var type in elementTypes)
+                {
+                    mode = (ClickHouseColumnSerializationMode)seq.FirstSpan[0];
+                    if (mode != ClickHouseColumnSerializationMode.Default && mode != ClickHouseColumnSerializationMode.Sparse)
+                        throw new NotSupportedException($"Invalid serialization mode ({mode}) for an elment of tuple.");
+
+                    typeModes.Add((type, mode));
+                    seq = seq.Slice(1);
+                }
+
+                _realReader = new TupleSkippingColumnReader(_rowCount, typeModes);
+                var result = _realReader.ReadNext(seq);
+                return result.AddBytes(elementTypes.Count + 1);
+            }
+        }
+
         private sealed class TupleSkippingColumnReader : IClickHouseColumnReaderBase
         {
             private readonly int _rowCount;
-            private readonly List<IClickHouseColumnTypeInfo> _elementTypes;
+            private readonly IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> _elementTypes;
 
             private IClickHouseColumnReaderBase _elementReader;
             private int _elementReaderIndex;
 
-            private int _position;            
+            private int _position;
 
-            public TupleSkippingColumnReader(int rowCount, List<IClickHouseColumnTypeInfo> elementTypes)
+            public TupleSkippingColumnReader(int rowCount, IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> elementTypes)
             {
                 _rowCount = rowCount;
                 _elementTypes = elementTypes;
 
-                _elementReader = _elementTypes[0].CreateSkippingColumnReader(_rowCount);
+                _elementReader = _elementTypes[0].type.CreateSkippingColumnReader(_rowCount, _elementTypes[0].mode);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -324,7 +456,8 @@ namespace Octonica.ClickHouseClient.Types
                         return result;
 
                     _position = 0;
-                    _elementReader = _elementTypes[++_elementReaderIndex].CreateSkippingColumnReader(_rowCount);                    
+                    ++_elementReaderIndex;
+                    _elementReader = _elementTypes[_elementReaderIndex].type.CreateSkippingColumnReader(_rowCount, _elementTypes[_elementReaderIndex].mode);
                 }
 
                 var lastColumnCount = _elementReader.ReadNext(sequence.Slice(result.Bytes));

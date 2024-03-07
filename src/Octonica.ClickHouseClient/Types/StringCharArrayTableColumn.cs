@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class StringCharArrayTableColumn : StringTableColumnBase<char[]>
     {
+        public override char[] DefaultValue => Array.Empty<char>();
+
         public StringCharArrayTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments) 
             : base(encoding, layouts, segments)
         {

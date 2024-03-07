@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 #endregion
 
+using System;
+
 namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class ObjectColumnAdapter : IClickHouseTableColumn<object>
@@ -22,6 +24,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn _tableColumn;
 
         public int RowCount => _tableColumn.RowCount;
+
+        public object DefaultValue => throw new NotSupportedException("The default value is not supported for the column of type Object.");
 
         public ObjectColumnAdapter(IClickHouseTableColumn tableColumn)
         {

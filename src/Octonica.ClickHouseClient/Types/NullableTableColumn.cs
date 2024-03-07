@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -200,6 +200,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _baseColumn.RowCount;
 
+        public TStruct? DefaultValue => null;
+
         public NullableStructTableColumn(BitArray? nullFlags, IClickHouseTableColumn<TStruct> baseColumn)
         {
             _nullFlags = nullFlags;
@@ -260,6 +262,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _baseColumn.RowCount;
 
+        public TStruct DefaultValue => _baseColumn.DefaultValue;
+
         public NullableStructTableColumnNotNullableAdapter(BitArray nullFlags, IClickHouseTableColumn<TStruct> baseColumn)
         {
             _nullFlags = nullFlags;
@@ -311,6 +315,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<TObj> _baseColumn;
 
         public int RowCount => _baseColumn.RowCount;
+
+        public TObj? DefaultValue => null;
 
         public NullableObjTableColumn(BitArray nullFlags, IClickHouseTableColumn<TObj> baseColumn)
         {

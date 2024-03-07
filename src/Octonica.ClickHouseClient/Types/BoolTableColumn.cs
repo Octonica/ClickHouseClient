@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2022 Octonica
+/* Copyright 2022, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _buffer;
 
         public int RowCount => _buffer.Length;
+
+        public bool DefaultValue => false;
 
         public BoolTableColumn(ReadOnlyMemory<byte> buffer)
         {

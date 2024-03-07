@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -205,6 +205,8 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn<T1> _column1;
 
+        public Tuple<T1> DefaultValue => Tuple.Create(_column1.DefaultValue);
+
         private TupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1)
             : base(rowCount)
         {
@@ -252,6 +254,8 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn<T1> _column1;
         private readonly IClickHouseTableColumn<T2> _column2;
+
+        public Tuple<T1, T2> DefaultValue => Tuple.Create(_column1.DefaultValue, _column2.DefaultValue);
 
         private TupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2)
             : base(rowCount)
@@ -307,6 +311,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T1> _column1;
         private readonly IClickHouseTableColumn<T2> _column2;
         private readonly IClickHouseTableColumn<T3> _column3;
+
+        public Tuple<T1, T2, T3> DefaultValue => Tuple.Create(_column1.DefaultValue, _column2.DefaultValue, _column3.DefaultValue);
 
         private TupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2, IClickHouseTableColumn<T3> column3)
             : base(rowCount)
@@ -369,6 +375,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T2> _column2;
         private readonly IClickHouseTableColumn<T3> _column3;
         private readonly IClickHouseTableColumn<T4> _column4;
+
+        public Tuple<T1, T2, T3, T4> DefaultValue => Tuple.Create(_column1.DefaultValue, _column2.DefaultValue, _column3.DefaultValue, _column4.DefaultValue);
 
         private TupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2, IClickHouseTableColumn<T3> column3, IClickHouseTableColumn<T4> column4)
             : base(rowCount)
@@ -438,6 +446,14 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T3> _column3;
         private readonly IClickHouseTableColumn<T4> _column4;
         private readonly IClickHouseTableColumn<T5> _column5;
+
+        public Tuple<T1, T2, T3, T4, T5> DefaultValue =>
+            Tuple.Create(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue);
 
         private TupleTableColumn(
             int rowCount,
@@ -520,6 +536,14 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T4> _column4;
         private readonly IClickHouseTableColumn<T5> _column5;
         private readonly IClickHouseTableColumn<T6> _column6;
+
+        public Tuple<T1, T2, T3, T4, T5, T6> DefaultValue => Tuple.Create(
+            _column1.DefaultValue,
+            _column2.DefaultValue,
+            _column3.DefaultValue,
+            _column4.DefaultValue,
+            _column5.DefaultValue,
+            _column6.DefaultValue);
 
         private TupleTableColumn(
             int rowCount,
@@ -616,6 +640,16 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T5> _column5;
         private readonly IClickHouseTableColumn<T6> _column6;
         private readonly IClickHouseTableColumn<T7> _column7;
+
+        public Tuple<T1, T2, T3, T4, T5, T6, T7> DefaultValue =>
+            Tuple.Create(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue,
+                _column6.DefaultValue,
+                _column7.DefaultValue);
 
         private TupleTableColumn(
             int rowCount,
@@ -723,6 +757,17 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T6> _column6;
         private readonly IClickHouseTableColumn<T7> _column7;
         private readonly TColumnRest _columnRest;
+
+        public Tuple<T1, T2, T3, T4, T5, T6, T7, TRest> DefaultValue =>
+            new Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue,
+                _column6.DefaultValue,
+                _column7.DefaultValue,
+                _columnRest.DefaultValue);
 
         private TupleTableColumn(
             int rowCount,
@@ -833,6 +878,8 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn<T1> _column1;
 
+        public ValueTuple<T1> DefaultValue => ValueTuple.Create(_column1.DefaultValue);
+
         private ValueTupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1)
             : base(rowCount)
         {
@@ -880,6 +927,8 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn<T1> _column1;
         private readonly IClickHouseTableColumn<T2> _column2;
+
+        public ValueTuple<T1, T2> DefaultValue => ValueTuple.Create(_column1.DefaultValue, _column2.DefaultValue);
 
         private ValueTupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2)
             : base(rowCount)
@@ -935,6 +984,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T1> _column1;
         private readonly IClickHouseTableColumn<T2> _column2;
         private readonly IClickHouseTableColumn<T3> _column3;
+
+        public ValueTuple<T1, T2, T3> DefaultValue => ValueTuple.Create(_column1.DefaultValue, _column2.DefaultValue, _column3.DefaultValue);
 
         private ValueTupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2, IClickHouseTableColumn<T3> column3)
             : base(rowCount)
@@ -997,6 +1048,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T2> _column2;
         private readonly IClickHouseTableColumn<T3> _column3;
         private readonly IClickHouseTableColumn<T4> _column4;
+
+        public ValueTuple<T1, T2, T3, T4> DefaultValue => ValueTuple.Create(_column1.DefaultValue, _column2.DefaultValue, _column3.DefaultValue, _column4.DefaultValue);
 
         private ValueTupleTableColumn(int rowCount, IClickHouseTableColumn<T1> column1, IClickHouseTableColumn<T2> column2, IClickHouseTableColumn<T3> column3, IClickHouseTableColumn<T4> column4)
             : base(rowCount)
@@ -1066,6 +1119,14 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T3> _column3;
         private readonly IClickHouseTableColumn<T4> _column4;
         private readonly IClickHouseTableColumn<T5> _column5;
+
+        public ValueTuple<T1, T2, T3, T4, T5> DefaultValue =>
+            ValueTuple.Create(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue);
 
         private ValueTupleTableColumn(
             int rowCount,
@@ -1148,6 +1209,15 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T4> _column4;
         private readonly IClickHouseTableColumn<T5> _column5;
         private readonly IClickHouseTableColumn<T6> _column6;
+
+        public ValueTuple<T1, T2, T3, T4, T5, T6> DefaultValue =>
+            ValueTuple.Create(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue,
+                _column6.DefaultValue);
 
         private ValueTupleTableColumn(
             int rowCount,
@@ -1244,6 +1314,16 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T5> _column5;
         private readonly IClickHouseTableColumn<T6> _column6;
         private readonly IClickHouseTableColumn<T7> _column7;
+
+        public ValueTuple<T1, T2, T3, T4, T5, T6, T7> DefaultValue =>
+            ValueTuple.Create(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue,
+                _column6.DefaultValue,
+                _column7.DefaultValue);
 
         private ValueTupleTableColumn(
             int rowCount,
@@ -1351,6 +1431,17 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<T6> _column6;
         private readonly IClickHouseTableColumn<T7> _column7;
         private readonly TColumnRest _columnRest;
+
+        public ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest> DefaultValue =>
+            new ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>(
+                _column1.DefaultValue,
+                _column2.DefaultValue,
+                _column3.DefaultValue,
+                _column4.DefaultValue,
+                _column5.DefaultValue,
+                _column6.DefaultValue,
+                _column7.DefaultValue,
+                _columnRest.DefaultValue);
 
         private ValueTupleTableColumn(
             int rowCount,

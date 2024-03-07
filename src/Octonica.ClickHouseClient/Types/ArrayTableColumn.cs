@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,10 +82,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _ranges.Count;
 
+        public TElement[] DefaultValue { get; }
+
         public ArrayTableColumn(IClickHouseTableColumn<TElement> column, List<(int offset, int length)> ranges)
         {
             _column = column ?? throw new ArgumentNullException(nameof(column));
             _ranges = ranges ?? throw new ArgumentNullException(nameof(ranges));
+            DefaultValue = Array.Empty<TElement>();
         }
 
         public bool IsNull(int index)

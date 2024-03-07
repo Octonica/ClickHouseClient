@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _buffer;
 
         public int RowCount => _buffer.Length / sizeof(uint);
+
+        public IPAddress DefaultValue => IPAddress.Any;
 
         public IpV4TableColumn(ReadOnlyMemory<byte> buffer)
         {
@@ -96,6 +98,8 @@ namespace Octonica.ClickHouseClient.Types
             private readonly Func<ReadOnlyMemory<byte>, TStruct> _getValue;
 
             public int RowCount => _buffer.Length / sizeof(uint);
+
+            public TStruct DefaultValue => default;
 
             public RawIpV4TableColumn(ReadOnlyMemory<byte> buffer, Func<ReadOnlyMemory<byte>, TStruct> getValue)
             {

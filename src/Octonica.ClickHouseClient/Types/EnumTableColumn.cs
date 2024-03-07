@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +29,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _internalColumn.RowCount;
 
+        public string DefaultValue { get; }
+
         public EnumTableColumn(IClickHouseTableColumn<TKey> internalColumn, IReadOnlyDictionary<TKey, string> valueMap)
         {
             _internalColumn = internalColumn;
             _valueMap = valueMap;
+
+            if (!_valueMap.TryGetValue(_internalColumn.DefaultValue, out var defaultStr))
+                defaultStr = string.Empty;
+
+            DefaultValue = defaultStr;
         }
 
         public bool IsNull(int index)
@@ -81,11 +88,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public int RowCount => _internalColumn.RowCount;
 
+        public TEnum DefaultValue { get; }
+
         public EnumTableColumn(IClickHouseTableColumn<TKey> internalColumn, IReadOnlyDictionary<TKey, TEnum> enumMap, IReadOnlyDictionary<TKey, string> stringMap)
         {
             _internalColumn = internalColumn;
             _enumMap = enumMap;
             _stringMap = stringMap;
+
+            if (!_enumMap.TryGetValue(_internalColumn.DefaultValue, out var defaultEnum))
+                defaultEnum = default;
+
+            Debug.Assert(defaultEnum != null);
+            DefaultValue = defaultEnum;
         }
 
         public bool IsNull(int index)

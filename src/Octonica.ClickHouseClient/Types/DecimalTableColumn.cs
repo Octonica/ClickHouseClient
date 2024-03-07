@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@ namespace Octonica.ClickHouseClient.Types
         private readonly byte _scale;
 
         public int RowCount => _buffer.Length / _elementSize;
+
+        public decimal DefaultValue => decimal.Zero;
 
         public DecimalTableColumn(ReadOnlyMemory<uint> buffer, int elementSize, byte scale)
         {
