@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2023 Octonica
+/* Copyright 2020-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -157,7 +157,7 @@ namespace Octonica.ClickHouseClient.Types
 
                 for (int i = 0; i < elementsCount; i++, _position++)
                 {
-                    var ipAddress = _rows[i];
+                    var ipAddress = _rows[_position];
                     if (ipAddress == null)
                     {
                         writeTo.Slice(i * AddressSize, AddressSize).Fill(0);

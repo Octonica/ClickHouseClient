@@ -20,6 +20,7 @@ using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -1536,6 +1537,37 @@ namespace Octonica.ClickHouseClient.Tests
                 }
 
                 Assert.Equal(33, expected);
+            }
+        }
+
+        [Fact]
+        public Task InsertIPv6Values()
+        {
+            return WithTemporaryTable("ipv6", "id Int32, ip IPv6", Test, csb => csb.BufferSize = 33);
+
+            static async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                var ids = Enumerable.Range(0, 255).ToList();
+                var ips = ids.Select(id => string.Format(CultureInfo.InvariantCulture, "192.168.0.{0}", id)).ToList();
+
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, ip) VALUES", ct))
+                    await writer.WriteTableAsync(new object[] { ids, ips }, ids.Count, ct);
+
+                var cmd = connection.CreateCommand($"SELECT id, ip FROM {tableName}");
+                await using (var reader = await cmd.ExecuteReaderAsync(ct))
+                {
+                    int counter = 0;
+                    while (await reader.ReadAsync(ct))
+                    {
+                        var id = reader.GetInt32(0);
+                        var ip = reader.GetFieldValue<IPAddress>(1);
+
+                        Assert.Equal(counter++, id);
+                        Assert.Equal(IPAddress.Parse("::ffff:" + ips[id]), ip);
+                    }
+
+                    Assert.Equal(255, counter);
+                }
             }
         }
 
