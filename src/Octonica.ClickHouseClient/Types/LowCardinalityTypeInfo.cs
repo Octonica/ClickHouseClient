@@ -18,6 +18,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -49,7 +50,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            var typeInfo = GetBaseTypeInfoForColumnReader();
+            var typeInfo = GetBaseTypeInfo();
             return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable);
         }
 
@@ -63,7 +64,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            var typeInfo = GetBaseTypeInfoForColumnReader();
+            var typeInfo = GetBaseTypeInfo();
             return new LowCardinalitySkippingColumnReader(rowCount, typeInfo.baseType);
         }
 
@@ -75,7 +76,7 @@ namespace Octonica.ClickHouseClient.Types
             throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
-        private (IClickHouseColumnTypeInfo baseType, bool isNullable) GetBaseTypeInfoForColumnReader()
+        private (IClickHouseColumnTypeInfo baseType, bool isNullable) GetBaseTypeInfo()
         {
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
@@ -94,11 +95,68 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
+            if (typeof(T) == typeof(string))
+                return CreateColumnWriter(columnName, (IReadOnlyList<string>)rows, StringComparer.Ordinal, string.Empty, columnSettings);
+
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             // Writing values as is. Let the database do de-duplication
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
+        }
+
+        private LowCardinalityColumnWriter CreateColumnWriter<T>(
+            string columnName,
+            IReadOnlyList<T> rows,
+            IEqualityComparer<T> equalityComparer,
+            T defaultValue,
+            ClickHouseColumnSettings? columnSettings)
+            where T : notnull
+        {
+            var (baseType, isNullable) = GetBaseTypeInfo();
+
+            var map = new Dictionary<T, int>(equalityComparer);
+            var indices = new List<int>(rows.Count);
+            var uniqueValues = new List<T>();
+            if (isNullable)
+                uniqueValues.Add(defaultValue);
+
+            // Reserve the first non-nullable position in the dictionary for the defualt value
+            map.Add(defaultValue, uniqueValues.Count);
+            uniqueValues.Add(defaultValue);
+
+            foreach (var row in rows)
+            {
+                if (isNullable && row is null)
+                {
+                    indices.Add(0);
+                    continue;
+                }
+
+                if (!map.TryGetValue(row, out var index))
+                {
+                    index = uniqueValues.Count;
+                    map.Add(row, index);
+                    uniqueValues.Add(row);
+                }
+
+                indices.Add(index);
+            }
+
+            if (indices.Count == 0)
+                uniqueValues.Clear();
+
+            KeySizeCode keySizeCode;
+            if (uniqueValues.Count > ushort.MaxValue)
+                keySizeCode = KeySizeCode.UInt32;
+            else if (uniqueValues.Count > byte.MaxValue)
+                keySizeCode = KeySizeCode.UInt16;
+            else
+                keySizeCode = KeySizeCode.UInt8;
+
+            Debug.Assert(_baseType != null);
+            var baseWriter = baseType.CreateColumnWriter(columnName, uniqueValues, columnSettings);
+            return new LowCardinalityColumnWriter(baseWriter, uniqueValues.Count, ComplexTypeName, indices, keySizeCode);
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
@@ -269,20 +327,20 @@ namespace Octonica.ClickHouseClient.Types
                 if (headerValues[0] != 1)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Unexpected dictionary version: {headerBytes[0]}.");
 
-                var keySizeCode = unchecked((byte)headerValues[1]);
+                var keySizeCode = (KeySizeCode)unchecked((byte)headerValues[1]);
                 int keySize;
                 switch (keySizeCode)
                 {
-                    case 0:
+                    case KeySizeCode.UInt8:
                         keySize = 1;
                         break;
-                    case 1:
+                    case KeySizeCode.UInt16:
                         keySize = 2;
                         break;
-                    case 3:
+                    case KeySizeCode.UInt32:
                         keySize = 4;
                         break;
-                    case 4:
+                    case KeySizeCode.UInt64:
                         throw new NotSupportedException("64-bit keys are not supported.");
                     default:
                         throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Unexpected size of a key: {keySizeCode}.");
@@ -380,6 +438,136 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
+        private sealed class LowCardinalityColumnWriter : IClickHouseColumnWriter
+        {
+            private readonly IClickHouseColumnWriter _baseWriter;
+            private readonly IReadOnlyList<int> _indices;
+            private readonly KeySizeCode _keySizeCode;
+
+            private bool _headerVersionWritten;
+            private bool _headerWritten;
+            private int _baseRowCount;
+            private int _position = -1;
+
+            public string ColumnName => _baseWriter.ColumnName;
+
+            public string ColumnType { get; }
+
+            public LowCardinalityColumnWriter(IClickHouseColumnWriter baseWriter, int baseRowCount, string columnType, IReadOnlyList<int> indices, KeySizeCode keySizeCode)
+            {
+                ColumnType = columnType;
+                _indices = indices;
+                _keySizeCode = keySizeCode;
+                _baseWriter = baseWriter;
+                _baseRowCount = baseRowCount;
+            }
+
+            int IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            {
+                if (_headerVersionWritten)
+                    return 0;
+
+                if (writeTo.Length < sizeof(ulong))
+                    return -1;
+
+                var writeToVersion = MemoryMarshal.Cast<byte, ulong>(writeTo.Slice(0, sizeof(ulong)));
+                writeToVersion[0] = 1; // Version
+
+                _headerVersionWritten = true;
+                return sizeof(ulong);
+            }
+
+            public SequenceSize WriteNext(Span<byte> writeTo)
+            {
+                var targetSpan = writeTo;
+                var result = new SequenceSize(0, 0);
+                if (!_headerWritten)
+                {
+                    Span<ulong> headerValues = stackalloc ulong[3];
+                    headerValues[0] = 1; // Version
+                    headerValues[1] = ((0x2 | 0x4) << 8) | (ulong)_keySizeCode; // The size of and element and flags
+                    headerValues[2] = (ulong)_baseRowCount;
+
+                    var headerBytes = MemoryMarshal.AsBytes(_headerVersionWritten ? headerValues.Slice(1) : headerValues);
+                    if (headerBytes.Length > targetSpan.Length)
+                        return result;
+
+                    headerBytes.CopyTo(targetSpan);
+                    targetSpan = targetSpan.Slice(headerBytes.Length);
+                    result = result.AddBytes(headerBytes.Length);
+                    _headerWritten = true;
+                }
+
+                if (_baseRowCount > 0)
+                {
+                    var baseResult = _baseWriter.WriteNext(targetSpan);
+
+                    _baseRowCount -= baseResult.Elements;
+                    result = result.AddBytes(baseResult.Bytes);
+                    if (_baseRowCount > 0)
+                        return result;
+
+                    if (_baseRowCount != 0)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Row count check failed: written {-_baseRowCount} more rows then expected.");
+
+                    targetSpan = targetSpan.Slice(baseResult.Bytes);
+                }
+
+                if (_position < 0)
+                {
+                    ulong length = (ulong)_indices.Count;
+                    var lengthSpan = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref length, 1));
+                    if (lengthSpan.Length > targetSpan.Length)
+                        return result;
+
+                    lengthSpan.CopyTo(targetSpan);
+                    result = result.AddBytes(lengthSpan.Length);
+                    targetSpan = targetSpan.Slice(lengthSpan.Length);
+
+                    _position = 0;
+                }
+
+                int size = _indices.Count - _position;
+                int byteSize;
+                switch (_keySizeCode)
+                {
+                    case KeySizeCode.UInt8:
+                        size = Math.Min(targetSpan.Length, size);
+                        byteSize = size;
+                        for (int i = 0; i < size; _position++, i++)
+                            targetSpan[i] = (byte)_indices[_position];
+
+                        break;
+
+                    case KeySizeCode.UInt16:
+                        size = Math.Min(targetSpan.Length / 2, size);
+                        byteSize = size * 2;
+                        var ushortSpan = MemoryMarshal.Cast<byte, ushort>(targetSpan.Slice(0, byteSize));
+
+                        for (int i = 0; i < size; _position++, i++)
+                            ushortSpan[i] = (ushort)_indices[_position];
+
+                        break;
+
+                    case KeySizeCode.UInt32:
+                        size = Math.Min(targetSpan.Length / 4, size);
+                        byteSize = size * 4;
+                        var intSpan = MemoryMarshal.Cast<byte, int>(targetSpan.Slice(0, byteSize));
+
+                        for (int i = 0; i < size; _position++, i++)
+                            intSpan[i] = _indices[_position];
+
+                        break;
+
+                    default:
+                        throw new InvalidOperationException($"Internal error. Unexpected key size code: {_keySizeCode}.");
+                }
+
+                result += new SequenceSize(byteSize, size);
+                return result;
+            }
+        }
+
         private sealed class LowCardinalityTableColumnDispatcher : IClickHouseTableColumnDispatcher<IClickHouseTableColumn>
         {
             private readonly ReadOnlyMemory<byte> _keys;
@@ -397,6 +585,14 @@ namespace Octonica.ClickHouseClient.Types
             {
                 return new LowCardinalityTableColumn<T>(_keys, _keySize, column, _isNullable);
             }
+        }
+
+        private enum KeySizeCode
+        {
+            UInt8 = 0,
+            UInt16 = 1,
+            UInt32 = 2,
+            UInt64 = 3
         }
     }
 }

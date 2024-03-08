@@ -556,6 +556,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public string ColumnType { get; }
 
+            private bool _prefixWritten;
             private int _headerPosition;
             private int _position;
             private int _elementPosition;
@@ -568,10 +569,36 @@ namespace Octonica.ClickHouseClient.Types
                 ColumnType = columnType;
             }
 
+            int IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            {
+                if (_prefixWritten)
+                    return 0;
+
+                var result = _elementColumnWriter.WritePrefix(writeTo);
+                if (result < 0)
+                    return result;
+
+                _prefixWritten = true;
+                return result;
+            }
+
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
                 int bytesCount = 0;
                 var span = writeTo;
+
+                if (!_prefixWritten)
+                {
+                    var prefixSize = _elementColumnWriter.WritePrefix(writeTo);
+                    if (prefixSize < 0)
+                        return new SequenceSize(bytesCount, 0);
+
+                    bytesCount += prefixSize;
+                    span = span.Slice(prefixSize);
+
+                    _prefixWritten = true;
+                }
+
                 for (; _headerPosition < _rows.ListLengths.Count; _headerPosition++)
                 {
                     if (!BitConverter.TryWriteBytes(span, (ulong) _rows.ListLengths[_headerPosition]))

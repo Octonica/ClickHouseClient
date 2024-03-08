@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,5 +40,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <param name="writeTo">The buffer to write data to.</param>
         /// <returns>The length of written data or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.</returns>
         SequenceSize WriteNext(Span<byte> writeTo);
+
+        /// <summary>
+        /// Writes prefix specific to the type.
+        /// </summary>
+        /// <param name="writeTo">The buffer to write data to.</param>
+        /// <returns>The number of written bytes or -1 if the provided buffer is too small.</returns>
+        int WritePrefix(Span<byte> writeTo) => 0;
     }
 }
