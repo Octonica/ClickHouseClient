@@ -96,7 +96,12 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(string))
+            {
+                // In most cases values of type T can be inserted into a column of type LowCardinality(T).
+                // However, a column of type Map(LowCardinality(String), TValue) doesn't accept keys of type String.
+                // https://github.com/Octonica/ClickHouseClient/issues/86
                 return CreateColumnWriter(columnName, (IReadOnlyList<string>)rows, StringComparer.Ordinal, string.Empty, columnSettings);
+            }
 
             if (_baseType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
@@ -226,6 +231,11 @@ namespace Octonica.ClickHouseClient.Types
                 _isNullable = isNullable;
             }
 
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                return ReadPrefix(sequence);
+            }
+
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (_position >= _rowCount)
@@ -308,14 +318,13 @@ namespace Octonica.ClickHouseClient.Types
                 return result;
             }
 
-            public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
+            public static SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence)
             {
-                Span<ulong> headerValues = stackalloc ulong[3];
-                var headerBytes = MemoryMarshal.AsBytes(headerValues);
-                if (sequence.Length < headerBytes.Length)
-                    return null;
+                if (sequence.Length < sizeof(ulong))
+                    return SequenceSize.Empty;
 
-                sequence.Slice(0, headerBytes.Length).CopyTo(headerBytes);
+                ulong version = 0;
+                sequence.Slice(0, sizeof(ulong)).CopyTo(MemoryMarshal.Cast<ulong, byte>(MemoryMarshal.CreateSpan(ref version, 1)));
 
                 // https://github.com/ClickHouse/ClickHouse/blob/master/src/DataTypes/DataTypeLowCardinality.cpp
                 // Dictionary is written as number N and N keys after them.
@@ -324,10 +333,22 @@ namespace Octonica.ClickHouseClient.Types
                 //
                 // SharedDictionariesWithAdditionalKeys = 1,
 
-                if (headerValues[0] != 1)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Unexpected dictionary version: {headerBytes[0]}.");
+                if (version != 1)
+                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Unexpected dictionary version received: {version}.");
 
-                var keySizeCode = (KeySizeCode)unchecked((byte)headerValues[1]);
+                return new SequenceSize(sizeof(ulong), 1);
+            }
+
+            public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
+            {
+                Span<ulong> headerValues = stackalloc ulong[2];
+                var headerBytes = MemoryMarshal.AsBytes(headerValues);
+                if (sequence.Length < headerBytes.Length)
+                    return null;
+
+                sequence.Slice(0, headerBytes.Length).CopyTo(headerBytes);
+
+                var keySizeCode = (KeySizeCode)unchecked((byte)headerValues[0]);
                 int keySize;
                 switch (keySizeCode)
                 {
@@ -353,11 +374,11 @@ namespace Octonica.ClickHouseClient.Types
                 // 0x2 Need to read additional keys. Additional keys are stored before indexes as value N and N keys after them.
                 // 0x4 Need to update dictionary. It means that previous granule has different dictionary.
 
-                var flags = headerValues[1] >> 8;
+                var flags = headerValues[0] >> 8;
                 if (flags != (0x2 | 0x4))
                     throw new NotSupportedException("Received combination of flags is not supported.");
 
-                var keyCount = (int) headerValues[2];
+                var keyCount = checked((int)headerValues[1]);
                 return (keySize, keyCount, headerBytes.Length);
             }
         }
@@ -379,6 +400,11 @@ namespace Octonica.ClickHouseClient.Types
             {
                 _rowCount = rowCount;
                 _baseType = baseType;
+            }
+
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                return LowCardinalityColumnReader.ReadPrefix(sequence);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -444,7 +470,6 @@ namespace Octonica.ClickHouseClient.Types
             private readonly IReadOnlyList<int> _indices;
             private readonly KeySizeCode _keySizeCode;
 
-            private bool _headerVersionWritten;
             private bool _headerWritten;
             private int _baseRowCount;
             private int _position = -1;
@@ -462,19 +487,15 @@ namespace Octonica.ClickHouseClient.Types
                 _baseRowCount = baseRowCount;
             }
 
-            int IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
-                if (_headerVersionWritten)
-                    return 0;
-
                 if (writeTo.Length < sizeof(ulong))
-                    return -1;
+                    return SequenceSize.Empty;
 
                 var writeToVersion = MemoryMarshal.Cast<byte, ulong>(writeTo.Slice(0, sizeof(ulong)));
                 writeToVersion[0] = 1; // Version
 
-                _headerVersionWritten = true;
-                return sizeof(ulong);
+                return new SequenceSize(sizeof(ulong), 1);
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)
@@ -483,12 +504,11 @@ namespace Octonica.ClickHouseClient.Types
                 var result = new SequenceSize(0, 0);
                 if (!_headerWritten)
                 {
-                    Span<ulong> headerValues = stackalloc ulong[3];
-                    headerValues[0] = 1; // Version
-                    headerValues[1] = ((0x2 | 0x4) << 8) | (ulong)_keySizeCode; // The size of and element and flags
-                    headerValues[2] = (ulong)_baseRowCount;
+                    Span<ulong> headerValues = stackalloc ulong[2];
+                    headerValues[0] = ((0x2 | 0x4) << 8) | (ulong)_keySizeCode; // The size of and element and flags
+                    headerValues[1] = (ulong)_baseRowCount;
 
-                    var headerBytes = MemoryMarshal.AsBytes(_headerVersionWritten ? headerValues.Slice(1) : headerValues);
+                    var headerBytes = MemoryMarshal.AsBytes(headerValues);
                     if (headerBytes.Length > targetSpan.Length)
                         return result;
 

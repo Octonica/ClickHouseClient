@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ namespace Octonica.ClickHouseClient
                     throw;
                 }
 
-                if (size.Bytes > 0)
+                if (size.Bytes > 0 || size.Elements > 0)
                 {
                     Advance(size.Bytes);
                     return size;
@@ -189,7 +189,7 @@ namespace Octonica.ClickHouseClient
 
                 bufferSize *= 2;
 
-            } while (size.Bytes == 0);
+            } while (size.Bytes == 0 && size.Elements == 0);
 
             Advance(size.Bytes);
             return size;

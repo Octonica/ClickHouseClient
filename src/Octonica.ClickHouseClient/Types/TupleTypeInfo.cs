@@ -60,7 +60,8 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypes == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new TupleColumnReader(rowCount, ((IReadOnlyList<IClickHouseColumnTypeInfo>)_elementTypes).Map(t => (t, ClickHouseColumnSerializationMode.Default)));
+            var elementReaders = _elementTypes.Select(t => t.CreateColumnReader(rowCount)).ToList();
+            return new TupleColumnReader(rowCount, elementReaders);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
@@ -84,7 +85,8 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypes == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new TupleSkippingColumnReader(rowCount, ((IReadOnlyList<IClickHouseColumnTypeInfo>)_elementTypes).Map(t => (t, ClickHouseColumnSerializationMode.Default)));
+            var elementReaders = _elementTypes.Select(t => t.CreateSkippingColumnReader(rowCount)).ToList();
+            return new TupleSkippingColumnReader(rowCount, elementReaders);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
@@ -276,18 +278,10 @@ namespace Octonica.ClickHouseClient.Types
                 _rowCount = rowCount;
             }
 
-            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
-            {
-                if (_realReader == null)
-                    return _typeInfo.CreateColumnReader(0).EndRead(settings);
-
-                return _realReader.EndRead(settings);
-            }
-
-            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
                 if (_realReader != null)
-                    return _realReader.ReadNext(sequence);
+                    return ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(sequence);
 
                 var elementTypes = _typeInfo._elementTypes;
                 Debug.Assert(elementTypes != null);
@@ -311,35 +305,56 @@ namespace Octonica.ClickHouseClient.Types
                     seq = seq.Slice(1);
                 }
 
-                _realReader = new TupleColumnReader(_rowCount, typeModes);
-                var result = _realReader.ReadNext(seq);
+                var readers = typeModes.Select(tm => tm.type.CreateColumnReader(_rowCount, tm.mode)).ToList();
+                _realReader = new TupleColumnReader(_rowCount, readers);
+                var result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
                 return result.AddBytes(elementTypes.Count + 1);
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                if (_realReader == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.");
+
+                return _realReader.ReadNext(sequence);
+            }
+
+            public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
+            {
+                if (_realReader == null)
+                    return _typeInfo.CreateColumnReader(0).EndRead(settings);
+
+                return _realReader.EndRead(settings);
             }
         }
 
         private sealed class TupleColumnReader : IClickHouseColumnReader
         {
             private readonly int _rowCount;
-            private readonly IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> _elementTypes;
+            private readonly IReadOnlyList<IClickHouseColumnReader> _readers;
 
-            private readonly List<IClickHouseColumnReader> _readers;
+            private int _prefixPosition;
+            private int _readerPosition;
             private int _position;
 
-            public TupleColumnReader(int rowCount, IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> elementTypes)
+            public TupleColumnReader(int rowCount, IReadOnlyList<IClickHouseColumnReader> readers)
             {
                 _rowCount = rowCount;
-                _elementTypes = elementTypes;
+                _readers = readers;
+            }
 
-                _readers = new List<IClickHouseColumnReader>(_elementTypes.Count) {_elementTypes[0].type.CreateColumnReader(_rowCount, _elementTypes[0].mode) };
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                return ReadPrefix(sequence, _readers, ref _prefixPosition);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var isLastColumn = _readers.Count == _elementTypes.Count;
+                var isLastColumn = _readerPosition == _readers.Count - 1;
                 if (!isLastColumn && _position >= _rowCount)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
 
-                var currentReader = _readers[^1];
+                var currentReader = _readers[_readerPosition];
                 var result = new SequenceSize(0, 0);
                 while (!isLastColumn)
                 {
@@ -355,9 +370,8 @@ namespace Octonica.ClickHouseClient.Types
                     }
 
                     _position = 0;
-                    currentReader = _elementTypes[_readers.Count].type.CreateColumnReader(_rowCount, _elementTypes[_readers.Count].mode);
-                    _readers.Add(currentReader);
-                    isLastColumn = _readers.Count == _elementTypes.Count;
+                    currentReader = _readers[++_readerPosition];
+                    isLastColumn = _readerPosition == _readers.Count - 1;
                 }
 
                 var lastColumnSize = currentReader.ReadNext(sequence.Slice(result.Bytes));
@@ -368,14 +382,36 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var columns = new List<IClickHouseTableColumn>(_elementTypes.Count);
-                for (int i = 0; i < _elementTypes.Count; i++)
+                var columns = new List<IClickHouseTableColumn>(_readers.Count);
+                foreach(var reader in _readers)
                 {
-                    var reader = i < _readers.Count ? _readers[i] : _elementTypes[i].type.CreateColumnReader(0);
-                    columns.Add(reader.EndRead(settings));
+                    var column = reader.EndRead(settings);
+                    columns.Add(column);
                 }
 
                 return TupleTableColumnBase.MakeTupleColumn(columns[^1].RowCount, columns);
+            }
+
+            public static SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence, IReadOnlyList<IClickHouseColumnReaderBase> elementReaders, ref int prefixPosition)
+            {
+                var totalBytes = 0;
+                var prefixReader = elementReaders[prefixPosition];
+                while (prefixPosition < elementReaders.Count - 1)
+                {
+                    var prefixSize = prefixReader.ReadPrefix(sequence);
+                    totalBytes += prefixSize.Bytes;
+
+                    if (prefixSize.Elements == 0)
+                        return new SequenceSize(totalBytes, 0);
+
+                    if (prefixSize.Elements != 1)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {prefixSize.Elements}.");
+
+                    prefixReader = elementReaders[++prefixPosition];
+                }
+
+                var lastPrefixSize = prefixReader.ReadPrefix(sequence);
+                return lastPrefixSize.AddBytes(totalBytes);
             }
         }
 
@@ -392,10 +428,10 @@ namespace Octonica.ClickHouseClient.Types
                 _rowCount = rowCount;
             }
 
-            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
                 if (_realReader != null)
-                    return _realReader.ReadNext(sequence);
+                    return ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(sequence);
 
                 var elementTypes = _typeInfo._elementTypes;
                 Debug.Assert(elementTypes != null);
@@ -419,36 +455,49 @@ namespace Octonica.ClickHouseClient.Types
                     seq = seq.Slice(1);
                 }
 
-                _realReader = new TupleSkippingColumnReader(_rowCount, typeModes);
-                var result = _realReader.ReadNext(seq);
+                var readers = typeModes.Select(tm => tm.type.CreateSkippingColumnReader(_rowCount, tm.mode)).ToList();
+                _realReader = new TupleSkippingColumnReader(_rowCount, readers);
+                var result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
                 return result.AddBytes(elementTypes.Count + 1);
+            }
+
+            public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
+            {
+                if (_realReader == null)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.");
+
+                return _realReader.ReadNext(sequence);
             }
         }
 
         private sealed class TupleSkippingColumnReader : IClickHouseColumnReaderBase
         {
             private readonly int _rowCount;
-            private readonly IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> _elementTypes;
+            private readonly IReadOnlyList<IClickHouseColumnReaderBase> _elementReaders;
 
-            private IClickHouseColumnReaderBase _elementReader;
+            private int _prefixPosition;
             private int _elementReaderIndex;
 
             private int _position;
 
-            public TupleSkippingColumnReader(int rowCount, IReadOnlyList<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> elementTypes)
+            public TupleSkippingColumnReader(int rowCount, IReadOnlyList<IClickHouseColumnReaderBase> elementReaders)
             {
                 _rowCount = rowCount;
-                _elementTypes = elementTypes;
+                _elementReaders = elementReaders;
+            }
 
-                _elementReader = _elementTypes[0].type.CreateSkippingColumnReader(_rowCount, _elementTypes[0].mode);
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                return TupleColumnReader.ReadPrefix(sequence, _elementReaders, ref _prefixPosition);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 var result = new SequenceSize(0, 0);
-                while (_elementReaderIndex < _elementTypes.Count - 1)
+                var elementReader = _elementReaders[_elementReaderIndex];
+                while (_elementReaderIndex < _elementReaders.Count - 1)
                 {
-                    var actualCount = _elementReader.ReadNext(sequence.Slice(result.Bytes));
+                    var actualCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
 
                     result = result.AddBytes(actualCount.Bytes);
                     _position += actualCount.Elements;
@@ -456,11 +505,10 @@ namespace Octonica.ClickHouseClient.Types
                         return result;
 
                     _position = 0;
-                    ++_elementReaderIndex;
-                    _elementReader = _elementTypes[_elementReaderIndex].type.CreateSkippingColumnReader(_rowCount, _elementTypes[_elementReaderIndex].mode);
+                    elementReader = _elementReaders[++_elementReaderIndex];
                 }
 
-                var lastColumnCount = _elementReader.ReadNext(sequence.Slice(result.Bytes));
+                var lastColumnCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
                 _position += lastColumnCount.Elements;
 
                 return lastColumnCount.AddBytes(result.Bytes);
@@ -476,6 +524,8 @@ namespace Octonica.ClickHouseClient.Types
 
             public string ColumnType { get; }
 
+            private int _prefixPosition;
+
             private int _currentWriterIdx;
             private int _currentWriterPosition;
 
@@ -488,6 +538,25 @@ namespace Octonica.ClickHouseClient.Types
                 var typeNameBuilder = _columns.Aggregate(new StringBuilder("Tuple("), (b, c) => b.Append(c.ColumnType).Append(','));
                 typeNameBuilder[^1] = ')';
                 ColumnType = typeNameBuilder.ToString();
+            }
+
+            SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            {
+                var totalBytes = 0;
+                for (; _prefixPosition < _columns.Count; _prefixPosition++)
+                {
+                    var slice = writeTo.Slice(totalBytes);
+                    var size = _columns[_prefixPosition].WritePrefix(slice);
+
+                    totalBytes += size.Bytes;
+                    if (size.Elements == 0)
+                        break;
+                }
+
+                if (_prefixPosition == _columns.Count)
+                    return new SequenceSize(totalBytes, 1);
+
+                return new SequenceSize(totalBytes, 0);
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)

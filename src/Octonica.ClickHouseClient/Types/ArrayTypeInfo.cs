@@ -33,9 +33,6 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class ArrayTypeInfo : IClickHouseColumnTypeInfo
     {
         private readonly IClickHouseColumnTypeInfo? _elementTypeInfo;
-        
-        // Part of the header of the element's column may be located before the beginning of the array
-        private readonly int _exposedElementHeaderSize;
 
         public string ComplexTypeName { get; }
 
@@ -51,7 +48,6 @@ namespace Octonica.ClickHouseClient.Types
         private ArrayTypeInfo(IClickHouseColumnTypeInfo elementTypeInfo)
         {
             _elementTypeInfo = elementTypeInfo ?? throw new ArgumentNullException(nameof(elementTypeInfo));
-            _exposedElementHeaderSize = GetExposedElementHeaderSize(elementTypeInfo);
             ComplexTypeName = $"{TypeName}({_elementTypeInfo.ComplexTypeName})";
         }
 
@@ -60,7 +56,7 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new ArrayColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
+            return new ArrayColumnReader(rowCount, _elementTypeInfo);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
@@ -76,7 +72,7 @@ namespace Octonica.ClickHouseClient.Types
             if (_elementTypeInfo == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
-            return new ArraySkippingColumnReader(rowCount, _elementTypeInfo, _exposedElementHeaderSize);
+            return new ArraySkippingColumnReader(rowCount, _elementTypeInfo);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
@@ -202,18 +198,6 @@ namespace Octonica.ClickHouseClient.Types
             return _elementTypeInfo;
         }
 
-        private static int GetExposedElementHeaderSize(IClickHouseTypeInfo elementType)
-        {
-            var type = elementType;
-            while (type.TypeName == "Array")
-                type = type.GetGenericArgument(0);
-
-            if (type.TypeName == "LowCardinality")
-                return sizeof(ulong);
-
-            return 0;
-        }
-
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_elementTypeInfo == null)
@@ -296,10 +280,9 @@ namespace Octonica.ClickHouseClient.Types
             private readonly int _rowCount;
 
             // A part of the inner column's header exposed outside of the beginning of the current column
-            private readonly byte[]? _exposedHeader;
+            private byte[]? _prefix;
 
             private int _elementPosition;
-            private int _exposedHeaderPosition;
 
             protected IClickHouseColumnTypeInfo ElementType { get; }
 
@@ -309,15 +292,38 @@ namespace Octonica.ClickHouseClient.Types
 
             protected int Position { get; private set; }
 
-            public ArrayColumnReaderBase(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
+            public ArrayColumnReaderBase(int rowCount, IClickHouseColumnTypeInfo elementType)
             {
                 _rowCount = rowCount;
                 ElementType = elementType;
-
-                if (exposedElementHeaderSize > 0)
-                    _exposedHeader = new byte[exposedElementHeaderSize];
-
                 Ranges = new List<(int offset, int length)>(_rowCount);
+            }
+
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                // We can't read the prefix right now, so we keep it in the buffer until we get the real reader
+                var skippingReader = ElementType.CreateSkippingColumnReader(0);
+                var updSeq = sequence;
+                if (_prefix != null)
+                {
+                    var segment = new SimpleReadOnlySequenceSegment<byte>(_prefix, updSeq);
+                    updSeq = new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length);
+                }
+
+                var result = skippingReader.ReadPrefix(updSeq);
+                var bufferSize = result.Bytes;
+                if (_prefix != null)
+                    result = result.AddBytes(-_prefix.Length);
+
+                if (result.Bytes < 0)
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Byte offset calculation error. The length of the prefix is negative.");
+
+                if (result.Bytes == 0)
+                    return result;
+
+                Array.Resize(ref _prefix, bufferSize);
+                updSeq.Slice(0, bufferSize).CopyTo(_prefix);
+                return result;
             }
 
             SequenceSize IClickHouseColumnReaderBase.ReadNext(ReadOnlySequence<byte> sequence)
@@ -327,17 +333,8 @@ namespace Octonica.ClickHouseClient.Types
 
                 int bytesCount = 0;
                 var slice = sequence;
-
                 if (ElementColumnReader == null)
                 {
-                    if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
-                    {
-                        bytesCount = (int)Math.Min(slice.Length, _exposedHeader.Length - _exposedHeaderPosition);
-                        slice.Slice(0, bytesCount).CopyTo(((Span<byte>)_exposedHeader).Slice(_exposedHeaderPosition, bytesCount));
-                        _exposedHeaderPosition += bytesCount;
-                        slice = slice.Slice(bytesCount);
-                    }
-
                     var totalLength = Ranges.Aggregate((ulong)0, (acc, r) => acc + (ulong)r.length);
 
                     Span<byte> sizeSpan = stackalloc byte[sizeof(ulong)];
@@ -368,7 +365,6 @@ namespace Octonica.ClickHouseClient.Types
                     }
 
                     ElementColumnReader = CreateElementColumnReader(checked((int)totalLength));
-                    _exposedHeaderPosition = 0;
 
                     if (totalLength == 0)
                     {
@@ -379,21 +375,22 @@ namespace Octonica.ClickHouseClient.Types
                     }
                 }
 
-                SequenceSize elementsSize;
-                if (_exposedHeader != null && _exposedHeaderPosition < _exposedHeader.Length)
+                if (_prefix!=null)
                 {
-                    var segment = new SimpleReadOnlySequenceSegment<byte>(((ReadOnlyMemory<byte>)_exposedHeader).Slice(_exposedHeaderPosition), slice);
-                    elementsSize = ElementColumnReader.ReadNext(new ReadOnlySequence<byte>(segment, 0, segment.LastSegment, segment.LastSegment.Memory.Length));
+                    var prefixSize = ElementColumnReader.ReadPrefix(new ReadOnlySequence<byte>(_prefix));
+                    if (prefixSize.Bytes == 0 && prefixSize.Elements == 0)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Failed to read the column prefix.");
 
-                    var exposedHeaderByteCount = Math.Min(elementsSize.Bytes, _exposedHeader.Length - _exposedHeaderPosition);
-                    _exposedHeaderPosition += exposedHeaderByteCount;
-                    elementsSize = elementsSize.AddBytes(-exposedHeaderByteCount);
-                }
-                else
-                {
-                    elementsSize = ElementColumnReader.ReadNext(slice);
+                    if (prefixSize.Bytes != _prefix.Length)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The column prefix' size is {_prefix.Length}, but the number of consumed bytes is {prefixSize.Bytes}.");
+
+                    if (prefixSize.Elements != 1)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {prefixSize.Elements}.");
+
+                    _prefix = null;
                 }
 
+                var elementsSize = ElementColumnReader.ReadNext(slice);
                 _elementPosition += elementsSize.Elements;
                 var elementsCount = 0;
                 while (Position < _rowCount)
@@ -414,8 +411,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ArrayColumnReader : ArrayColumnReaderBase<IClickHouseColumnReader>, IClickHouseColumnReader
         {
-            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
-                : base(rowCount, elementType, exposedElementHeaderSize)
+            public ArrayColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
+                : base(rowCount, elementType)
             {
             }
 
@@ -439,8 +436,8 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ArraySkippingColumnReader : ArrayColumnReaderBase<IClickHouseColumnReaderBase>
         {
-            public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType, int exposedElementHeaderSize)
-                : base(rowCount, elementType, exposedElementHeaderSize)
+            public ArraySkippingColumnReader(int rowCount, IClickHouseColumnTypeInfo elementType)
+                : base(rowCount, elementType)
             {
             }
 
@@ -556,7 +553,6 @@ namespace Octonica.ClickHouseClient.Types
 
             public string ColumnType { get; }
 
-            private bool _prefixWritten;
             private int _headerPosition;
             private int _position;
             private int _elementPosition;
@@ -569,36 +565,15 @@ namespace Octonica.ClickHouseClient.Types
                 ColumnType = columnType;
             }
 
-            int IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
-                if (_prefixWritten)
-                    return 0;
-
-                var result = _elementColumnWriter.WritePrefix(writeTo);
-                if (result < 0)
-                    return result;
-
-                _prefixWritten = true;
-                return result;
+                return _elementColumnWriter.WritePrefix(writeTo);
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
                 int bytesCount = 0;
                 var span = writeTo;
-
-                if (!_prefixWritten)
-                {
-                    var prefixSize = _elementColumnWriter.WritePrefix(writeTo);
-                    if (prefixSize < 0)
-                        return new SequenceSize(bytesCount, 0);
-
-                    bytesCount += prefixSize;
-                    span = span.Slice(prefixSize);
-
-                    _prefixWritten = true;
-                }
-
                 for (; _headerPosition < _rows.ListLengths.Count; _headerPosition++)
                 {
                     if (!BitConverter.TryWriteBytes(span, (ulong) _rows.ListLengths[_headerPosition]))

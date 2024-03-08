@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1458,6 +1458,44 @@ namespace Octonica.ClickHouseClient.Tests
                 }
 
                 Assert.Equal(33, expected);
+            }
+        }
+
+        [Fact]
+        public Task InsertMapLowCardinalityValues()
+        {
+            return WithTemporaryTable("map_lc", "id Int32, data Map(LowCardinality(String), Int32)", Test);
+
+            static async Task Test(ClickHouseConnection connection, string tableName, CancellationToken ct)
+            {
+                var ids = Enumerable.Range(0, 1000).ToList();
+                var values = ids.Select(
+                    id =>
+                        id % 2 == 0
+                        ? new[] { KeyValuePair.Create("key1", id * 3), KeyValuePair.Create("key2", id * 3 + 1) }
+                        : new[] { KeyValuePair.Create("key2", id * 3 - 1) })
+                    .ToList();
+
+                await using (var writer = await connection.CreateColumnWriterAsync($"INSERT INTO {tableName}(id, data) VALUES", ct))
+                    await writer.WriteTableAsync(new object[] { ids, values }, ids.Count, ct);
+
+                var cmd = connection.CreateCommand($"SELECT id, data FROM {tableName} ORDER BY id");
+                await using (var reader = await cmd.ExecuteReaderAsync(ct))
+                {
+                    int counter = 0;
+                    while (await reader.ReadAsync(ct))
+                    {
+                        var id = reader.GetInt32(0);
+                        var data = reader.GetFieldValue<KeyValuePair<string, int>[]>(1);
+
+                        Assert.Equal(counter++, id);
+                        Assert.Equal(values[id], data);
+                    }
+                    Assert.Equal(1000, counter);
+                }
+
+                // Skipping values
+                await cmd.ExecuteNonQueryAsync(ct);
             }
         }
 

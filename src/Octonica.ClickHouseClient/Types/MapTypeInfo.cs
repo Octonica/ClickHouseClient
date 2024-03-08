@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021, 2023 Octonica
+/* Copyright 2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,12 +62,29 @@ namespace Octonica.ClickHouseClient.Types
             return new MapReader(_underlyingType.CreateColumnReader(rowCount), fieldType);
         }
 
+        IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (_underlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            var fieldType = GetFieldType();
+            return new MapReader(_underlyingType.CreateColumnReader(rowCount, serializationMode), fieldType);
+        }
+
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             if (_underlyingType == null)
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
 
             return _underlyingType.CreateSkippingColumnReader(rowCount);
+        }
+
+        IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
+        {
+            if (_underlyingType == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+
+            return _underlyingType.CreateSkippingColumnReader(rowCount, serializationMode);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -207,6 +224,11 @@ namespace Octonica.ClickHouseClient.Types
                 _fieldType = fieldType;
             }            
 
+            SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
+            {
+                return _underlyingReader.ReadPrefix(sequence);
+            }
+
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 return _underlyingReader.ReadNext(sequence);
@@ -256,6 +278,11 @@ namespace Octonica.ClickHouseClient.Types
 
                 ColumnType = "Map" + typeName[typeNameStart.Length..^typeNameEnd.Length];
                 _underlyingWriter = underlyingWriter;
+            }
+
+            SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
+            {
+                return _underlyingWriter.WritePrefix(writeTo);
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)

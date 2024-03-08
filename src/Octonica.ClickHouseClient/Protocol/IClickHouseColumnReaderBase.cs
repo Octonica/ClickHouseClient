@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,5 +30,16 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <param name="sequence">The binary buffer.</param>
         /// <returns>The length of data that were read or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.</returns>
         SequenceSize ReadNext(ReadOnlySequence<byte> sequence);
+
+        /// <summary>
+        /// When implemented reads the prefix specific to the column's type
+        /// </summary>
+        /// <param name="sequence">The binary buffer.</param>
+        /// <returns>
+        /// The length of data that were read or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.
+        /// The prefix is counted for a single element, so the number of elements (<see cref="SequenceSize.Elements"/>)
+        /// can be either 0 or 1.
+        /// </returns>
+        SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence) => new SequenceSize(0, 1);
     }
 }

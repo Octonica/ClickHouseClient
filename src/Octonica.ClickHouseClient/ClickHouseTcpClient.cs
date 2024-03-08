@@ -311,6 +311,19 @@ namespace Octonica.ClickHouseClient
                     if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
                         writer.WriteBool(false); // has_custom
 
+                    if (table.RowCount == 0)
+                        continue;
+
+                    while (true)
+                    {
+                        var size = writer.WriteRaw(mem => column.WritePrefix(mem.Span));
+                        if (size.Elements == 1)
+                            break;
+
+                        if (size.Elements != 0)
+                            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. A column writer returned an unexpected number of prefixes: {size.Elements}.");
+                    }
+
                     int rowCount = table.RowCount;
                     while (rowCount > 0)
                     {
@@ -426,8 +439,21 @@ namespace Octonica.ClickHouseClient
                     var columnInfo = new ColumnInfo(columnName, columnType);
                     columnInfos.Add(columnInfo);
 
-                    var columnRowCount = rowCount;
                     var columnReader = createColumnReader(columnType, rowCount, serializationMode);
+                    if (rowCount > 0)
+                    {
+                        while (true)
+                        {
+                            var sequenceSize = await reader.ReadRaw(columnReader.ReadPrefix, async, cancellationToken);
+                            if (sequenceSize.Elements == 1)
+                                break;
+
+                            if (sequenceSize.Elements != 0)
+                                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {sequenceSize.Elements}.");
+                        }
+                    }
+
+                    var columnRowCount = rowCount;
                     while (columnRowCount > 0)
                     {
                         var sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);

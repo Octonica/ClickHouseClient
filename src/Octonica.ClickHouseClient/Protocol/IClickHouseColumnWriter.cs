@@ -42,10 +42,14 @@ namespace Octonica.ClickHouseClient.Protocol
         SequenceSize WriteNext(Span<byte> writeTo);
 
         /// <summary>
-        /// Writes prefix specific to the type.
+        /// Writes prefix specific to the column's type.
         /// </summary>
         /// <param name="writeTo">The buffer to write data to.</param>
-        /// <returns>The number of written bytes or -1 if the provided buffer is too small.</returns>
-        int WritePrefix(Span<byte> writeTo) => 0;
+        /// <returns>
+        /// The length of written data or <see cref="SequenceSize.Empty"/> if the provided buffer is too small.
+        /// The prefix is counted for a single element, so the number of elements (<see cref="SequenceSize.Elements"/>)
+        /// can be either 0 or 1.
+        /// </returns>
+        SequenceSize WritePrefix(Span<byte> writeTo) => new SequenceSize(0, 1);
     }
 }
