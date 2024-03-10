@@ -42,7 +42,7 @@ namespace Octonica.ClickHouseClient
         private TimeSpan? _commandTimeout;
 
         /// <summary>
-        /// Gets or sets the SQL statement to exeucute at the data source.
+        /// Gets or sets the SQL statement to execute at the data source.
         /// </summary>
         [AllowNull]
         public override string CommandText
