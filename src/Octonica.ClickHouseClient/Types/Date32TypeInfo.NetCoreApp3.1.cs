@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021, 2023 Octonica
+/* Copyright 2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,9 +56,9 @@ namespace Octonica.ClickHouseClient.Types
             if (value == default)
                 return MinValue;
 
-            var days = (value - DateTime.UnixEpoch).TotalDays;
+            var days = (value.Date - DateTime.UnixEpoch).TotalDays;
             if (days < MinValue || days > MaxValue)
-                throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
+                throw new OverflowException($"The value must be in range [{MinDateTimeValue}, {MaxDateTimeValue}].");
 
             return (int)days;
         }

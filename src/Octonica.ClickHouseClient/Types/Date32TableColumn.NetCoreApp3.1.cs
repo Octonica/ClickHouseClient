@@ -25,14 +25,11 @@ namespace Octonica.ClickHouseClient.Types
     {
         static readonly DateTime UnixEpochUnspecified = new DateTime(DateTime.UnixEpoch.Ticks, DateTimeKind.Unspecified);
 
-        DateTime IClickHouseTableColumn<DateTime>.DefaultValue => default;
+        public DateTime DefaultValue => UnixEpochUnspecified;
 
         public DateTime GetValue(int index)
         {
             var value = _buffer.Span[index];
-            if (value == DefaultValue)
-                return default;
-
             return UnixEpochUnspecified.AddDays(value);
         }
 

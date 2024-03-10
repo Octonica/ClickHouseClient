@@ -21,45 +21,55 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class DateTime64TableColumn : IClickHouseTableColumn<DateTimeOffset>
     {
-        private static readonly ulong[] ClickHouseTicksMaxValue;
+        private static readonly (long min, long max)[] ClickHouseTicksRange;
 
-        private readonly ReadOnlyMemory<ulong> _buffer;
+        private readonly ReadOnlyMemory<long> _buffer;
         private readonly int _ticksScale;
-        private readonly ulong _maxValue;
+        private readonly (long min, long max) _range;
         private readonly TimeZoneInfo _timeZone;
 
         public int RowCount { get; }
 
-        public DateTimeOffset DefaultValue => default;
+        public DateTimeOffset DefaultValue => new DateTimeOffset(DateTime.UnixEpoch).ToOffset(_timeZone.GetUtcOffset(DateTime.UnixEpoch));
 
         static DateTime64TableColumn()
         {
-            var maxValues = new ulong[DateTime64TypeInfo.DateTimeTicksScales.Length];
-            var dateTimeTicksMax = (ulong) (DateTime.MaxValue - DateTime.UnixEpoch).Ticks;
-            for (int i = 0; i < maxValues.Length; i++)
+            var ranges = new (long min, long max)[DateTime64TypeInfo.DateTimeTicksScales.Length];
+            var dateTimeTicksMax = (DateTime.MaxValue - DateTime.UnixEpoch).Ticks;
+            var dateTimeTicksMin = (DateTime.MinValue - DateTime.UnixEpoch).Ticks;
+            for (int i = 0; i < ranges.Length; i++)
             {
+                long min, max;
                 var magnitude = DateTime64TypeInfo.DateTimeTicksScales[i];
                 if (magnitude < 0)
                 {
-                    if (dateTimeTicksMax > ulong.MaxValue / (uint) -magnitude)
-                        maxValues[i] = ulong.MaxValue;
+                    if (dateTimeTicksMax > long.MaxValue / -magnitude)
+                        max = long.MaxValue;
                     else
-                        maxValues[i] = checked(dateTimeTicksMax * (uint) -magnitude);
+                        max = checked(dateTimeTicksMax * -magnitude);
+
+                    if (dateTimeTicksMin < long.MinValue / -magnitude)
+                        min = long.MinValue;
+                    else
+                        min = checked(dateTimeTicksMin * -magnitude);
                 }
                 else
                 {
-                    maxValues[i] = dateTimeTicksMax / (uint) magnitude;
+                    max = dateTimeTicksMax / magnitude;
+                    min = dateTimeTicksMin / magnitude;
                 }
+
+                ranges[i] = (min, max);
             }
 
-            ClickHouseTicksMaxValue = maxValues;
+            ClickHouseTicksRange = ranges;
         }
 
-        public DateTime64TableColumn(ReadOnlyMemory<ulong> buffer, int precision, TimeZoneInfo timeZone)
+        public DateTime64TableColumn(ReadOnlyMemory<long> buffer, int precision, TimeZoneInfo timeZone)
         {
             _buffer = buffer;
             _ticksScale = DateTime64TypeInfo.DateTimeTicksScales[precision];
-            _maxValue = ClickHouseTicksMaxValue[precision];
+            _range = ClickHouseTicksRange[precision];
             _timeZone = timeZone;
             RowCount = buffer.Length;
         }
@@ -72,22 +82,26 @@ namespace Octonica.ClickHouseClient.Types
         public DateTimeOffset GetValue(int index)
         {
             var ticks = _buffer.Span[index];
-            if (ticks == 0)
-                return default;
+            if (ticks < _range.min)
+            {
+                throw new OverflowException(
+                    $"The value 0x{ticks:X} is lesser than the minimal value of the type \"{typeof(DateTime)}\". " +
+                    $"It is only possible to read this value as \"{typeof(long)}\".");
+            }
 
-            if (ticks > _maxValue)
+            if (ticks > _range.max)
             {
                 throw new OverflowException(
                     $"The value 0x{ticks:X} is greater than the maximal value of the type \"{typeof(DateTime)}\". " +
-                    $"It is only possible to read this value as \"{typeof(ulong)}\".");
+                    $"It is only possible to read this value as \"{typeof(long)}\".");
             }
 
             if (_ticksScale < 0)
-                ticks /= (uint) -_ticksScale;
+                ticks /= -_ticksScale;
             else
-                ticks = checked(ticks * (uint) _ticksScale);
+                ticks = checked(ticks * _ticksScale);
 
-            var dateTime = DateTime.UnixEpoch.AddTicks(checked((long) ticks));
+            var dateTime = DateTime.UnixEpoch.AddTicks(ticks);
             var offset = _timeZone.GetUtcOffset(dateTime);
             return new DateTimeOffset(dateTime).ToOffset(offset);
         }
@@ -103,7 +117,7 @@ namespace Octonica.ClickHouseClient.Types
             if (typeof(T) == typeof(DateTimeOffset?))
                 return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<DateTimeOffset>(null, this);
 
-            var rawColumn = new StructureTableColumn<ulong>(_buffer);
+            var rawColumn = new StructureTableColumn<long>(_buffer);
             var rawReinterpreted = rawColumn as IClickHouseTableColumn<T> ?? rawColumn.TryReinterpret<T>();
             if (rawReinterpreted != null)
                 return new ReinterpretedTableColumn<T>(this, rawReinterpreted);

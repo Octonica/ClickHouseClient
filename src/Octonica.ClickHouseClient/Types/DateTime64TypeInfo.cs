@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2023 Octonica
+/* Copyright 2020-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
@@ -30,7 +31,7 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class DateTime64TypeInfo : IClickHouseConfigurableTypeInfo
     {
         internal static readonly int[] DateTimeTicksScales;
-        private static readonly long[] DateTimeTicksMaxValues;
+        private static readonly (long min, long max)[] DateTimeTicksRanges;
 
         public const int DefaultPrecision = 3;
 
@@ -60,8 +61,12 @@ namespace Octonica.ClickHouseClient.Types
             for (int i = 0; i < scales.Length; i++)
                 scales[i] = i == 0 ? 1 : checked(scales[i - 1] * 10);
 
-            var maxValues = new long[scales.Length];
-            var dateTimeTicksMax = (DateTime.MaxValue - DateTime.UnixEpoch).Ticks;
+            var ranges = new (long min, long max)[scales.Length];
+
+            var minValue = new DateTime(1900, 1, 1);
+            var exclusiveMaxValue = new DateTime(2300, 1, 1);
+            var dateTimeTicksMin = (minValue - DateTime.UnixEpoch).Ticks;
+            var dateTimeTicksMax = (exclusiveMaxValue - DateTime.UnixEpoch).Ticks - 1;
             for (int i = 0; i < scales.Length; i++)
             {
                 long scale, rem;
@@ -73,16 +78,25 @@ namespace Octonica.ClickHouseClient.Types
                 if (rem != 0)
                     throw new InvalidOperationException($"Internal error. Expected that the value of {typeof(TimeSpan)}.{nameof(TimeSpan.TicksPerSecond)} is a power of 10.");
 
-                scales[i] = checked((int) scale);
+                scales[i] = checked((int)scale);
 
+                long max;
                 if (scale < 0)
-                    maxValues[i] = Math.Min(dateTimeTicksMax, checked((long) (ulong.MaxValue / (uint) -scale)));
+                    max = Math.Min(dateTimeTicksMax, long.MaxValue / -scale);
                 else
-                    maxValues[i] = dateTimeTicksMax;
+                    max = dateTimeTicksMax;
+
+                long min;
+                if (scale < 0)
+                    min = Math.Max(dateTimeTicksMin, long.MinValue / -scale);
+                else
+                    min = dateTimeTicksMin;
+
+                ranges[i] = (min, max);
             }
 
             DateTimeTicksScales = scales;
-            DateTimeTicksMaxValues = maxValues;
+            DateTimeTicksRanges = ranges;
         }
 
         public DateTime64TypeInfo()
@@ -205,7 +219,7 @@ namespace Octonica.ClickHouseClient.Types
                 _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
             };
 
-            return new DateTime64ParameterWriter<T>(this, (IConverter<T, ulong>?)converter);
+            return new DateTime64ParameterWriter<T>(this, (IConverter<T, long>?)converter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -244,7 +258,7 @@ namespace Octonica.ClickHouseClient.Types
             return _timeZone;
         }
 
-        private sealed class DateTime64Reader : StructureReaderBase<ulong, DateTimeOffset>
+        private sealed class DateTime64Reader : StructureReaderBase<long, DateTimeOffset>
         {
             private readonly int _precision;
             private readonly TimeZoneInfo _timeZone;
@@ -258,75 +272,85 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            protected override ulong ReadElement(ReadOnlySpan<byte> source)
+            protected override long ReadElement(ReadOnlySpan<byte> source)
             {
-                return BitConverter.ToUInt64(source);
+                return BitConverter.ToInt64(source);
             }
 
-            protected override IClickHouseTableColumn<DateTimeOffset> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<ulong> buffer)
+            protected override IClickHouseTableColumn<DateTimeOffset> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<long> buffer)
             {
                 return new DateTime64TableColumn(buffer, _precision, _timeZone);
             }
         }
 
-        private sealed class DateTimeWriter : StructureWriterBase<DateTime, ulong>, IConverter<DateTime, ulong>
+        private sealed class DateTimeWriter : StructureWriterBase<DateTime, long>, IConverter<DateTime, long>
         {
             private readonly int _ticksScale;
-            private readonly long _ticksMaxValue;
             private readonly TimeZoneInfo _timeZone;
+            private readonly (long min, long max) _range;
 
             public DateTimeWriter(string columnName, string columnType, int precision, TimeZoneInfo timeZone, IReadOnlyList<DateTime> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)
             {
                 _ticksScale = DateTimeTicksScales[precision];
-                _ticksMaxValue = DateTimeTicksMaxValues[precision];
+                _range = DateTimeTicksRanges[precision];
                 _timeZone = timeZone;
             }
 
-            ulong IConverter<DateTime, ulong>.Convert(DateTime value) => Convert(value);
+            long IConverter<DateTime, long>.Convert(DateTime value) => Convert(value);
 
-            protected override ulong Convert(DateTime value)
+            protected override long Convert(DateTime value)
             {
-                ulong ticks;
+                long ticks;
                 if (value == default)
                 {
                     ticks = 0;
                 }
                 else
                 {
-                    var dateTimeTicks = (value - DateTime.UnixEpoch - _timeZone.GetUtcOffset(value)).Ticks;
-                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
-                        throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch:O}, {DateTime.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
+                    var dateTimeTicks = value.Ticks - DateTime.UnixEpoch.Ticks - _timeZone.GetUtcOffset(value).Ticks;
+                    if (dateTimeTicks < _range.min || dateTimeTicks > _range.max)
+                        throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch.AddTicks(_range.min):O}, {DateTime.UnixEpoch.AddTicks(_range.max):O}].");
 
-                    if (_ticksScale < 0)
-                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
-                    else
-                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
+                    ticks = ScaleTicks(dateTimeTicks, _ticksScale);
                 }
 
                 return ticks;
             }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal static long ScaleTicks(long ticks, int scaleFactor)
+            {
+                if (scaleFactor < 0)
+                    return checked(ticks * -scaleFactor);
+
+                if (ticks >= 0)
+                    return ticks / scaleFactor;
+
+                var ticksDouble = ticks / (double)scaleFactor;
+                return (long)Math.Round(ticksDouble, MidpointRounding.ToNegativeInfinity);
+            }
         }
 
-        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, ulong>, IConverter<DateTimeOffset, ulong>
+        private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, long>, IConverter<DateTimeOffset, long>
         {
             private readonly int _ticksScale;
-            private readonly long _ticksMaxValue;
+            private readonly (long min, long max) _range;
             private readonly TimeZoneInfo _timeZone;
 
             public DateTimeOffsetWriter(string columnName, string columnType, int precision, TimeZoneInfo timeZone, IReadOnlyList<DateTimeOffset> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)
             {
                 _ticksScale = DateTimeTicksScales[precision];
-                _ticksMaxValue = DateTimeTicksMaxValues[precision];
+                _range = DateTimeTicksRanges[precision];
                 _timeZone = timeZone;
             }
 
-            ulong IConverter<DateTimeOffset, ulong>.Convert(DateTimeOffset value) => Convert(value);
+            long IConverter<DateTimeOffset, long>.Convert(DateTimeOffset value) => Convert(value);
 
-            protected override ulong Convert(DateTimeOffset value)
+            protected override long Convert(DateTimeOffset value)
             {
-                ulong ticks;
+                long ticks;
                 if (value == default)
                 {
                     ticks = 0;
@@ -336,13 +360,10 @@ namespace Octonica.ClickHouseClient.Types
                     var offset = _timeZone.GetUtcOffset(value);
                     var valueWithOffset = value.ToOffset(offset);
                     var dateTimeTicks = (valueWithOffset - DateTimeOffset.UnixEpoch).Ticks;
-                    if (dateTimeTicks < 0 || dateTimeTicks > _ticksMaxValue)
-                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch:O}, {DateTimeOffset.UnixEpoch.AddTicks(_ticksMaxValue):O}].");
+                    if (dateTimeTicks < _range.min || dateTimeTicks > _range.max)
+                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch.AddTicks(_range.min):O}, {DateTimeOffset.UnixEpoch.AddTicks(_range.max):O}].");
 
-                    if (_ticksScale < 0)
-                        ticks = checked((ulong) dateTimeTicks * (uint) -_ticksScale);
-                    else
-                        ticks = (ulong) dateTimeTicks / (uint) _ticksScale;
+                    ticks = DateTimeWriter.ScaleTicks(dateTimeTicks, _ticksScale);
                 }
 
                 return ticks;
@@ -352,11 +373,11 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class DateTime64ParameterWriter<T> : IClickHouseParameterWriter<T>
         {
             private readonly DateTime64TypeInfo _typeInfo;
-            private readonly IConverter<T, ulong>? _converter;
+            private readonly IConverter<T, long>? _converter;
 
-            public DateTime64ParameterWriter(DateTime64TypeInfo typeInfo, IConverter<T, ulong>? converter)
+            public DateTime64ParameterWriter(DateTime64TypeInfo typeInfo, IConverter<T, long>? converter)
             {
-                Debug.Assert(converter != null || typeof(T) == typeof(ulong));
+                Debug.Assert(converter != null || typeof(T) == typeof(long));
 
                 _typeInfo = typeInfo;
                 _converter = converter;
@@ -398,13 +419,13 @@ namespace Octonica.ClickHouseClient.Types
                 });
             }
 
-            private ulong Convert(T value)
+            private long Convert(T value)
             {
                 if (_converter == null)
                 {
-                    Debug.Assert(typeof(T) == typeof(ulong));
+                    Debug.Assert(typeof(T) == typeof(long));
                     Debug.Assert(value != null);
-                    return (ulong)(object)value;
+                    return (long)(object)value;
                 }
 
                 return _converter.Convert(value);

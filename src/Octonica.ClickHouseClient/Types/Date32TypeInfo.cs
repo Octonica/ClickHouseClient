@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021, 2023 Octonica
+/* Copyright 2021, 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,14 +27,14 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed partial class Date32TypeInfo : SimpleTypeInfo
     {
-        public const int MinValue = -16436;
-        public const int MaxValue = 114635;
+        public const int MinValue = -25567;
+        public const int MaxValue = 120529;
 
         private const string FormatStr = DateTypeInfo.FormatStr;
-        private const string DefaultValueStr = "1925-01-01";
+        private const string DefaultValueStr = "1900-01-01";
 
         private static readonly DateTime MinDateTimeValue = DateTime.UnixEpoch.AddDays(MinValue);
-        private static readonly DateTime MaxDateTimeValue = DateTime.UnixEpoch.AddDays(MaxValue);
+        private static readonly DateTime MaxDateTimeValue = DateTime.UnixEpoch.AddDays(MaxValue + 1).Subtract(TimeSpan.FromTicks(1));
 
         public Date32TypeInfo()
             :base("Date32")

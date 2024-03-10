@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -417,17 +417,25 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44), resultDateTime);
         }
 
-        [Fact]
-        public async Task ReadDateTime64Scalar()
+        [Theory]
+        [InlineData("2015-04-21 14:59:44.12345", 3, 2015, 4, 21, 14, 59, 44, 123)]
+        [InlineData("1908-09-10 11:12:13.141516", 6, 1908, 9, 10, 11, 12, 13, 141.516)]
+        [InlineData("2112-01-15 23:01:59.99999", 1, 2112, 1, 15, 23, 1, 59, 900)]
+        [InlineData("1970-01-01", 3, 1970, 1, 1, 0, 0, 0, 0)]
+        [InlineData("1931-03-05 07:09:23", 0, 1931, 3, 5, 7, 9, 23, 0)]
+        [InlineData("1900-01-01", 3, 1900, 1, 1, 0, 0, 0, 0)] // Min value
+        [InlineData("2299-12-31 23:59:59.999999", 6, 2299, 12, 31, 23, 59, 59, 999.999)] // Max value
+        public async Task ReadDateTime64Scalar(string dateText, int scale, int year, int month, int day, int hour, int minute, int second, double milliseconds)
         {
             await using var connection = await OpenConnectionAsync();
 
-            await using var cmd = connection.CreateCommand("SELECT cast('2015-04-21 14:59:44.12345' AS DateTime64)");
+            string queryStr = $"SELECT cast('{dateText}' AS DateTime64({scale}, 'Etc/UTC'))";
+            await using var cmd = connection.CreateCommand(queryStr);
 
             var result = await cmd.ExecuteScalarAsync();
             var resultDateTime = Assert.IsType<DateTimeOffset>(result);
 
-            Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).AddMilliseconds(123), resultDateTime.DateTime);
+            Assert.Equal(new DateTime(year, month, day, hour, minute, second).Add(TimeSpan.FromMilliseconds(milliseconds)), resultDateTime.DateTime);
         }
 
         [Fact]
@@ -452,13 +460,21 @@ namespace Octonica.ClickHouseClient.Tests
             await using var connection = await OpenConnectionAsync(parameterMode);
             var timeZone = connection.GetServerTimeZone();
             var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
+            var minDate = new DateTime(1900, 1, 1);
+            var maxDate = new DateTime(2299, 12, 31, 23, 59, 59, 999);
 
             var values = new[]
             {
                 default,
                 DateTime.UnixEpoch.Add(TimeSpan.FromMilliseconds(1111.1111) + unixEpochOffset),
-                new DateTime(2531, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
-                new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567))
+                new DateTime(1966, 6, 6, 7, 8, 9).Add(TimeSpan.FromMilliseconds(987.654)),
+                new DateTime(1931, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
+                new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)),
+                new DateTime(2032, 3, 18, 12, 0, 59).Add(TimeSpan.FromMilliseconds(987.6543)),
+                new DateTime(1970, 1, 1),
+                new DateTime(1970, 1, 1) + unixEpochOffset,
+                minDate + timeZone.GetUtcOffset(minDate),
+                maxDate + timeZone.GetUtcOffset(maxDate)
             };
 
             await using var cmd = connection.CreateCommand("SELECT {v}");
@@ -474,6 +490,12 @@ namespace Octonica.ClickHouseClient.Tests
 
                 foreach (var value in values)
                 {
+                    if (value.Year >= maxDate.Year && precision >= 9)
+                    {
+                        // The value is too large for writing
+                        continue;
+                    }
+
                     parameter.Value = value;
 
                     var result = await cmd.ExecuteScalarAsync();
@@ -481,56 +503,13 @@ namespace Octonica.ClickHouseClient.Tests
 
                     DateTime expectedValue;
                     if (value == default)
-                        expectedValue = default;
+                        expectedValue = DateTime.UnixEpoch + unixEpochOffset;
                     else if (div > 0)
                         expectedValue = new DateTime(value.Ticks / div * div);
                     else
                         expectedValue = value;
 
                     Assert.Equal(expectedValue, resultDateTime.DateTime);
-                }
-
-                // Min and max values must be adjusted to the server's timezone
-                var unixEpochValue = new DateTime(DateTime.UnixEpoch.Ticks + unixEpochOffset.Ticks);
-                parameter.Value = unixEpochValue;
-
-                var unixEpochResult = await cmd.ExecuteScalarAsync();
-                var unixEpochResultDto = Assert.IsType<DateTimeOffset>(unixEpochResult);
-
-                Assert.Equal(default, unixEpochResultDto);
-
-                if (div > 0)
-                {
-                    var offset = timeZone.GetUtcOffset(DateTime.MaxValue);
-                    long ticks = DateTime.MaxValue.Ticks;
-                    if (offset < TimeSpan.Zero)
-                        ticks += offset.Ticks;
-
-                    var maxValue = new DateTimeOffset(ticks, offset).DateTime;
-                    parameter.Value = maxValue;
-                    var result = await cmd.ExecuteScalarAsync<DateTime>();
-
-                    var expectedValue = new DateTime(maxValue.Ticks / div * div);
-                    Assert.Equal(expectedValue, result);
-                }
-                else
-                {
-                    DateTimeOffset maxValueDto;
-                    if (div == -100)
-                        maxValueDto = DateTimeOffset.ParseExact("2554-07-21T23:34:33.7095516Z", "O", CultureInfo.InvariantCulture);
-                    else
-                        maxValueDto = DateTimeOffset.ParseExact("7815-07-17T19:45:37.0955161Z", "O", CultureInfo.InvariantCulture);
-
-                    var offset = timeZone.GetUtcOffset(maxValueDto);
-                    var maxValue = new DateTime(maxValueDto.Ticks + offset.Ticks);
-
-                    parameter.Value = maxValue;
-                    var result = await cmd.ExecuteScalarAsync<DateTime>();
-                    Assert.Equal(maxValue, result);
-
-                    parameter.Value = maxValue.AddTicks(1);
-                    var exception = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
-                    Assert.IsAssignableFrom<OverflowException>(exception.InnerException);
                 }
             }
         }
@@ -2988,10 +2967,12 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
         [Theory]
         [InlineData("2021-11-09", 2021, 11, 09)]
-        [InlineData("1925-01-01", 0, 0, 0)] // Default value
+        [InlineData("1925-01-01", 1925, 1, 1)]
         [InlineData("1925-1-02", 1925, 1, 2)]
         [InlineData("1970-1-1", 1970, 1, 1)]
         [InlineData("2283-11-11", 2283, 11, 11)]
+        [InlineData("1900-1-1", 1900, 1, 1)] // Min value
+        [InlineData("2299-12-31", 2299, 12, 31)] // Max value
         public async Task ReadDate32Scalar(string str, int year, int month, int day)
         {
             DateTime expectedDateTime = default;
@@ -3030,11 +3011,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         public async Task ReadDate32ParameterScalar(ClickHouseParameterMode parameterMode)
         {
             var now = DateTime.Now;
-            var minValue = new DateTime(1925, 1, 1);
-            var maxValue = new DateTime(2283, 11, 11);
+            var minValue = new DateTime(1900, 1, 1);
+            var maxValue = new DateTime(2299, 12, 31, 23, 59, 59, 999);
             now = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind);
 
-            var testData = new[] { now, default, new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), minValue.AddDays(1), maxValue, DateTime.UnixEpoch };
+            var testData = new[] { now, default, new DateTime(1919, 6, 28, 18, 19, 20), new DateTime(1980, 12, 15, 3, 8, 58), new DateTime(2015, 1, 1, 18, 33, 55), minValue.AddDays(1), maxValue, DateTime.UnixEpoch };
 
             await using var connection = await OpenConnectionAsync(parameterMode);
 
@@ -3050,7 +3031,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
                 Assert.True(await reader.ReadAsync());
 
                 var result = reader.GetFieldValue<DateTime>(0);
-                Assert.Equal(testValue.Date, result);
+                var expected = testValue.Date;
+                if (expected == default)
+                    expected = minValue;
+
+                Assert.Equal(expected, result);
 
                 if (testValue == default)
                     continue;
@@ -3075,9 +3060,9 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         {
             var nowDateTime = DateTime.Now;
             var now = new DateOnly(nowDateTime.Year, nowDateTime.Month, nowDateTime.Day);
-            var minValue = new DateOnly(1925, 1, 1);
-            var maxValue = new DateOnly(2283, 11, 11);
-            var testData = new[] { now, default, new DateOnly(1980, 12, 15), new DateOnly(2015, 1, 1), minValue.AddDays(1), maxValue, DateOnly.FromDateTime(DateTime.UnixEpoch) };
+            var minValue = new DateOnly(1900, 1, 1);
+            var maxValue = new DateOnly(2299, 12, 31);
+            var testData = new[] { now, default, new DateOnly(1912, 6, 28), new DateOnly(1980, 12, 15), new DateOnly(2015, 1, 1), minValue.AddDays(1), maxValue, DateOnly.FromDateTime(DateTime.UnixEpoch) };
 
             await using var connection = await OpenConnectionAsync(parameterMode);
 
@@ -3094,7 +3079,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
 
                 var result = reader.GetValue(0);
                 var resultDateOnly = Assert.IsType<DateOnly>(result);
-                Assert.Equal(testValue, resultDateOnly);
+                var expected = testValue;
+                if (expected == default)
+                    expected = minValue;
+
+                Assert.Equal(expected, resultDateOnly);
 
                 if (testValue == default)
                     continue;

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed partial class Date32TableColumn
     {
-        private const int DefaultValue = -16436;
-
         private readonly ReadOnlyMemory<int> _buffer;
 
         public int RowCount => _buffer.Length;

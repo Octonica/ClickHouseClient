@@ -25,14 +25,13 @@ namespace Octonica.ClickHouseClient.Types
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
 
-        DateOnly IClickHouseTableColumn<DateOnly>.DefaultValue => default;
+        // The default sparse value '1970-01-01' is not equal to the default column value '1901-01-01'.
+        // Here we should return the value corresponding to 0, which is 1970-01-01.
+        public DateOnly DefaultValue => UnixEpoch;
 
         public DateOnly GetValue(int index)
         {
             var value = _buffer.Span[index];
-            if (value == DefaultValue)
-                return default;
-
             return UnixEpoch.AddDays(value);
         }
 
