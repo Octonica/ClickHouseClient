@@ -1,3 +1,18 @@
+### Octonica.ClickHouseClient v3.1.2, 2024-03-10
+
+#### Bug Fix
+
+* Fix reading columns with the sparse serialization ([#85](https://github.com/Octonica/ClickHouseClient/issues/85)).
+* Fix ranges for values of types `DateTime64` and `Date32` ([#66](https://github.com/Octonica/ClickHouseClient/issues/66)).
+* Fix writing values of type `IPv6`. The client wrote values to wrong cells when the internal binary buffer was of insufficient size.
+* Fix reading values of types `Array(LowCardinality(T))` and `Tuple(..., LowCardinality(T), ...)` ([#86](https://github.com/Octonica/ClickHouseClient/issues/86)).
+* Fix writing values of type `Map(LowCardinality(String), T)` ([#86](https://github.com/Octonica/ClickHouseClient/issues/86)).
+
+#### Miscellaneous
+
+* When writing to a column of type `LowCardinality(String)`, the client serializes values in the low cardinality format.
+ In previous versions the client passed a column of type `String` instead of `LowCardinality(String)`.
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
