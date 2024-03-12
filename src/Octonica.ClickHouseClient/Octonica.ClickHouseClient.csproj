@@ -9,7 +9,7 @@
 
   <PropertyGroup>
     <Version Condition="'$(ClickHouseClientVersion)' != ''">$(ClickHouseClientVersion)</Version>
-    <Version Condition="'$(Version)' == ''">2.2.8</Version>
+    <Version Condition="'$(Version)' == ''">2.2.9</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Version Condition="'$(ClickHouseClientVersionSuffix)' != ''">$(Version)$(ClickHouseClientVersionSuffix)</Version>
 
