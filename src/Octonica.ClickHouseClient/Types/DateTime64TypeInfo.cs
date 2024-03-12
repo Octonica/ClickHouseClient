@@ -25,6 +25,7 @@ using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -43,7 +44,7 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         private readonly bool _explicitTimeZoneCode;
 
-        private TimeZoneInfo? _timeZone;
+        private DateTimeZone? _timeZone;
 
         public string ComplexTypeName { get; }
 
@@ -246,26 +247,26 @@ namespace Octonica.ClickHouseClient.Types
             return new DateTime64TypeInfo(null, serverInfo.Timezone, false);
         }
 
-        private TimeZoneInfo GetTimeZone()
+        private DateTimeZone GetTimeZone()
         {
             if (_timeZone != null)
                 return _timeZone;
 
             if (_timeZoneCode == null)
-                return TimeZoneInfo.Utc;
+                return DateTimeZone.Utc;
 
-            _timeZone = TimeZoneHelper.GetTimeZoneInfo(_timeZoneCode);
+            _timeZone = TimeZoneHelper.GetDateTimeZone(_timeZoneCode);
             return _timeZone;
         }
 
         private sealed class DateTime64Reader : StructureReaderBase<long, DateTimeOffset>
         {
             private readonly int _precision;
-            private readonly TimeZoneInfo _timeZone;
+            private readonly DateTimeZone _timeZone;
 
             protected override bool BitwiseCopyAllowed => true;
 
-            public DateTime64Reader(int rowCount, int precision, TimeZoneInfo timeZone)
+            public DateTime64Reader(int rowCount, int precision, DateTimeZone timeZone)
                 : base(sizeof(ulong), rowCount)
             {
                 _precision = precision;
@@ -286,10 +287,10 @@ namespace Octonica.ClickHouseClient.Types
         private sealed class DateTimeWriter : StructureWriterBase<DateTime, long>, IConverter<DateTime, long>
         {
             private readonly int _ticksScale;
-            private readonly TimeZoneInfo _timeZone;
+            private readonly DateTimeZone _timeZone;
             private readonly (long min, long max) _range;
 
-            public DateTimeWriter(string columnName, string columnType, int precision, TimeZoneInfo timeZone, IReadOnlyList<DateTime> rows)
+            public DateTimeWriter(string columnName, string columnType, int precision, DateTimeZone timeZone, IReadOnlyList<DateTime> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)
             {
                 _ticksScale = DateTimeTicksScales[precision];
@@ -301,21 +302,13 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override long Convert(DateTime value)
             {
-                long ticks;
-                if (value == default)
-                {
-                    ticks = 0;
-                }
-                else
-                {
-                    var dateTimeTicks = value.Ticks - DateTime.UnixEpoch.Ticks - _timeZone.GetUtcOffset(value).Ticks;
-                    if (dateTimeTicks < _range.min || dateTimeTicks > _range.max)
-                        throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch.AddTicks(_range.min):O}, {DateTime.UnixEpoch.AddTicks(_range.max):O}].");
+                // Convert DateTime to Instant
+                Instant instant = Instant.FromDateTimeUtc(value.ToUniversalTime());
 
-                    ticks = ScaleTicks(dateTimeTicks, _ticksScale);
-                }
+                // Convert Instant to Unix time
+                long unixTime = instant.ToUnixTimeSeconds();
 
-                return ticks;
+                return unixTime;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -336,9 +329,9 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly int _ticksScale;
             private readonly (long min, long max) _range;
-            private readonly TimeZoneInfo _timeZone;
+            private readonly DateTimeZone _timeZone;
 
-            public DateTimeOffsetWriter(string columnName, string columnType, int precision, TimeZoneInfo timeZone, IReadOnlyList<DateTimeOffset> rows)
+            public DateTimeOffsetWriter(string columnName, string columnType, int precision, DateTimeZone timeZone, IReadOnlyList<DateTimeOffset> rows)
                 : base(columnName, columnType, sizeof(ulong), rows)
             {
                 _ticksScale = DateTimeTicksScales[precision];
@@ -350,23 +343,13 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override long Convert(DateTimeOffset value)
             {
-                long ticks;
-                if (value == default)
-                {
-                    ticks = 0;
-                }
-                else
-                {
-                    var offset = _timeZone.GetUtcOffset(value);
-                    var valueWithOffset = value.ToOffset(offset);
-                    var dateTimeTicks = (valueWithOffset - DateTimeOffset.UnixEpoch).Ticks;
-                    if (dateTimeTicks < _range.min || dateTimeTicks > _range.max)
-                        throw new OverflowException($"The value must be in range [{DateTimeOffset.UnixEpoch.AddTicks(_range.min):O}, {DateTimeOffset.UnixEpoch.AddTicks(_range.max):O}].");
+                // Convert DateTimeOffset to Instant
+                Instant instant = Instant.FromDateTimeOffset(value);
 
-                    ticks = DateTimeWriter.ScaleTicks(dateTimeTicks, _ticksScale);
-                }
+                // Convert Instant to Unix time
+                long unixTime = instant.ToUnixTimeSeconds();
 
-                return ticks;
+                return unixTime;
             }
         }
 

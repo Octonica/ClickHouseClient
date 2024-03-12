@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1;net6.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -27,7 +27,8 @@
 
   <ItemGroup>
     <PackageReference Include="K4os.Compression.LZ4" Version="1.3.6" />
-    <PackageReference Include="TimeZoneConverter" Version="6.1.0" Condition="'$(TargetFramework)' == 'netcoreapp3.1'" />
+    <PackageReference Include="NodaTime" Version="3.1.11" />
+    <PackageReference Include="TimeZoneConverter" Version="6.1.0" />
   </ItemGroup>
 
 </Project>

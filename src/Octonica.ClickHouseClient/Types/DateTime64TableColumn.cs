@@ -16,21 +16,18 @@
 #endregion
 
 using System;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class DateTime64TableColumn : IClickHouseTableColumn<DateTimeOffset>
     {
         private static readonly (long min, long max)[] ClickHouseTicksRange;
-
         private readonly ReadOnlyMemory<long> _buffer;
-        private readonly int _ticksScale;
         private readonly (long min, long max) _range;
-        private readonly TimeZoneInfo _timeZone;
-
+        private readonly DateTimeZone _timeZone;
         public int RowCount { get; }
-
-        public DateTimeOffset DefaultValue => new DateTimeOffset(DateTime.UnixEpoch).ToOffset(_timeZone.GetUtcOffset(DateTime.UnixEpoch));
+        public DateTimeOffset DefaultValue => DateTimeZone.Utc.AtStrictly(LocalDateTime.FromDateTime(DateTime.MinValue)).ToDateTimeOffset(); 
 
         static DateTime64TableColumn()
         {
@@ -65,10 +62,9 @@ namespace Octonica.ClickHouseClient.Types
             ClickHouseTicksRange = ranges;
         }
 
-        public DateTime64TableColumn(ReadOnlyMemory<long> buffer, int precision, TimeZoneInfo timeZone)
+        public DateTime64TableColumn(ReadOnlyMemory<long> buffer, int precision, DateTimeZone timeZone)
         {
             _buffer = buffer;
-            _ticksScale = DateTime64TypeInfo.DateTimeTicksScales[precision];
             _range = ClickHouseTicksRange[precision];
             _timeZone = timeZone;
             RowCount = buffer.Length;
@@ -96,14 +92,10 @@ namespace Octonica.ClickHouseClient.Types
                     $"It is only possible to read this value as \"{typeof(long)}\".");
             }
 
-            if (_ticksScale < 0)
-                ticks /= -_ticksScale;
-            else
-                ticks = checked(ticks * _ticksScale);
+            Instant instant = Instant.FromUnixTimeMilliseconds(ticks);
+            ZonedDateTime zonedDateTime = instant.InZone(_timeZone);
 
-            var dateTime = DateTime.UnixEpoch.AddTicks(ticks);
-            var offset = _timeZone.GetUtcOffset(dateTime);
-            return new DateTimeOffset(dateTime).ToOffset(offset);
+            return zonedDateTime.ToDateTimeOffset();
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
