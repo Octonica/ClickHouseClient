@@ -1,3 +1,16 @@
+### Octonica.ClickHouseClient v2.2.9, 2022-04-27
+
+#### New Feature
+
+* New mode of passing parameters to a query - `Interpolate`. In this mode values are interpolated into the query text as constant literals.
+ Parameter mode can be set for a connection (the property `ParametersMode` in the connection string), for a command (the property `ClickHouseCommand.ParametersMode`) or
+ for a single parameter (`ClickHouseParameter.ParameterMode`)
+ ([#49](https://github.com/Octonica/ClickHouseClient/issues/49), PR [#42](https://github.com/Octonica/ClickHouseClient/pull/42)).
+
+#### Improvement
+
+* Set `DateTimeKind.Unspecified` when cast a value of ClickHouse types `Date` and `Date32` to the .NET type `DateTime` (PR [#45](https://github.com/Octonica/ClickHouseClient/pull/45)).
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
