@@ -1,3 +1,18 @@
+### Octonica.ClickHouseClient v2.2.10, 2022-12-30
+
+#### New Feature
+
+* Add support for the type `Bool` ([#56](https://github.com/Octonica/ClickHouseClient/issues/56)).
+
+#### Bug Fix
+
+* Return the correct non-generic enumerator for `ClickHouseParameterCollection` (PR [#65](https://github.com/Octonica/ClickHouseClient/pull/65)).
+
+#### Improvement
+
+* Remove arguments with default values from constructors of `ClickHouseConnection`. It makes possible to call the constructor `ClickHouseConnection(sting)` using reflection
+ ([#54](https://github.com/Octonica/ClickHouseClient/issues/54)).
+
 ### Octonica.ClickHouseClient v2.2.9, 2022-04-27
 
 #### New Feature
