@@ -1,3 +1,37 @@
+### Octonica.ClickHouseClient v2.2.11, 2023-01-11
+
+#### Bug Fix
+
+* Fix null reference exception when the garbage collector calls the finalizer for `ClickHouseConnection` ([#70](https://github.com/Octonica/ClickHouseClient/issues/70)).
+
+### Octonica.ClickHouseClient v2.2.10, 2022-12-30
+
+#### New Feature
+
+* Add support for the type `Bool` ([#56](https://github.com/Octonica/ClickHouseClient/issues/56)).
+
+#### Bug Fix
+
+* Return the correct non-generic enumerator for `ClickHouseParameterCollection` (PR [#65](https://github.com/Octonica/ClickHouseClient/pull/65)).
+
+#### Improvement
+
+* Remove arguments with default values from constructors of `ClickHouseConnection`. It makes possible to call the constructor `ClickHouseConnection(sting)` using reflection
+ ([#54](https://github.com/Octonica/ClickHouseClient/issues/54)).
+
+### Octonica.ClickHouseClient v2.2.9, 2022-04-27
+
+#### New Feature
+
+* New mode of passing parameters to a query - `Interpolate`. In this mode values are interpolated into the query text as constant literals.
+ Parameter mode can be set for a connection (the property `ParametersMode` in the connection string), for a command (the property `ClickHouseCommand.ParametersMode`) or
+ for a single parameter (`ClickHouseParameter.ParameterMode`)
+ ([#49](https://github.com/Octonica/ClickHouseClient/issues/49), PR [#42](https://github.com/Octonica/ClickHouseClient/pull/42)).
+
+#### Improvement
+
+* Set `DateTimeKind.Unspecified` when cast a value of ClickHouse types `Date` and `Date32` to the .NET type `DateTime` (PR [#45](https://github.com/Octonica/ClickHouseClient/pull/45)).
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
