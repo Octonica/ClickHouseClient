@@ -1571,6 +1571,43 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public Task InsertEmptyArrayLowCardinality()
+        {
+            return WithTemporaryTable("lc_array", "id Int32, strings Array(LowCardinality(String)), tuples Array(Array(Tuple(LowCardinality(String), LowCardinality(String))))", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
+            {
+                var columns = new Dictionary<string, object?>
+                {
+                    { "id", new[] { 123 } },
+                    { "strings", new[] { Array.Empty<string>() } },
+                    { "tuples", new[] { new[] { Array.Empty<(string, string)>(), Array.Empty<(string, string)>() } } }
+                };
+
+                await using (var writer = await cn.CreateColumnWriterAsync($"insert into {tableName} values", ct))
+                {
+                    await writer.WriteTableAsync(columns, 1, ct);
+                }
+
+                await using var reader = await cn.CreateCommand($"select * from {tableName}").ExecuteReaderAsync(ct);
+
+                Assert.True(await reader.ReadAsync(ct));
+                var obj1 = reader.GetValue(0);
+                var obj2 = reader.GetValue(1);
+                var obj3 = reader.GetValue(2);
+
+                Assert.Equal(123, obj1);
+                Assert.Equal(Array.Empty<string>(), obj2);
+                var arr3 = Assert.IsType<Tuple<string, string>[][]>(obj3);
+                Assert.Equal(2, arr3.Length);
+                Assert.Equal(Array.Empty<Tuple<string, string>>(), arr3[0]);
+                Assert.Equal(Array.Empty<Tuple<string, string>>(), arr3[1]);
+
+                Assert.False(await reader.ReadAsync(ct));
+            }
+        }
+
         protected override string GetTempTableName(string tableNameSuffix)
         {
             return $"{TestTableName}_{tableNameSuffix}";

@@ -583,6 +583,14 @@ namespace Octonica.ClickHouseClient.Types
                     bytesCount += sizeof(ulong);
                 }
 
+                if (_rows.Count == 0)
+                {
+                    // There are no actual values, only an empty array or a bunch of empty arrays
+                    Debug.Assert(_position == 0);
+                    _position = _rows.ListLengths.Count;
+                    return new SequenceSize(bytesCount, _position);
+                }
+
                 var elementSize = _elementColumnWriter.WriteNext(span);
                 _elementPosition += elementSize.Elements;
 
