@@ -206,6 +206,7 @@ namespace Octonica.ClickHouseClient
 
         /// <summary>
         /// A type representing a date and time value with defined sub-second precision.
+        /// Supported range of values: [1900-01-01 00:00:00, 2299-12-31 23:59:59.99999999]
         /// </summary>
         DateTime64 = ClickHouseSpecificTypeDelimiterCode + 7,
 
@@ -236,7 +237,7 @@ namespace Octonica.ClickHouseClient
 
         /// <summary>
         /// A type representing a date value without a time. Supports the date range same with <see cref="DateTime64"/>.
-        /// Stored in four bytes as the number of days since 1925-01-01. Allows storing values till 2283-11-11.
+        /// Stored in four bytes as the number of days since 1970-01-01.
         /// </summary>
         Date32 = ClickHouseSpecificTypeDelimiterCode + 13,
     }
