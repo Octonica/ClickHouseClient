@@ -1608,6 +1608,44 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public Task InsertVariant()
+        {
+            return WithTemporaryTable("variant", "id Int32, v Variant(UInt64, LowCardinality(String), Array(Int32))", Test, afterOpen: (cn, ct) => cn.CreateCommand("SET allow_experimental_variant_type = 1").ExecuteNonQueryAsync(ct));
+
+            static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
+            {
+                var columns = new Dictionary<string, object?>
+                {
+                    ["id"] = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 },
+                    ["v"] = new object?[] { DBNull.Value, "foo", "bar", Array.Empty<int>(), "foo", null, "bar", new[] { 1, 2, 3, 4, 5 }, 42ul }
+                };
+
+                await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName} VALUES", ct))
+                    await writer.WriteTableAsync(columns, 9, ct);
+
+                var cmd = cn.CreateCommand();
+                cmd.CommandText = $"SELECT id, v FROM {tableName}";
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+                var expected = (object?[])columns["v"]!;
+                int count = 0;
+                while(await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    var val = reader.GetValue(1);
+
+                    bool isNull = (expected[id - 1] ?? DBNull.Value) == DBNull.Value;
+                    Assert.Equal(isNull, reader.IsDBNull(1));
+
+                    Assert.Equal(expected[id - 1] ?? DBNull.Value, val);
+                    ++count;
+                }
+
+                Assert.Equal(9, count);
+            }
+        }
+
         protected override string GetTempTableName(string tableNameSuffix)
         {
             return $"{TestTableName}_{tableNameSuffix}";

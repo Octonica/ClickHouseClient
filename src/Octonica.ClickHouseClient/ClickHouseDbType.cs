@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021 Octonica
+/* Copyright 2020-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -240,5 +240,11 @@ namespace Octonica.ClickHouseClient
         /// Stored in four bytes as the number of days since 1970-01-01.
         /// </summary>
         Date32 = ClickHouseSpecificTypeDelimiterCode + 13,
+
+        /// <summary>
+        /// This type represents a union of other data types. Type Variant(T1, T2, ..., TN) means that each row of this type
+        /// has a value of either type T1 or T2 or ... or TN or none of them (NULL value).
+        /// </summary>
+        Variant = ClickHouseSpecificTypeDelimiterCode + 14,
     }
 }

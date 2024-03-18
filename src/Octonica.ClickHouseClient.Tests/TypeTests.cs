@@ -3244,6 +3244,52 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         }
 
         [Fact]
+        public async Task ReadVariant()
+        {
+            const string query = "SELECT if(number = 1, NULL::Variant(Array(UInt64), UInt64), if(number % 2 != 0, number, range(number))) as variant FROM numbers(5)";
+
+            await using var connection = await OpenConnectionAsync();
+            var cmd = connection.CreateCommand();
+
+            // TODO: remove when this feature will be non-experimental
+            cmd.CommandText = "SET allow_experimental_variant_type = 1";
+            await cmd.ExecuteNonQueryAsync();
+
+            cmd.CommandText = "SET use_variant_as_common_type = 1";
+            await cmd.ExecuteNonQueryAsync();
+
+            cmd.CommandText = query;
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            ulong count = 0;
+            while (await reader.ReadAsync())
+            {
+                var value = reader.GetValue(0);
+                if (count % 2 == 0)
+                {
+                    Assert.False(reader.IsDBNull(0));
+                    var arrValue = Assert.IsType<ulong[]>(value);
+                    Assert.Equal(count, (ulong)arrValue.Length);
+                    for (ulong i = 0; i < count; i++)
+                        Assert.Equal(i, arrValue[i]);
+                }
+                else if (count == 1)
+                {
+                    Assert.IsType<DBNull>(value);
+                    Assert.True(reader.IsDBNull(0));
+                }
+                else
+                {
+                    Assert.False(reader.IsDBNull(0));
+                    var longVal = Assert.IsType<ulong>(value);
+                    Assert.Equal(count, longVal);
+                }
+
+                ++count;
+            }
+        }
+
+        [Fact]
         public async Task CreateInsertSelectAllKnownNullable()
         {
             const string ddl = @"
