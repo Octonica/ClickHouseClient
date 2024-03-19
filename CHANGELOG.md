@@ -1,3 +1,13 @@
+### Octonica.ClickHouseClient v3.1.3, 2024-03-19
+
+#### New Feature
+
+* Add support for the type `Variant(T1, ... ,TN)` ([#84](https://github.com/Octonica/ClickHouseClient/issues/84)).
+
+#### Bug Fix
+
+* Fix writing an empty array or several empty arrays to a column of type `Array(LowCardinality(String))` ([#92](https://github.com/Octonica/ClickHouseClient/issues/92)).
+
 ### Octonica.ClickHouseClient v2.2.11, 2023-01-11
 
 #### Bug Fix
