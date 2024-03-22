@@ -23,6 +23,8 @@ using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using NodaTime;
+using NodaTime.Extensions;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -35,7 +37,7 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         private readonly bool _explicitTimeZoneCode;
 
-        private TimeZoneInfo? _timeZone;
+        private DateTimeZone? _timeZone;
 
         public string ComplexTypeName { get; }
 
@@ -141,25 +143,25 @@ namespace Octonica.ClickHouseClient.Types
             return new DateTimeTypeInfo(serverInfo.Timezone, false);
         }
 
-        private TimeZoneInfo GetTimeZone()
+        private DateTimeZone GetTimeZone()
         {
             if (_timeZone != null)
                 return _timeZone;
 
             if (_timeZoneCode == null)
-                return TimeZoneInfo.Utc;
+                return DateTimeZone.Utc;
 
-            _timeZone = TimeZoneHelper.GetTimeZoneInfo(_timeZoneCode);
+            _timeZone = TimeZoneHelper.GetDateTimeZone(_timeZoneCode);
             return _timeZone;
         }
 
         private sealed class DateTimeReader : StructureReaderBase<uint, DateTimeOffset>
         {
-            private readonly TimeZoneInfo _timeZone;            
+            private readonly DateTimeZone _timeZone;            
 
             protected override bool BitwiseCopyAllowed => true;
 
-            public DateTimeReader(int rowCount, TimeZoneInfo timeZone)
+            public DateTimeReader(int rowCount, DateTimeZone timeZone)
                 : base(sizeof(uint), rowCount)
             {
                 _timeZone = timeZone;
@@ -178,9 +180,9 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class DateTimeWriter : StructureWriterBase<DateTime, uint>, IConverter<DateTime, uint>
         {
-            private readonly TimeZoneInfo _timeZone;
+            private readonly DateTimeZone _timeZone;
 
-            public DateTimeWriter(string columnName, string columnType, TimeZoneInfo timeZone, IReadOnlyList<DateTime> rows)
+            public DateTimeWriter(string columnName, string columnType, DateTimeZone timeZone, IReadOnlyList<DateTime> rows)
                 : base(columnName, columnType, sizeof(uint), rows)
             {
                 _timeZone = timeZone;
@@ -194,28 +196,28 @@ namespace Octonica.ClickHouseClient.Types
             protected override uint Convert(DateTime value)
             {
                 uint seconds;
+
                 if (value == default)
                 {
                     seconds = 0;
                 }
                 else
                 {
-                    var doubleSeconds = (value - DateTime.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value).TotalSeconds;
+                    var doubleSeconds = (value - DateTime.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
                     if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
                         throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
 
                     seconds = (uint) doubleSeconds;
                 }
-
                 return seconds;
             }
         }
 
         private sealed class DateTimeOffsetWriter : StructureWriterBase<DateTimeOffset, uint>, IConverter<DateTimeOffset, uint>
         {
-            private readonly TimeZoneInfo _timeZone;
+            private readonly DateTimeZone _timeZone;
 
-            public DateTimeOffsetWriter(string columnName, string columnType, TimeZoneInfo timeZone, IReadOnlyList<DateTimeOffset> rows)
+            public DateTimeOffsetWriter(string columnName, string columnType, DateTimeZone timeZone, IReadOnlyList<DateTimeOffset> rows)
                 : base(columnName, columnType, sizeof(uint), rows)
             {
                 _timeZone = timeZone;
@@ -229,21 +231,20 @@ namespace Octonica.ClickHouseClient.Types
             protected override uint Convert(DateTimeOffset value)
             {
                 uint seconds;
+
                 if (value == default)
                 {
                     seconds = 0;
                 }
                 else
                 {
-                    var offset = _timeZone.GetUtcOffset(value);
-                    var valueWithOffset = value.ToOffset(offset);
-                    var doubleSeconds = (valueWithOffset - DateTimeOffset.UnixEpoch).TotalSeconds;
+                    var doubleSeconds = (value - DateTimeOffset.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
                     if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
                         throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
 
-                    seconds = (uint)doubleSeconds;
+                    seconds = (uint) doubleSeconds;
                 }
-
+                
                 return seconds;
             }
         }
