@@ -453,13 +453,15 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)), resultDateTime);
         }
 
+        // ...
+
         [Theory]
         [MemberData(nameof(ParameterModes))]
         public async Task ReadDateTime64ParameterScalar(ClickHouseParameterMode parameterMode)
         {
             await using var connection = await OpenConnectionAsync(parameterMode);
             var timeZone = connection.GetServerTimeZone();
-            var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
+            var unixEpochOffset = timeZone.GetUtcOffset(Instant.FromDateTimeUtc(DateTime.UnixEpoch));
             var minDate = new DateTime(1900, 1, 1);
             var maxDate = new DateTime(2299, 12, 31, 23, 59, 59, 999);
 
@@ -471,22 +473,23 @@ namespace Octonica.ClickHouseClient.Tests
                 new DateTime(1931, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
                 new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)),
                 new DateTime(2032, 3, 18, 12, 0, 59).Add(TimeSpan.FromMilliseconds(987.6543)),
+                new DateTime(1968, 04, 16, 0, 0, 0),
                 new DateTime(1970, 1, 1),
                 new DateTime(1970, 1, 1) + unixEpochOffset,
-                minDate + timeZone.GetUtcOffset(minDate),
-                maxDate + timeZone.GetUtcOffset(maxDate)
+                minDate + timeZone.GetUtcOffset(Instant.FromDateTimeUtc(minDate)),
+                maxDate + timeZone.GetUtcOffset(Instant.FromDateTimeUtc(maxDate))
             };
 
             await using var cmd = connection.CreateCommand("SELECT {v}");
-            var parameter = new ClickHouseParameter("v") {ClickHouseDbType = ClickHouseDbType.DateTime64};
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.DateTime64 };
             cmd.Parameters.Add(parameter);
 
             for (int precision = 0; precision < 10; precision++)
             {
-                parameter.Precision = (byte) precision;
-                var div = TimeSpan.TicksPerSecond / (long) Math.Pow(10, precision);
+                parameter.Precision = (byte)precision;
+                var div = TimeSpan.TicksPerSecond / (long)Math.Pow(10, precision);
                 if (div == 0)
-                    div = -(long) Math.Pow(10, precision) / TimeSpan.TicksPerSecond;
+                    div = -(long)Math.Pow(10, precision) / TimeSpan.TicksPerSecond;
 
                 foreach (var value in values)
                 {
