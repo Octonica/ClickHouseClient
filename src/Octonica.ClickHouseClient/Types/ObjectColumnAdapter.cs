@@ -19,7 +19,7 @@ using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class ObjectColumnAdapter : IClickHouseTableColumn<object>
+    internal sealed class ObjectColumnAdapter : IClickHouseReinterpretedTableColumn<object>
     {
         private readonly IClickHouseTableColumn _tableColumn;
 
@@ -56,6 +56,11 @@ namespace Octonica.ClickHouseClient.Types
         object IClickHouseTableColumn.GetValue(int index)
         {
             return GetValue(index);
+        }
+
+        public IClickHouseReinterpretedTableColumn<TResult> Chain<TResult>(Func<object, TResult> reinterpret)
+        {
+            return new ReinterpretedObjectTableColumn<TResult>(_tableColumn, reinterpret);
         }
     }
 }

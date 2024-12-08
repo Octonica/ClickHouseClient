@@ -15,9 +15,12 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Types;
 using System;
 using System.Data;
 using System.Globalization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -526,6 +529,220 @@ FROM
                 var answer = await cmd.ExecuteScalarAsync<int>(ct);
                 Assert.Equal(42, answer);
             }
+        }
+
+        [Fact]
+        public async Task CustomColumnCast()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT 42::Float32");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumnReader(0, (double v) => new TestBox<decimal>((decimal)v));
+
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(typeof(TestBox<decimal>), reader.GetFieldType(0));
+
+            var res = reader.GetValue(0);
+            Assert.IsType<TestBox<decimal>>(res);
+            Assert.Equal(42m, ((TestBox<decimal>)res).Unbox());
+
+            var box = reader.GetFieldValue<TestBox<decimal>>(0);
+            Assert.Equal(42m, box.Unbox());
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task CustomNullableColumnCast()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT if(number=1, NULL, (number + 40)::Nullable(Float32)) AS c, c AS c_copy FROM numbers(1, 2)");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumnReader(0, (double v) => (decimal)v);
+            reader.ConfigureColumnReader("c_copy", (float? v) => v == null ? (TestBox<int>?)null : new TestBox<int>((int)v));
+
+            Assert.Equal(typeof(decimal), reader.GetFieldType(0));
+            Assert.Equal(typeof(TestBox<int>), reader.GetFieldType(1));
+
+            Assert.True(await reader.ReadAsync());
+
+            Assert.True(reader.IsDBNull(0));
+            Assert.True(reader.IsDBNull(1));
+
+            var res = reader.GetValue(0);
+            Assert.IsType<DBNull>(res);
+
+            var resCopy = reader.GetValue(1);
+            Assert.IsType<DBNull>(resCopy);
+
+            var box = reader.GetFieldValue<TestBox<int>>(1, null);
+            Assert.Null(box);
+
+            Assert.True(await reader.ReadAsync());
+
+            Assert.False(reader.IsDBNull(0));
+            Assert.False(reader.IsDBNull(1));
+
+            res = reader.GetValue(0);
+            Assert.IsType<decimal>(res);
+            Assert.Equal(42m, (decimal)res);
+
+            var altReinterpreted = reader.GetDouble(1);
+            Assert.Equal(42, altReinterpreted);
+
+            resCopy = reader.GetValue(1);
+            Assert.IsType<TestBox<int>>(resCopy);
+            Assert.Equal(42, ((TestBox<int>)resCopy).Unbox());
+
+            box = reader.GetFieldValue<TestBox<int>?>(1);
+            Assert.NotNull(box);
+            Assert.Equal(42, box.Value.Unbox());
+
+            box = reader.GetFieldValue<TestBox<int>>(1);
+            Assert.NotNull(box);
+            Assert.Equal(42, box.Value.Unbox());
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task CustomObjecctColumnCast()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT 42::Float32");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumnReader(0, (object _) => 24);
+
+            Assert.Equal(typeof(int), reader.GetFieldType(0));
+
+            Assert.True(await reader.ReadAsync());
+
+            var res = reader.GetValue(0);
+            Assert.IsType<int>(res);
+            Assert.Equal(24, (int)res);
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task ValidColumnReconfiguration()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT 42::Float32 AS col0, 42::Int32 AS col1, 42 AS col2");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumn(0, new ClickHouseColumnSettings(Encoding.UTF8));
+            reader.ConfigureColumnReader("col0", (float f) => (double)f);
+
+            reader.ConfigureColumnReader(2, (byte b) => (double)b);
+            reader.ConfigureColumn("col2", new ClickHouseColumnSettings(enumConverter: new ClickHouseEnumConverter<TestEnum>()));
+
+            Assert.True(await reader.ReadAsync());
+
+            var result = new object[3];
+            Assert.Equal(3, reader.GetValues(result));
+
+            Assert.Equal(42d, result[0]);
+            Assert.Equal(42, result[1]);
+            Assert.Equal(42d, result[2]);
+
+            Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task NullableObjectColumnReconfiguration()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT number AS n, multiIf(number%15==0, 'fizzbuzz', number%5==0, 'buzz', number%3==0, 'fizz', NULL) AS s FROM numbers(1, 15)");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureColumnReader("s", (string s) => s.ToUpperInvariant());
+
+            Assert.Equal(typeof(ulong), reader.GetFieldType(0));
+            Assert.Equal(typeof(string), reader.GetFieldType(1));
+
+            int count = 0;
+            var result = new object[2];
+            while(await reader.ReadAsync())
+            {
+                Assert.Equal(2, reader.GetValues(result));
+                var n = Assert.IsType<ulong>(result[0]);
+                string? expected = null;
+                if (n % 3 == 0)
+                    expected = "FIZZ";
+                if (n % 5 ==0)
+                    expected = expected == null ? "BUZZ" : "FIZZBUZZ";
+
+                if (expected == null)
+                {
+                    Assert.IsType<DBNull>(result[1]);
+                    Assert.True(reader.IsDBNull(1));
+
+                    var value = reader.GetValue(1);
+                    Assert.IsType<DBNull>(value);
+
+                    var strNullable = reader.GetFieldValue(1, "NONE");
+                    Assert.Equal("NONE", strNullable);
+                }
+                else
+                {
+                    var str = Assert.IsType<string>(result[1]);
+                    Assert.Equal(expected, str);
+                    Assert.False(reader.IsDBNull(1));
+
+                    str = reader.GetString(1);
+                    Assert.Equal(expected, str);
+
+                    var strNullable = reader.GetFieldValue(1, "NONE");
+                    Assert.Equal(expected, strNullable);
+                }
+
+                count++;
+            }
+
+            Assert.Equal(15, count);
+        }
+
+        [Fact]
+        public async Task InavlidColumnReconfiguration()
+        {
+            await using var cn = await OpenConnectionAsync();
+            var cmd = cn.CreateCommand("SELECT 42::Float32 AS col0, 42::Float64 AS col1, 42 AS col2");
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            reader.ConfigureDataReader(new ClickHouseColumnSettings(typeof(double)));
+            var err = Assert.Throws<ClickHouseException>(() => reader.ConfigureColumnReader(0, (double v) => v + 1));
+            Assert.Equal(ClickHouseErrorCodes.InvalidColumnSettings, err.ErrorCode);
+
+            reader.ConfigureColumn("col2", new ClickHouseColumnSettings());
+
+            err = Assert.Throws<ClickHouseException>(() => reader.ConfigureColumnReader("col2", (byte v) => (string?)null));
+            Assert.Equal(ClickHouseErrorCodes.CallbackError, err.ErrorCode);
+
+            reader.ConfigureColumnReader("col2", (byte? v) => v / 2);
+
+            err = Assert.Throws<ClickHouseException>(() => reader.ConfigureColumn(2, new ClickHouseColumnSettings(typeof(int))));
+            Assert.Equal(ClickHouseErrorCodes.InvalidColumnSettings, err.ErrorCode);
+
+            err = Assert.Throws<ClickHouseException>(() => reader.ConfigureDataReader(new ClickHouseColumnSettings(typeof(int))));
+            Assert.Equal(ClickHouseErrorCodes.InvalidColumnSettings, err.ErrorCode);
+
+            Assert.True(await reader.ReadAsync());
+
+            err = Assert.Throws<ClickHouseException>(() => reader.ConfigureColumnReader("col0", (float v) => (int)v));
+            Assert.Equal(ClickHouseErrorCodes.DataReaderError, err.ErrorCode);
+
+            var result = new object[3];
+            Assert.Equal(3, reader.GetValues(result));
+
+            Assert.Equal(42d, result[0]);
+            Assert.Equal(42d, result[1]);
+            Assert.Equal(21, result[2]);
+
+            Assert.False(await reader.ReadAsync());
         }
     }
 }

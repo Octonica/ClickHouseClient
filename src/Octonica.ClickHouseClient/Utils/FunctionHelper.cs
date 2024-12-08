@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2023 Octonica
+/* Copyright 2023-2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,5 +22,7 @@ namespace Octonica.ClickHouseClient.Utils
     internal static class FunctionHelper
     {
         public static TOut Apply<TIn, TOut>(TIn input, Func<TIn, TOut> func) => func(input);
+
+        public static Func<T1, T3> Combine<T1, T2, T3>(Func<T1, T2> func1, Func<T2, T3> func2) => v => func2(func1(v));
     }
 }
