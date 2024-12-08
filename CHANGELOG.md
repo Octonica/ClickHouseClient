@@ -6,6 +6,10 @@
  The callback function is invoked whenever the reader reads a non-null value from the column. This feature could be useful in
  cases when ClcikHouseClient doesn't have a built-in type conversion rule, for expample, `double -> decimal`, `Guid -> string` or `uint -> int`.
 
+#### Improvement
+
+* Add method `ClickHouseParameterCollection.AddRange` receiveng any enumerable collection of `ClickHouseParameter`.
+
 ### Octonica.ClickHouseClient v2.2.11, 2023-01-11
 
 #### Bug Fix

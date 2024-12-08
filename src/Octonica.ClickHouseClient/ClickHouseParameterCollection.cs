@@ -476,6 +476,20 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Adds the specified parameters to the collection.
+        /// </summary>
+        /// <param name="parameters">The set of parameters that should be added to this collection.</param>
+        /// <remarks>This operation is not atomic, it calls <see cref="Add(ClickHouseParameter)"/> for each parameter in <paramref name="parameters"/>.</remarks>
+        public void AddRange(IEnumerable<ClickHouseParameter> parameters)
+        {
+            if (parameters == null)
+                throw new ArgumentNullException(nameof(parameters));
+
+            foreach (var parameter in parameters)
+                Add(parameter);
+        }
+
+        /// <summary>
         /// Gets the <see cref="ClickHouseParameter"/> with the specified name.
         /// </summary>
         /// <param name="parameterName">The name of the parameter.</param>
