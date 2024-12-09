@@ -407,7 +407,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var connection = await OpenConnectionAsync();
 
-            var tzName = TimeZoneHelper.GetTimeZoneId(TimeZoneInfo.Local);
+            var tzName = TimeZoneHelper.GetTimeZoneId(DateTimeZone.Local);
 
             await using var cmd = connection.CreateCommand($"SELECT toDateTime('2015-04-21 14:59:44', '{tzName}')");
 
@@ -443,7 +443,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             await using var connection = await OpenConnectionAsync();
 
-            var tzName = TimeZoneHelper.GetTimeZoneId(TimeZoneInfo.Local);
+            var tzName = TimeZoneHelper.GetTimeZoneId(DateTimeZone.Local);
 
             await using var cmd = connection.CreateCommand($"SELECT cast('2015-04-21 14:59:44.123456789' AS DateTime64(9,'{tzName}'))");
 
@@ -453,13 +453,15 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(new DateTime(2015, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)), resultDateTime);
         }
 
+        // ...
+
         [Theory]
         [MemberData(nameof(ParameterModes))]
         public async Task ReadDateTime64ParameterScalar(ClickHouseParameterMode parameterMode)
         {
             await using var connection = await OpenConnectionAsync(parameterMode);
             var timeZone = connection.GetServerTimeZone();
-            var unixEpochOffset = timeZone.GetUtcOffset(DateTime.UnixEpoch);
+            var unixEpochOffset = timeZone.GetUtcOffset(Instant.FromDateTimeUtc(DateTime.UnixEpoch));
             var minDate = new DateTime(1900, 1, 1);
             var maxDate = new DateTime(2299, 12, 31, 23, 59, 59, 999);
 
@@ -471,22 +473,23 @@ namespace Octonica.ClickHouseClient.Tests
                 new DateTime(1931, 3, 5, 7, 9, 23).Add(TimeSpan.FromMilliseconds(123.45)),
                 new DateTime(1984, 4, 21, 14, 59, 44).Add(TimeSpan.FromMilliseconds(123.4567)),
                 new DateTime(2032, 3, 18, 12, 0, 59).Add(TimeSpan.FromMilliseconds(987.6543)),
+                new DateTime(1968, 04, 16, 0, 0, 0),
                 new DateTime(1970, 1, 1),
                 new DateTime(1970, 1, 1) + unixEpochOffset,
-                minDate + timeZone.GetUtcOffset(minDate),
-                maxDate + timeZone.GetUtcOffset(maxDate)
+                minDate + timeZone.GetUtcOffset(Instant.FromDateTimeUtc(minDate)),
+                maxDate + timeZone.GetUtcOffset(Instant.FromDateTimeUtc(maxDate))
             };
 
             await using var cmd = connection.CreateCommand("SELECT {v}");
-            var parameter = new ClickHouseParameter("v") {ClickHouseDbType = ClickHouseDbType.DateTime64};
+            var parameter = new ClickHouseParameter("v") { ClickHouseDbType = ClickHouseDbType.DateTime64 };
             cmd.Parameters.Add(parameter);
 
             for (int precision = 0; precision < 10; precision++)
             {
-                parameter.Precision = (byte) precision;
-                var div = TimeSpan.TicksPerSecond / (long) Math.Pow(10, precision);
+                parameter.Precision = (byte)precision;
+                var div = TimeSpan.TicksPerSecond / (long)Math.Pow(10, precision);
                 if (div == 0)
-                    div = -(long) Math.Pow(10, precision) / TimeSpan.TicksPerSecond;
+                    div = -(long)Math.Pow(10, precision) / TimeSpan.TicksPerSecond;
 
                 foreach (var value in values)
                 {
@@ -522,11 +525,11 @@ namespace Octonica.ClickHouseClient.Tests
             var value = valueShort.Add(TimeSpan.FromMilliseconds(123.4567));
 
             const string targetTzCode = "Asia/Magadan";
-            var targetTz = TimeZoneHelper.GetTimeZoneInfo(targetTzCode);
+            var targetTz = TimeZoneHelper.GetDateTimeZone(targetTzCode);
 
             await using var connection = await OpenConnectionAsync(parameterMode);
             await using var cmd = connection.CreateCommand($"SELECT toTimeZone({{d}}, '{targetTzCode}')");
-            var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TimeZoneHelper.GetTimeZoneInfo("Pacific/Niue"), Precision = 4};
+            var parameter = new ClickHouseParameter("d") {Value = value, TimeZone = TimeZoneHelper.GetDateTimeZone("Pacific/Niue"), Precision = 4};
             cmd.Parameters.Add(parameter);
             var deltaOffset = targetTz.GetUtcOffset(valueShort) - parameter.TimeZone.GetUtcOffset(valueShort);
 
@@ -1200,8 +1203,8 @@ namespace Octonica.ClickHouseClient.Tests
                     case 2:
                         Assert.Equal(2, value.Item1);
                         Assert.Equal("two", value.Item2);
-                        var tz = TimeZoneHelper.GetTimeZoneInfo("Asia/Yekaterinburg");
-                        dt = TimeZoneInfo.ConvertTime(new DateTime(2019, 12, 11, 16, 55, 54), tz, connection.GetServerTimeZone());
+                        var tz = TimeZoneHelper.GetDateTimeZone("Asia/Yekaterinburg");
+                        dt = DateTimeZone.ConvertTime(new DateTime(2019, 12, 11, 16, 55, 54), tz, connection.GetServerTimeZone());
                         Assert.Equal(dt, value.Item3);
                         break;
 
@@ -1256,7 +1259,7 @@ namespace Octonica.ClickHouseClient.Tests
                         Assert.Equal(2, value.number);
                         Assert.Equal("two", value.str);
                         dt = new DateTime(2019, 12, 11, 16, 55, 54);
-                        dt = TimeZoneInfo.ConvertTime(dt, TimeZoneHelper.GetTimeZoneInfo("Asia/Yekaterinburg"), connection.GetServerTimeZone());
+                        dt = DateTimeZone.ConvertTime(dt, TimeZoneHelper.GetDateTimeZone("Asia/Yekaterinburg"), connection.GetServerTimeZone());
                         Assert.Equal(dt, value.date);
                         break;
 

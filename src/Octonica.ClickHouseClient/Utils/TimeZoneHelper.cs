@@ -16,22 +16,23 @@
 #endregion
 
 using System;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Utils
 {
     internal static partial class TimeZoneHelper
     {
-        public static TimeZoneInfo GetTimeZoneInfo(string timeZone)
+        public static DateTimeZone GetDateTimeZone(string timeZone)
         {
-            TimeZoneInfo? timeZoneInfo = null;
-            GetTimeZoneInfoImpl(timeZone, ref timeZoneInfo);
-            if (timeZoneInfo == null)
-                throw new NotImplementedException($"Internal error. The method {nameof(GetTimeZoneInfoImpl)} is not implemented properly.");
+            DateTimeZone? DateTimeZone = null;
+            GetDateTimeZoneImpl(timeZone, ref DateTimeZone);
+            if (DateTimeZone == null)
+                throw new NotImplementedException($"Internal error. The method {nameof(GetDateTimeZoneImpl)} is not implemented properly.");
 
-            return timeZoneInfo;
+            return DateTimeZone;
         }
 
-        public static string GetTimeZoneId(TimeZoneInfo timeZone)
+        public static string GetTimeZoneId(DateTimeZone timeZone)
         {
             string? timeZoneCode = null;
             GetTimeZoneIdImpl(timeZone, ref timeZoneCode);
@@ -41,8 +42,8 @@ namespace Octonica.ClickHouseClient.Utils
             return timeZoneCode;
         }
 
-        static partial void GetTimeZoneInfoImpl(string timeZone, ref TimeZoneInfo? timeZoneInfo);
+        static partial void GetDateTimeZoneImpl(string timeZone, ref DateTimeZone? DateTimeZone);
 
-        static partial void GetTimeZoneIdImpl(TimeZoneInfo timeZoneInfo, ref string? timeZoneCode);
+        static partial void GetTimeZoneIdImpl(DateTimeZone DateTimeZone, ref string? timeZoneCode);
     }
 }

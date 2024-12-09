@@ -16,19 +16,20 @@
 #endregion
 
 using System;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class DateTimeTableColumn : IClickHouseTableColumn<DateTimeOffset>
     {
         private readonly ReadOnlyMemory<uint> _buffer;
-        private readonly TimeZoneInfo _timeZone;
+        private readonly DateTimeZone _timeZone;
 
         public int RowCount { get; }
 
         public DateTimeOffset DefaultValue => default;
 
-        public DateTimeTableColumn(ReadOnlyMemory<uint> buffer, TimeZoneInfo timeZone)
+        public DateTimeTableColumn(ReadOnlyMemory<uint> buffer, DateTimeZone timeZone)
         {
             _buffer = buffer;
             _timeZone = timeZone;
@@ -46,9 +47,7 @@ namespace Octonica.ClickHouseClient.Types
             if (seconds == 0)
                 return default;
 
-            var dateTime = DateTime.UnixEpoch.AddSeconds(seconds);
-            var offset = _timeZone.GetUtcOffset(dateTime);
-            return new DateTimeOffset(dateTime).ToOffset(offset);
+            return Instant.FromUnixTimeSeconds(seconds).InZone(_timeZone).ToDateTimeOffset();
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()

@@ -26,6 +26,7 @@ using System.Numerics;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -403,7 +404,7 @@ namespace Octonica.ClickHouseClient.Types
             return GetTypeInfo(typeName);
         }
 
-        internal static IntermediateClickHouseTypeInfo GetTypeFromValue(Type valueType, bool valueCanBeNull, TimeZoneInfo? timeZone)
+        internal static IntermediateClickHouseTypeInfo GetTypeFromValue(Type valueType, bool valueCanBeNull, DateTimeZone? timeZone)
         {
             if (valueType == typeof(string))
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.String, "String", valueCanBeNull, 0);
@@ -542,7 +543,7 @@ namespace Octonica.ClickHouseClient.Types
         }
 
         [return: NotNullIfNotNull("timeZone")]
-        private static string? GetTimeZoneCode(TimeZoneInfo? timeZone)
+        private static string? GetTimeZoneCode(DateTimeZone? timeZone)
         {
             if (timeZone == null)
                 return null;
