@@ -21,7 +21,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class ReinterpretedTableColumn<TFrom, TTo> : IClickHouseTableColumn<TTo>
+    internal sealed class ReinterpretedTableColumn<TFrom, TTo> : IClickHouseReinterpretedTableColumn<TTo>
     {
         private readonly IClickHouseTableColumn? _reinterpretationRoot;
         private readonly IClickHouseTableColumn<TFrom> _sourceColumn;
@@ -32,15 +32,13 @@ namespace Octonica.ClickHouseClient.Types
         public TTo DefaultValue { get; }
 
         public ReinterpretedTableColumn(IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
+            : this(null, sourceColumn, reinterpret)
         {
-            _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
-            _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
-            DefaultValue = _reinterpret(_sourceColumn.DefaultValue);
         }
 
-        public ReinterpretedTableColumn(IClickHouseTableColumn reinterpretationRoot, IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
+        public ReinterpretedTableColumn(IClickHouseTableColumn? reinterpretationRoot, IClickHouseTableColumn<TFrom> sourceColumn, Func<TFrom, TTo> reinterpret)
         {
-            _reinterpretationRoot = reinterpretationRoot ?? throw new ArgumentNullException(nameof(reinterpretationRoot));
+            _reinterpretationRoot = reinterpretationRoot;
             _sourceColumn = sourceColumn ?? throw new ArgumentNullException(nameof(sourceColumn));
             _reinterpret = reinterpret ?? throw new ArgumentNullException(nameof(reinterpret));
             DefaultValue = _reinterpret(_sourceColumn.DefaultValue);
@@ -77,16 +75,24 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            var sourceValue = ((IClickHouseTableColumn) _sourceColumn).GetValue(index);
-            if (sourceValue == DBNull.Value)
-                return sourceValue;
+            if (_sourceColumn.IsNull(index))
+                return DBNull.Value;
 
-            var reinterpreted = _reinterpret((TFrom) sourceValue);
-            return reinterpreted!;
+            var sourceValue = _sourceColumn.GetValue(index);
+            var reinterpreted = _reinterpret(sourceValue);
+            if (reinterpreted is null)
+                return DBNull.Value;
+
+            return reinterpreted;
+        }
+
+        public IClickHouseReinterpretedTableColumn<TResult> Chain<TResult>(Func<TTo, TResult> reinterpret)
+        {
+            return new ReinterpretedTableColumn<TFrom, TResult>(_reinterpretationRoot, _sourceColumn, FunctionHelper.Combine(_reinterpret, reinterpret));
         }
     }
 
-    internal sealed class ReinterpretedTableColumn<TValue> : IClickHouseTableColumn<TValue>
+    internal sealed class ReinterpretedTableColumn<TValue> : IClickHouseReinterpretedTableColumn<TValue>
     {
         private readonly IClickHouseTableColumn _reinterpretationRoot;
         private readonly IClickHouseTableColumn<TValue> _column;
@@ -131,6 +137,11 @@ namespace Octonica.ClickHouseClient.Types
             dispatchedValue = dispatcher.Dispatch(this);
             return true;
         }
+
+        public IClickHouseReinterpretedTableColumn<TResult> Chain<TResult>(Func<TValue, TResult> reinterpret)
+        {
+            return new ReinterpretedTableColumn<TValue, TResult>(_reinterpretationRoot, _column, reinterpret);
+        }
     }
 
     internal sealed class ReinterpretedTableColumn : IClickHouseTableColumn
@@ -138,7 +149,7 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn _column;
         private readonly Func<object, object> _convertValue;
 
-        public int RowCount => throw new NotImplementedException();
+        public int RowCount => _column.RowCount;
 
         public ReinterpretedTableColumn(IClickHouseTableColumn column, Func<object, object> convertValue)
         {

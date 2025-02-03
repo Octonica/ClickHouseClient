@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,8 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public string? Password { get; }
 
+        public string? QuotaKey { get; }
+
         private ClientHelloMessage(Builder builder)
         {
             ClientName = builder.ClientName ?? throw new ArgumentException("The name of the client can't be null.", nameof(ClientName));
@@ -43,6 +45,7 @@ namespace Octonica.ClickHouseClient.Protocol
             Database = builder.Database;
             User = builder.User ?? throw new ArgumentException("The name of the user is required.", nameof(User));
             Password = builder.Password;
+            QuotaKey = builder.QuotaKey;
         }
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
@@ -57,6 +60,11 @@ namespace Octonica.ClickHouseClient.Protocol
             writer.WriteString(Database ?? string.Empty);
             writer.WriteString(User);
             writer.WriteString(Password ?? string.Empty);
+        }
+
+        public void WriteAddendum(ClickHouseBinaryProtocolWriter writer)
+        {
+            writer.WriteString(QuotaKey ?? string.Empty);
         }
 
         internal class Builder
@@ -90,6 +98,11 @@ namespace Octonica.ClickHouseClient.Protocol
             /// Optional
             /// </summary>
             public string? Password { get; set; }
+
+            /// <summary>
+            /// Optional (addendum)
+            /// </summary>
+            public string? QuotaKey { get; set; }
 
             public ClientHelloMessage Build()
             {

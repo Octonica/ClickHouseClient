@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -472,6 +472,20 @@ namespace Octonica.ClickHouseClient
                 throw new ArgumentNullException(nameof(values));
 
             foreach (var parameter in values.Cast<ClickHouseParameter>())
+                Add(parameter);
+        }
+
+        /// <summary>
+        /// Adds the specified parameters to the collection.
+        /// </summary>
+        /// <param name="parameters">The set of parameters that should be added to this collection.</param>
+        /// <remarks>This operation is not atomic, it calls <see cref="Add(ClickHouseParameter)"/> for each parameter in <paramref name="parameters"/>.</remarks>
+        public void AddRange(IEnumerable<ClickHouseParameter> parameters)
+        {
+            if (parameters == null)
+                throw new ArgumentNullException(nameof(parameters));
+
+            foreach (var parameter in parameters)
                 Add(parameter);
         }
 

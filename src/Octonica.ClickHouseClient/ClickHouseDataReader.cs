@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2024 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ namespace Octonica.ClickHouseClient
         private ClickHouseTable _currentTable;
 
         private IClickHouseTableColumn[] _reinterpretedColumnsCache;
-        private ClickHouseColumnSettings?[]? _columnSettings;
+        private ClickHouseReaderColumnSettings[]? _columnSettings;
 
         /// <summary>
         /// Gets the current state of the reader.
@@ -139,10 +139,74 @@ namespace Octonica.ClickHouseClient
             if (State == ClickHouseDataReaderState.ProfileEvents)
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
 
-            if (_columnSettings == null)
-                _columnSettings = new ClickHouseColumnSettings?[_currentTable.Columns.Count];
+            IClickHouseColumnReinterpreter? reinterpreter = null;
+            if (columnSettings.ColumnType != null)
+                reinterpreter = ClickHouseColumnReinterpreter.Create(columnSettings.ColumnType);
 
-            _columnSettings[ordinal] = columnSettings;
+            var columnName = _currentTable.Header.Columns[ordinal].Name;
+            if (_columnSettings != null)
+            {
+                _columnSettings[ordinal] = _columnSettings[ordinal].WithColumnSettings(columnName, columnSettings, reinterpreter);
+            }
+            else
+            {
+                _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+                _columnSettings[ordinal] = new ClickHouseReaderColumnSettings(columnSettings, reinterpreter);
+            }
+        }
+
+        /// <summary>
+        /// Configures the reader to invoke an arbitrary type conversion callback function when reading a value of a column.
+        /// </summary>
+        /// <typeparam name="T">The type supported by ClickHouseDataReader. The column is expected to be convertible to this type.</typeparam>
+        /// <typeparam name="TResult">The type to which column values must be converted.</typeparam>
+        /// <param name="name">The name of the column.</param>
+        /// <param name="readAs">The callback function converting a value of type <typeparamref name="T"/> to type <typeparamref name="TResult"/>.</param>
+        /// <remarks>The callback function (<paramref name="readAs"/>) must never return <see langword="null"/> when its argument is not null.</remarks>
+        public void ConfigureColumnReader<T, TResult>(string name, Func<T, TResult>? readAs)
+        {
+            var index = GetOrdinal(name);
+            if (index < 0)
+                throw new ArgumentException($"A column with the name \"{name}\" not found.", nameof(name));
+
+            ConfigureColumnReader(index, readAs);
+        }
+
+        /// <summary>
+        /// Configures the reader to invoke an arbitrary type conversion callback function when reading a value of a column.
+        /// </summary>
+        /// <typeparam name="T">The type supported by ClickHouseDataReader. The column is expected to be convertible to this type.</typeparam>
+        /// <typeparam name="TResult">The type to which column values must be converted.</typeparam>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="readAs">The callback function converting a value of type <typeparamref name="T"/> to type <typeparamref name="TResult"/>.</param>
+        /// <remarks>The callback function (<paramref name="readAs"/>) must never return <see langword="null"/> when its argument is not null.</remarks>
+        public void ConfigureColumnReader<T, TResult>(int ordinal, Func<T, TResult>? readAs)
+        {
+            if (_rowIndex >= 0)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+
+            if (State == ClickHouseDataReaderState.ProfileEvents)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
+
+            if (readAs == null && _columnSettings == null)
+                return;
+
+            IClickHouseColumnReinterpreter? reinterpreter = null;
+            if (readAs != null)
+            {
+                if (typeof(T) == typeof(object))
+                    reinterpreter = new ClickHouseObjectColumnReinterpreter<TResult>((Func<object, TResult>)(object)readAs);
+                else
+                    reinterpreter = ClickHouseColumnReinterpreter.Create(readAs);
+
+                // Dry run. The interpreter could invoke the function 'readAs' and it could fail.
+                reinterpreter.TryReinterpret(_currentTable.Columns[ordinal]);
+            }
+
+            if (_columnSettings == null)
+                _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+
+            _columnSettings[ordinal] = _columnSettings[ordinal].WithUserDefinedReader(_currentTable.Header.Columns[ordinal].Name, reinterpreter);
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumnWriter
@@ -155,11 +219,25 @@ namespace Octonica.ClickHouseClient
             if (_rowIndex >= 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The reader can't be reconfigured during reading.");
 
-            if (_columnSettings == null)
-                _columnSettings = new ClickHouseColumnSettings?[_currentTable.Columns.Count];
+            IClickHouseColumnReinterpreter? reinterpreter = null;
+            if (columnSettings.ColumnType != null)
+                reinterpreter = ClickHouseColumnReinterpreter.Create(columnSettings.ColumnType);
 
-            for (int i = 0; i < _currentTable.Columns.Count; i++)
-                _columnSettings[i] = columnSettings;
+            if (_columnSettings == null)
+            {
+                var settings = new ClickHouseReaderColumnSettings(columnSettings, reinterpreter);
+                _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+                for (int i = 0; i < _columnSettings.Length; i++)
+                    _columnSettings[i] = settings;
+            }
+            else
+            {
+                var settingsCopy = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+                for (int i = 0; i < settingsCopy.Length; i++)
+                    settingsCopy[i] = _columnSettings[i].WithColumnSettings(_currentTable.Header.Columns[i].Name, columnSettings, reinterpreter);
+
+                _columnSettings = settingsCopy;
+            }
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.GetFieldTypeInfo
@@ -207,7 +285,8 @@ namespace Octonica.ClickHouseClient
             // GetValue should always return DBNull.Value instead of null.
             // So an actual field type should be unboxed from Nullable<T>.
 
-            var type = _columnSettings?[ordinal]?.ColumnType;
+            var reinterpreter = _columnSettings?[ordinal].Reinterpreter;
+            var type = reinterpreter?.ExternalConvertToType ?? reinterpreter?.BuiltInConvertToType;
             type ??= _currentTable.Header.Columns[ordinal].TypeInfo.GetFieldType();
             return Nullable.GetUnderlyingType(type) ?? type;
         }
@@ -642,7 +721,7 @@ namespace Octonica.ClickHouseClient
         {
             CheckRowIndex();
             var column = _currentTable.Columns[ordinal];
-            return column.IsNull(_rowIndex) ? DBNull.Value : column.GetValue(_rowIndex);
+            return column.GetValue(_rowIndex);
         }
 
         /// <summary>
@@ -657,10 +736,7 @@ namespace Octonica.ClickHouseClient
             for (int i = 0; i < count; i++)
             {
                 var column = _currentTable.Columns[i];
-                if (column.IsNull(_rowIndex))
-                    values[i] = DBNull.Value;
-                else
-                    values[i] = column.GetValue(_rowIndex);
+                values[i] = column.GetValue(_rowIndex);
             }
 
             return count;

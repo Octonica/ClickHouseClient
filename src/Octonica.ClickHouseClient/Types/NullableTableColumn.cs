@@ -306,6 +306,11 @@ namespace Octonica.ClickHouseClient.Types
 
             return _baseColumn.GetValue(index);
         }
+
+        public NullableStructTableColumn<TStruct> Unguard()
+        {
+            return new NullableStructTableColumn<TStruct>(_nullFlags, _baseColumn);
+        }
     }
 
     internal sealed class NullableObjTableColumn<TObj> : IClickHouseTableColumn<TObj?>
@@ -335,6 +340,30 @@ namespace Octonica.ClickHouseClient.Types
                 return null;
 
             return _baseColumn.GetValue(index);
+        }
+
+        public NullableObjTableColumn<TRes> ReinterpretAsObj<TRes>(Func<TObj, TRes> convert)
+            where TRes : class
+        {
+            IClickHouseTableColumn<TRes> updColumn;
+            if (_baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted)
+                updColumn = baseReinterpreted.Chain(convert);
+            else
+                updColumn = new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
+
+            return new NullableObjTableColumn<TRes>(_nullFlags, updColumn);
+        }
+
+        public NullableStructTableColumn<TRes> ReinterpretAsStruct<TRes>(Func<TObj, TRes> convert)
+            where TRes : struct
+        {
+            IClickHouseTableColumn<TRes> updColumn;
+            if (_baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted)
+                updColumn = baseReinterpreted.Chain(convert);
+            else
+                updColumn = new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
+
+            return new NullableStructTableColumn<TRes>(_nullFlags, updColumn);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()

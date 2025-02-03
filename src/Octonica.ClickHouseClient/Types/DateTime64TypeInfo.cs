@@ -320,8 +320,11 @@ namespace Octonica.ClickHouseClient.Types
                 if (ticks >= 0)
                     return ticks / scaleFactor;
 
-                var ticksDouble = ticks / (double)scaleFactor;
-                return (long)Math.Round(ticksDouble, MidpointRounding.ToNegativeInfinity);
+                var result = Math.DivRem(ticks, scaleFactor, out var rem);
+                if (rem != 0)
+                    --result;
+
+                return result;
             }
         }
 

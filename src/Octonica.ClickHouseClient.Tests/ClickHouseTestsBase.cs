@@ -75,17 +75,31 @@ namespace Octonica.ClickHouseClient.Tests
             return WithTemporaryTable(tableNameSuffix, columns, (cn, tableName, _) => runTest(cn, tableName), updateSettings);
         }
 
-        protected Task WithTemporaryTable(string tableNameSuffix, string columns, Func<ClickHouseConnection, string, CancellationToken, Task> runTest, Action<ClickHouseConnectionStringBuilder>? updateSettings = null, CancellationToken ct = default)
+        protected Task WithTemporaryTable(
+            string tableNameSuffix,
+            string columns,
+            Func<ClickHouseConnection, string, CancellationToken, Task> runTest,
+            Action<ClickHouseConnectionStringBuilder>? updateSettings = null,
+            Func<ClickHouseConnection, CancellationToken, Task>? afterOpen = null,
+            CancellationToken ct = default)
         {
-            return WithTemporaryTable(tableNameSuffix, tableName => $"CREATE TABLE {tableName}({columns}) ENGINE=Memory", runTest, updateSettings, ct);
+            return WithTemporaryTable(tableNameSuffix, tableName => $"CREATE TABLE {tableName}({columns}) ENGINE=Memory", runTest, updateSettings, afterOpen, ct);
         }
 
-        protected async Task WithTemporaryTable(string tableNameSuffix, Func<string, string> makeCreateTableQuery, Func<ClickHouseConnection, string, CancellationToken, Task> runTest, Action<ClickHouseConnectionStringBuilder>? updateSettings = null, CancellationToken ct = default)
+        protected async Task WithTemporaryTable(
+            string tableNameSuffix,
+            Func<string, string> makeCreateTableQuery, Func<ClickHouseConnection, string, CancellationToken, Task> runTest,
+            Action<ClickHouseConnectionStringBuilder>? updateSettings = null,
+            Func<ClickHouseConnection, CancellationToken, Task>? configure = null,
+            CancellationToken ct = default)
         {
             var tableName = GetTempTableName(tableNameSuffix);
             try
             {
                 await using var connection = await OpenConnectionAsync(updateSettings, ct);
+
+                if (configure != null)
+                    await configure(connection, ct);
 
                 var cmd = connection.CreateCommand($"DROP TABLE IF EXISTS {tableName}");
                 await cmd.ExecuteNonQueryAsync(ct);

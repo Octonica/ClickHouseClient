@@ -351,7 +351,7 @@ namespace Octonica.ClickHouseClient
                 return message;
             }
 
-            public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseColumnSettings?>? columnSettings, bool async, CancellationToken cancellationToken)
+            public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseReaderColumnSettings>? columnSettings, bool async, CancellationToken cancellationToken)
             {
                 var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
 
@@ -361,7 +361,7 @@ namespace Octonica.ClickHouseClient
                         ReadTable(
                             withDecompression,
                             (typeInfo, rowCount, mode) => typeInfo.CreateColumnReader(rowCount, mode),
-                            (columnInfo, reader, index) => ReadTableColumn(columnInfo, reader, columnSettings == null || columnSettings.Count <= index ? null : columnSettings[index]),
+                            (columnInfo, reader, index) => ReadTableColumn(columnInfo, reader, columnSettings == null || columnSettings.Count <= index ? default : columnSettings[index]),
                             async,
                             ct)
                 );
@@ -480,24 +480,27 @@ namespace Octonica.ClickHouseClient
                 return (columnInfos, columns, rowCount);                
             }
 
-            private static IClickHouseTableColumn ReadTableColumn(ColumnInfo columnInfo, IClickHouseColumnReader columnReader, ClickHouseColumnSettings? settings)
+            private static IClickHouseTableColumn ReadTableColumn(ColumnInfo columnInfo, IClickHouseColumnReader columnReader, ClickHouseReaderColumnSettings settings)
             {
-                var column = columnReader.EndRead(settings);
+                var column = columnReader.EndRead(settings.Column);
 
-                var typeDispatcher = settings?.GetColumnTypeDispatcher();
-                if (typeDispatcher != null)
+                var reinterpreter = settings.Reinterpreter;
+                if (reinterpreter != null)
                 {
-                    Debug.Assert(settings != null && settings.ColumnType != null);
-                    column = ReinterpretedTableColumn.GetReinterpetedTableColumn(column, typeDispatcher, CreateCastFunc(columnInfo, settings.ColumnType));
+                    var reinterpretedColumn = reinterpreter.TryReinterpret(column);
+                    if (reinterpretedColumn != null)
+                        return reinterpretedColumn;
+
+                    return new ReinterpretedTableColumn(column, CreateCastFunc(columnInfo, reinterpreter.BuiltInConvertToType, reinterpreter.ExternalConvertToType));
                 }
 
                 return column;
             }
 
-            private static Func<object, object> CreateCastFunc(ColumnInfo columnInfo, Type targetType)
+            private static Func<object, object> CreateCastFunc(ColumnInfo columnInfo, Type? builtInConvertToType, Type? externalConvertToType)
             {
-                if (targetType == typeof(object))
-                    return value => value; // This is fine, everything is object
+                if ((externalConvertToType ?? builtInConvertToType) == typeof(object))
+                    return value => value; // This is fine, everything is an object
 
                 return CastFailed;
 
@@ -506,9 +509,26 @@ namespace Octonica.ClickHouseClient
                     if (value == DBNull.Value)
                         return value;
 
+                    if (builtInConvertToType != null)
+                    {
+                        if (externalConvertToType == null)
+                        {
+                            throw new ClickHouseException(
+                                ClickHouseErrorCodes.ColumnTypeMismatch,
+                                $"A value from the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\" can't be converted to type \"{builtInConvertToType}\". "
+                                + "This type is defined in the column settings.");
+                        }
+
+                        throw new ClickHouseException(
+                            ClickHouseErrorCodes.ColumnTypeMismatch,
+                            $"A value from the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\" can't be converted to type \"{builtInConvertToType}\". "
+                            + $"This type is implicitly defined by the callback function for a value conversion. The callback function returns a value of type \"{externalConvertToType}\".");
+                    }
+
                     throw new ClickHouseException(
-                        ClickHouseErrorCodes.ColumnTypeMismatch,
-                        $"A value from the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\" can't be converted to type \"{targetType}\". This type is defined in column settings.");
+                        ClickHouseErrorCodes.InternalError,
+                        $"ClickHouseClient didn't find a suitable type conversion for the column \"{columnInfo.Name}\" of type \"{columnInfo.TypeInfo.GetFieldType()}\". "
+                        + "This is an internal error. Please, report a bug if you see this message.");
                 }
             }
 

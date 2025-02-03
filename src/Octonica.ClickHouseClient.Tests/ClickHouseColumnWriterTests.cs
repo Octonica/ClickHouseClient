@@ -1571,6 +1571,81 @@ namespace Octonica.ClickHouseClient.Tests
             }
         }
 
+        [Fact]
+        public Task InsertEmptyArrayLowCardinality()
+        {
+            return WithTemporaryTable("lc_array", "id Int32, strings Array(LowCardinality(String)), tuples Array(Array(Tuple(LowCardinality(String), LowCardinality(String))))", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
+            {
+                var columns = new Dictionary<string, object?>
+                {
+                    { "id", new[] { 123 } },
+                    { "strings", new[] { Array.Empty<string>() } },
+                    { "tuples", new[] { new[] { Array.Empty<(string, string)>(), Array.Empty<(string, string)>() } } }
+                };
+
+                await using (var writer = await cn.CreateColumnWriterAsync($"insert into {tableName} values", ct))
+                {
+                    await writer.WriteTableAsync(columns, 1, ct);
+                }
+
+                await using var reader = await cn.CreateCommand($"select * from {tableName}").ExecuteReaderAsync(ct);
+
+                Assert.True(await reader.ReadAsync(ct));
+                var obj1 = reader.GetValue(0);
+                var obj2 = reader.GetValue(1);
+                var obj3 = reader.GetValue(2);
+
+                Assert.Equal(123, obj1);
+                Assert.Equal(Array.Empty<string>(), obj2);
+                var arr3 = Assert.IsType<Tuple<string, string>[][]>(obj3);
+                Assert.Equal(2, arr3.Length);
+                Assert.Equal(Array.Empty<Tuple<string, string>>(), arr3[0]);
+                Assert.Equal(Array.Empty<Tuple<string, string>>(), arr3[1]);
+
+                Assert.False(await reader.ReadAsync(ct));
+            }
+        }
+
+        [Fact]
+        public Task InsertVariant()
+        {
+            return WithTemporaryTable("variant", "id Int32, v Variant(UInt64, LowCardinality(String), Array(Int32))", Test, afterOpen: (cn, ct) => cn.CreateCommand("SET allow_experimental_variant_type = 1").ExecuteNonQueryAsync(ct));
+
+            static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
+            {
+                var columns = new Dictionary<string, object?>
+                {
+                    ["id"] = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 },
+                    ["v"] = new object?[] { DBNull.Value, "foo", "bar", Array.Empty<int>(), "foo", null, "bar", new[] { 1, 2, 3, 4, 5 }, 42ul }
+                };
+
+                await using (var writer = await cn.CreateColumnWriterAsync($"INSERT INTO {tableName} VALUES", ct))
+                    await writer.WriteTableAsync(columns, 9, ct);
+
+                var cmd = cn.CreateCommand();
+                cmd.CommandText = $"SELECT id, v FROM {tableName}";
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+                var expected = (object?[])columns["v"]!;
+                int count = 0;
+                while(await reader.ReadAsync(ct))
+                {
+                    var id = reader.GetInt32(0);
+                    var val = reader.GetValue(1);
+
+                    bool isNull = (expected[id - 1] ?? DBNull.Value) == DBNull.Value;
+                    Assert.Equal(isNull, reader.IsDBNull(1));
+
+                    Assert.Equal(expected[id - 1] ?? DBNull.Value, val);
+                    ++count;
+                }
+
+                Assert.Equal(9, count);
+            }
+        }
+
         protected override string GetTempTableName(string tableNameSuffix)
         {
             return $"{TestTableName}_{tableNameSuffix}";
