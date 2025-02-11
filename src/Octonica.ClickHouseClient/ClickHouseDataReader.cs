@@ -692,8 +692,8 @@ namespace Octonica.ClickHouseClient
         {
             CheckRowIndex();
             var column = _currentTable.Columns[ordinal];
-            if (column.IsNull(_rowIndex))
-                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The value is null.");
+            //if (column.IsNull(_rowIndex))
+            //    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The value is null.");
 
             if (column is IClickHouseTableColumn<T> typedColumn)
                 return typedColumn.GetValue(_rowIndex);
