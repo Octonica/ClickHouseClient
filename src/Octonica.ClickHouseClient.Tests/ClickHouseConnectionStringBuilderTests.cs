@@ -39,7 +39,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(42, settings.ReadWriteTimeout);
             Assert.Equal("ClickHouse.NetCore Tests", settings.ClientName);
             Assert.Equal(new ClickHouseVersion(3, 2, 1), settings.ClientVersion);
-            Assert.Equal(false, settings.Compress);
+            Assert.False(settings.Compress);
         }
 
         [Fact]
@@ -56,7 +56,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.False(builder.Remove("Port"));
             
             Assert.True(builder.Remove("ClientName"));
-            Assert.Equal(1, builder.Count);
+            Assert.Single(builder);
             Assert.Equal(ClickHouseConnectionStringBuilder.DefaultClientName, builder.ClientName);
         }
 

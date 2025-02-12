@@ -254,7 +254,7 @@ namespace Octonica.ClickHouseClient.Tests
                         continue;
 
                     default:
-                        Assert.True(false, $"Unexpected state: {reader.State}.");
+                        Assert.Fail($"Unexpected state: {reader.State}.");
                         break;
                 }
 
@@ -368,8 +368,10 @@ namespace Octonica.ClickHouseClient.Tests
             long selectedRows = 0;
             await using var reader = await cmd.ExecuteReaderAsync();
             reader.ConfigureColumn("d", new ClickHouseColumnSettings(columnType: typeof(DateTime)));
-
-            var startDate = new DateTimeOffset(2000, 1, 1, 0, 0, 0, -cn.GetServerTimeZone().GetUtcOffset(new DateTime(2000, 1, 1)));
+            
+            // create NodaTime instant for 2000-01-01 00:00:00
+            NodaTime.Instant instant = NodaTime.Instant.FromDateTimeUtc(new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            var startDate = new DateTimeOffset(instant.ToDateTimeUtc(), TimeSpan.Zero);
 
             while(true)
             {
@@ -411,7 +413,7 @@ namespace Octonica.ClickHouseClient.Tests
                             selectedRows = value;
                             break;
                         default:
-                            Assert.True(false, $"Unexpected event type: {type}");
+                            Assert.Fail($"Unexpected event type: {type}");
                             continue;
                     }
                 }

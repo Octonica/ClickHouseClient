@@ -76,7 +76,7 @@ namespace Octonica.ClickHouseClient.Tests
                             Assert.Equal(-999999.99999m, num);
                             break;
                         default:
-                            Assert.False(true, $"Unexpected id: {id}");
+                            Assert.Fail($"Unexpected id: {id}");
                             break;
                     }
 
@@ -95,7 +95,7 @@ namespace Octonica.ClickHouseClient.Tests
             var rangeStart = _tableFixture.ReserveRange(10_000);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
-                var columns = new Dictionary<string, object>
+                var columns = new Dictionary<string, object?>
                 {
                     ["id"] = Enumerable.Range(rangeStart, int.MaxValue - rangeStart),
                     ["str"] = Enumerable.Range(0, int.MaxValue).Select(i => i % 3 == 0 ? i % 5 == 0 ? "FizzBuzz" : "Fizz" : i % 5 == 0 ? "Buzz" : i.ToString())
@@ -205,7 +205,7 @@ namespace Octonica.ClickHouseClient.Tests
             var rangeStart = _tableFixture.ReserveRange(10_000);
             await using (var writer = await con.CreateColumnWriterAsync($"INSERT INTO {TestTableName} VALUES", CancellationToken.None))
             {
-                writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.UTF7));
+                writer.ConfigureColumn("str", new ClickHouseColumnSettings(Encoding.UTF8));
                 var columns = new object?[writer.FieldCount];
                 columns[writer.GetOrdinal("id")] = Enumerable.Range(rangeStart, int.MaxValue - rangeStart);
                 columns[writer.GetOrdinal("str")] = values;
@@ -1233,7 +1233,7 @@ namespace Octonica.ClickHouseClient.Tests
                             expected = map4.Select(t => new KeyValuePair<string, int>(t.key, t.value)).ToArray();
                             break;
                         default:
-                            Assert.True(false, "Too many rows.");
+                            Assert.Fail("Too many rows.");
                             throw new InvalidOperationException();
                     }
 

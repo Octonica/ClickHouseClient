@@ -462,7 +462,7 @@ namespace Octonica.ClickHouseClient.Tests
                 var expectedUser = users.Single(u => u.id == userId).name;
                 Assert.Equal(expectedUser, user);
 
-                var expectedIp = addr[expectedId].ip == null ? null : IPAddress.Parse(addr[expectedId].ip).MapToIPv6();
+                var expectedIp = addr[expectedId].ip == null ? null : IPAddress.Parse(addr[expectedId]!.ip!).MapToIPv6();
                 Assert.Equal(expectedIp, ip);
 
                 if (++expectedId % 7 == 0)

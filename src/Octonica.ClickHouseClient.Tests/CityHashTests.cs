@@ -63,6 +63,9 @@ namespace Octonica.ClickHouseClient.Tests
 
         void Test(int index, int offset, int len)
         {
+            if(data == null)
+                throw new InvalidOperationException("data is not initialized");
+            
             var seq = new ReadOnlySequence<byte>(data, offset, len);
 
             UInt128 u = CityHash.CityHash128(seq);

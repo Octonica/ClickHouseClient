@@ -23,6 +23,7 @@ using System.Linq.Expressions;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using NodaTime;
 using Octonica.ClickHouseClient.Utils;
 using Xunit;
 
@@ -63,7 +64,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(7, p2.Scale);
             Assert.Equal(ClickHouseParameterMode.Interpolate, p2.ParameterMode);
 
-            p2.TimeZone = DateTimeZone.Local;
+            p2.TimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault();
             p2.Size = 35;
             p2.ArrayRank = 3;
             p2.StringEncoding = Encoding.ASCII;
@@ -77,7 +78,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Same(collection, p2.Collection);
 
             AssertParametersEqual(p2, p3);
-            Assert.Equal(DateTimeZone.Local, p3.TimeZone);
+            Assert.Equal(DateTimeZoneProviders.Tzdb.GetSystemDefault(), p3.TimeZone);
             Assert.Equal(35, p3.Size);
             Assert.Equal(3, p3.ArrayRank);
             Assert.Equal(Encoding.ASCII, p3.StringEncoding);
