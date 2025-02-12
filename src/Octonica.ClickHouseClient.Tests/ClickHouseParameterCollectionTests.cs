@@ -105,13 +105,13 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Same(parameters[2], collection[1]);
 
             Assert.True(collection.Remove("p3", out removedParameter));
-            Assert.Equal(1, collection.Count);
+            Assert.Single(collection);
             Assert.Null(parameters[2].Collection);
             Assert.Same(parameters[2], removedParameter);
             Assert.Same(collection[0], parameters[1]);
 
             collection.RemoveAt("p2");
-            Assert.Equal(0, collection.Count);
+            Assert.Empty(collection);
             Assert.Null(parameters[1].Collection);
 
             collection.AddRange(parameters.Reverse().ToArray());
@@ -130,7 +130,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(2, collection.Count);
 
             Assert.True(collection.Remove(parameters[1]));
-            Assert.Equal(1, collection.Count);
+            Assert.Single(collection);
             Assert.Null(parameters[1].Collection);
             Assert.Same(collection[0], parameters[0]);
         }
@@ -141,7 +141,7 @@ namespace Octonica.ClickHouseClient.Tests
             var collection = new ClickHouseParameterCollection();
 
             collection.Insert(0, (object) new ClickHouseParameter("p1"));
-            Assert.Equal(1, collection.Count);
+            Assert.Single(collection);
             Assert.Equal("p1", collection[0].ParameterName);
             Assert.Same(collection, collection[0].Collection);
 

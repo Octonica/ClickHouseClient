@@ -31,7 +31,7 @@ namespace Octonica.ClickHouseClient.Tests
         [InlineData("Nullable ( DateTime( 'Asia/Yekaterinburg' ) )", "DateTime('Asia/Yekaterinburg')")]
         public void NullableGenericArguments(string typeName, string baseTypeName)
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
             
             Assert.Equal(1, typeInfo.GenericArgumentsCount);
             Assert.Equal(1, typeInfo.TypeArgumentsCount);
@@ -45,7 +45,7 @@ namespace Octonica.ClickHouseClient.Tests
         [InlineData("LowCardinality( Decimal ( 28, 10 ))", "Decimal(28, 10)")]
         public void LowCardinalityGenericArguments(string typeName, string baseTypeName)
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
             Assert.Equal(1, typeInfo.GenericArgumentsCount);
             Assert.Equal(1, typeInfo.TypeArgumentsCount);
@@ -62,7 +62,7 @@ namespace Octonica.ClickHouseClient.Tests
             for (int i = 1; i <= typeNames.Length; i++)
             {
                 var typeName = "Tuple(" + string.Join(',', typeNames.Take(i)) + ')';
-                var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+                var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
                 Assert.Equal(i, typeInfo.GenericArgumentsCount);
                 Assert.Equal(i, typeInfo.TypeArgumentsCount);
@@ -84,7 +84,7 @@ namespace Octonica.ClickHouseClient.Tests
         [InlineData("Array(Array(Nothing))", "Array(Nothing)", "Nothing")]
         public void ArrayGenericArguments(string typeName, string baseTypeName, string? baseBaseTypeName)
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
             Assert.Equal(1, typeInfo.GenericArgumentsCount);
             Assert.Equal(1, typeInfo.TypeArgumentsCount);
@@ -114,7 +114,7 @@ namespace Octonica.ClickHouseClient.Tests
         [InlineData("Decimal(35, 10)", "Decimal", 35, 10)]
         public void DecimalTypeArguments(string typeName, string expectedTypeName, int firstArgument, int? secondArgument)
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
             int expectedCount = 1 + (secondArgument == null ? 0 : 1);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -130,7 +130,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void DateTimeTypeArguments()
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo("DateTime('Asia/Macau')");
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("DateTime('Asia/Macau')");
 
             Assert.Equal("DateTime", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -138,7 +138,7 @@ namespace Octonica.ClickHouseClient.Tests
 
             Assert.Equal("Asia/Macau", typeInfo.GetTypeArgument(0));
 
-            typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo("DateTime");
+            typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("DateTime");
 
             Assert.Equal("DateTime", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -148,7 +148,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void DateTime64TypeArguments()
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo("DateTime64(3, 'Africa/Addis_Ababa')");
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("DateTime64(3, 'Africa/Addis_Ababa')");
 
             Assert.Equal("DateTime64", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -157,7 +157,7 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(3, typeInfo.GetTypeArgument(0));
             Assert.Equal("Africa/Addis_Ababa", typeInfo.GetTypeArgument(1));
 
-            typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo("DateTime64(5)");
+            typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("DateTime64(5)");
 
             Assert.Equal("DateTime64", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -174,7 +174,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             Assert.Equal(expectedKeys.Length, expectedValues.Length);
 
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
             Assert.Equal("Enum8", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -197,7 +197,7 @@ namespace Octonica.ClickHouseClient.Tests
         {
             Assert.Equal(expectedKeys.Length, expectedValues.Length);
 
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
             Assert.Equal("Enum16", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -215,7 +215,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void FixedStringTypeArguments()
         {
-            var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo("FixedString(42)");
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("FixedString(42)");
 
             Assert.Equal("FixedString", typeInfo.TypeName);
             Assert.Equal(0, typeInfo.GenericArgumentsCount);
@@ -246,11 +246,11 @@ namespace Octonica.ClickHouseClient.Tests
             {
                 var tupleItems = Enumerable.Range(0, i).Select(j => itemNames[j].Value + typeNames[j]);
                 var typeName = "Tuple(" + string.Join(',',  tupleItems) + ')';
-                var typeInfo = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeName);
+                var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeName);
 
                 ValidateTypeInfo(typeInfo, i);
 
-                var typeInfoCopy = DefaultTypeInfoProvider.Instance.GetTypeInfo(typeInfo.ComplexTypeName);
+                var typeInfoCopy = ClickHouseTypeInfoProvider.Instance.GetTypeInfo(typeInfo.ComplexTypeName);
                 ValidateTypeInfo(typeInfoCopy, i);
             }
 
