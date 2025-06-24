@@ -50,6 +50,8 @@ namespace Octonica.ClickHouseClient
         private int? _forcedArrayRank;
         private IntermediateClickHouseTypeInfo? _valueTypeInfo;
         private string? _sourceColumn;
+        private string v;
+
         internal string Id { get; private set; }
 
         /// <summary>
@@ -296,13 +298,26 @@ namespace Octonica.ClickHouseClient
         /// Initializes a new instance of <see cref="ClickHouseParameter"/> with the specified name.
         /// </summary>
         /// <param name="parameterName">The name of the parameter.</param>
-        public ClickHouseParameter(string parameterName)
+        /// <param name="content"></param>
+        public ClickHouseParameter(string parameterName, string content)
         {
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
             Id = GetId(parameterName);
             _parameterName = parameterName;
+            v = content;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ClickHouseParameter"/> class with a default parameter name and the specified value.
+        /// </summary>
+        /// <param name="v">The value of the parameter.</param>
+        public ClickHouseParameter(string v)
+        {
+            _parameterName = "parameter";
+            Id = GetId(_parameterName);
+            this.v = v;
         }
 
         /// <inheritdoc/>
