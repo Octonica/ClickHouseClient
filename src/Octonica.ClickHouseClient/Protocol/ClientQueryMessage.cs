@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2025 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,9 +27,7 @@ namespace Octonica.ClickHouseClient.Protocol
         
         public QueryKind QueryKind { get; }
 
-        public string? InitialUser { get; }
-
-        public string? InitialQueryId { get; }
+        public string? QueryId { get; }
 
         public string RemoteAddress { get; }
 
@@ -53,8 +51,7 @@ namespace Octonica.ClickHouseClient.Protocol
         private ClientQueryMessage(Builder builder)
         {
             QueryKind = builder.QueryKind ?? throw new ArgumentException("The kind of the query is required.", nameof(QueryKind));
-            InitialUser = builder.InitialUser;
-            InitialQueryId = builder.InitialQueryId;
+            QueryId = string.IsNullOrEmpty(builder.QueryId) ? null : builder.QueryId;
             RemoteAddress = builder.RemoteAddress ?? throw new ArgumentException("The remote address is required.", nameof(RemoteAddress));
             Host = builder.Host ?? throw new ArgumentException("The name of the host is required.", nameof(Host));
             ClientName = builder.ClientName ?? throw new ArgumentException("The name of the client is required.", nameof(ClientName));
@@ -69,7 +66,7 @@ namespace Octonica.ClickHouseClient.Protocol
         public void Write(ClickHouseBinaryProtocolWriter writer)
         {
             writer.Write7BitInt32((int) MessageCode);
-            writer.WriteString(string.Empty);
+            writer.WriteString(QueryId ?? string.Empty);
             switch (QueryKind)
             {
                 case QueryKind.NoQuery:
@@ -78,8 +75,8 @@ namespace Octonica.ClickHouseClient.Protocol
                 case QueryKind.InitialQuery:
                     writer.Write7BitInt32((int) QueryKind);
 
-                    writer.WriteString(InitialUser?? string.Empty); //initial user
-                    writer.WriteString(InitialQueryId?? string.Empty); //initial query id
+                    writer.WriteString(string.Empty); //initial user
+                    writer.WriteString(string.Empty); //initial query id
                     writer.WriteString(RemoteAddress); //initial IP address
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInitialQueryStartTime)
@@ -204,12 +201,7 @@ namespace Octonica.ClickHouseClient.Protocol
             /// <summary>
             /// Optional
             /// </summary>
-            public string? InitialUser { get; set; }
-
-            /// <summary>
-            /// Optional
-            /// </summary>
-            public string? InitialQueryId { get; set; }
+            public string? QueryId { get; set; }
 
             /// <summary>
             /// Required

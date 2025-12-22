@@ -617,5 +617,37 @@ namespace Octonica.ClickHouseClient.Tests
                 await cmd.ExecuteNonQueryAsync();
             }
         }
+
+        [Fact]
+        public async Task WithQueryId()
+        {
+            await using var connection = await OpenConnectionAsync();
+
+            var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT * FROM system.processes WHERE query_id = {qid}";
+            cmd.QueryId = "ABSOLUTELY NOT a UUID";
+            cmd.Parameters.AddWithValue("qid", cmd.QueryId);
+
+            await using var reader = cmd.ExecuteReader();
+            Assert.True(await reader.ReadAsync());
+
+            var isInitialIdx = reader.GetOrdinal("is_initial_query");
+            Assert.True(isInitialIdx >= 0);
+            var queryIdIdx = reader.GetOrdinal("query_id");
+            Assert.True(queryIdIdx >= 0);
+            var initialQueryIdIdx = reader.GetOrdinal("initial_query_id");
+            Assert.True(initialQueryIdIdx >= 0);
+
+            bool isInitialQuery = reader.GetBoolean(isInitialIdx);
+            Assert.True(isInitialQuery);
+
+            var queryId = reader.GetString(queryIdIdx);
+            var initialQueryId = reader.GetString(initialQueryIdIdx);
+
+            Assert.Equal(queryId, initialQueryId);
+            Assert.Equal(queryId, cmd.QueryId);
+
+            Assert.False(await reader.ReadAsync());
+        }
     }
 }
