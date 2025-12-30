@@ -27,15 +27,15 @@ namespace Octonica.ClickHouseClient.Utils
     partial class TimeZoneHelper
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static partial void GetTimeZoneInfoImpl(string timeZone, ref TimeZoneInfo? timeZoneInfo)
+        static partial void GetDateTimeZoneImpl(string timeZone, ref DateTimeZone? DateTimeZone)
         {
-            timeZoneInfo = TZConvert.GetTimeZoneInfo(timeZone);
+            DateTimeZone = TZConvert.GetDateTimeZone(timeZone);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static partial void GetTimeZoneIdImpl(TimeZoneInfo timeZoneInfo, ref string? timeZoneCode)
+        static partial void GetTimeZoneIdImpl(DateTimeZone DateTimeZone, ref string? timeZoneCode)
         {
-            timeZoneCode = timeZoneInfo.Id;
+            timeZoneCode = DateTimeZone.Id;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 timeZoneCode = TZConvert.WindowsToIana(timeZoneCode);
         }

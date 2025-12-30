@@ -29,7 +29,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public void GetColumnIndex()
         {
-            var type = DefaultTypeInfoProvider.Instance.GetTypeInfo("Int32");
+            var type = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("Int32");
             var colInfo = new List<ColumnInfo> {new ColumnInfo("COL", type), new ColumnInfo("col", type), new ColumnInfo("another_col", type)}.AsReadOnly();
 
             var idx = CommonUtils.GetColumnIndex(colInfo, "COL");

@@ -28,6 +28,7 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient
 {
@@ -38,22 +39,18 @@ namespace Octonica.ClickHouseClient
     {
         // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
         private static readonly Regex ParameterNameRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*$");
-
         private string _parameterName;
-
         private object? _value;
         private int _size;
-        private TimeZoneInfo? _timeZone;
-
+        private DateTimeZone? _timeZone;
         private bool? _forcedNullable;
         private ClickHouseDbType? _forcedType;
         private byte? _forcedScale;
         private byte? _forcedPrecision;
         private int? _forcedArrayRank;
-
         private IntermediateClickHouseTypeInfo? _valueTypeInfo;
-
         private string? _sourceColumn;
+        private string v;
 
         internal string Id { get; private set; }
 
@@ -225,7 +222,7 @@ namespace Octonica.ClickHouseClient
         /// <see cref="ClickHouseClient.ClickHouseDbType.DateTimeOffset"/>, <see cref="ClickHouseClient.ClickHouseDbType.DateTime2"/>
         /// and <see cref="ClickHouseClient.ClickHouseDbType.DateTime64"/>).
         /// </summary>
-        public TimeZoneInfo? TimeZone
+        public DateTimeZone? TimeZone
         {
             get => _timeZone;
             set
@@ -301,13 +298,26 @@ namespace Octonica.ClickHouseClient
         /// Initializes a new instance of <see cref="ClickHouseParameter"/> with the specified name.
         /// </summary>
         /// <param name="parameterName">The name of the parameter.</param>
-        public ClickHouseParameter(string parameterName)
+        /// <param name="content"></param>
+        public ClickHouseParameter(string parameterName, string content)
         {
             if (parameterName == null)
                 throw new ArgumentNullException(nameof(parameterName));
 
             Id = GetId(parameterName);
             _parameterName = parameterName;
+            v = content;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ClickHouseParameter"/> class with a default parameter name and the specified value.
+        /// </summary>
+        /// <param name="v">The value of the parameter.</param>
+        public ClickHouseParameter(string v)
+        {
+            _parameterName = "parameter";
+            Id = GetId(_parameterName);
+            this.v = v;
         }
 
         /// <inheritdoc/>
@@ -587,7 +597,7 @@ namespace Octonica.ClickHouseClient
 
             public byte? Scale => _parameter._forcedScale;
 
-            public TimeZoneInfo? TimeZone => _parameter.TimeZone;
+            public DateTimeZone? TimeZone => _parameter.TimeZone;
 
             public int? ArrayRank => _parameter._forcedArrayRank;
 

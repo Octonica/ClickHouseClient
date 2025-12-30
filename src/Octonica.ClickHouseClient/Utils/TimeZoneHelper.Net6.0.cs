@@ -17,30 +17,22 @@
 
 #if NET6_0_OR_GREATER
 
-using System;
 using System.Runtime.CompilerServices;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Utils
 {
     partial class TimeZoneHelper
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static partial void GetTimeZoneInfoImpl(string timeZone, ref TimeZoneInfo? timeZoneInfo)
+        static partial void GetDateTimeZoneImpl(string timeZone, ref DateTimeZone? DateTimeZone)
         {
-            timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            DateTimeZone = DateTimeZoneProviders.Tzdb[timeZone];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static partial void GetTimeZoneIdImpl(TimeZoneInfo timeZoneInfo, ref string? timeZoneCode)
+        static partial void GetTimeZoneIdImpl(DateTimeZone DateTimeZone, ref string? timeZoneCode)
         {
-            if (timeZoneInfo.HasIanaId)
-            {
-                timeZoneCode = timeZoneInfo.Id;
-            }
-            else if (!TimeZoneInfo.TryConvertWindowsIdToIanaId(timeZoneInfo.Id, out timeZoneCode))
-            {
-                throw new TimeZoneNotFoundException($"The IANA time zone identifier for the time zone '{timeZoneInfo.Id}' was not found.");
-            }
+            timeZoneCode = DateTimeZone.Id;
         }
     }
 }

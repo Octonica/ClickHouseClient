@@ -32,6 +32,7 @@ using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient
 {
@@ -439,14 +440,14 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <returns>The default timezone of the ClickHouse server.</returns>
         /// <exception cref="ClickHouseException">Throws <see cref="ClickHouseException"/> if the connection is not open.</exception>
-        public TimeZoneInfo GetServerTimeZone()
+        public DateTimeZone GetServerTimeZone()
         {
             var connectionState = _connectionState;
             var serverInfo = connectionState.TcpClient?.ServerInfo;
             if (serverInfo == null || connectionState.State != ConnectionState.Open)
                 throw new ClickHouseException(ClickHouseErrorCodes.ConnectionClosed, "The connection is closed.");
 
-            return TimeZoneHelper.GetTimeZoneInfo(serverInfo.Timezone);
+            return TimeZoneHelper.GetDateTimeZone(serverInfo.Timezone);
         }
 
         /// <summary>

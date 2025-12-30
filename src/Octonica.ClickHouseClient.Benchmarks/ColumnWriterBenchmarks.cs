@@ -25,12 +25,12 @@ namespace Octonica.ClickHouseClient.Benchmarks
 {
     public class ColumnWriterBenchmarks
     {
-        private ClickHouseConnectionSettings _connectionSettings;
+        private ClickHouseConnectionSettings? _connectionSettings;
 
-        private List<Guid> _id;
-        private List<string?> _str;
-        private List<DateTime> _dt;
-        private List<decimal> _val;
+        private List<Guid>? _id;
+        private List<string?>? _str;
+        private List<DateTime>? _dt;
+        private List<decimal>? _val;
 
         [Params(10_000, 50_000)]
         public int Rows;
@@ -76,7 +76,7 @@ namespace Octonica.ClickHouseClient.Benchmarks
         [Benchmark]
         public async Task WriteBatсhes()
         {
-            await using var connection = new ClickHouseConnection(_connectionSettings);
+            await using var connection = new ClickHouseConnection(_connectionSettings!);
             await connection.OpenAsync();
 
             await using var writer = connection.CreateColumnWriter("INSERT INTO ColumnWriterInsertBenchmarks VALUES");
@@ -102,10 +102,16 @@ namespace Octonica.ClickHouseClient.Benchmarks
                 var len = Math.Min(BatchSize, Rows - i);
                 for (int j = 0; j < len; j++)
                 {
+                    if(_id != null && _id[i + j] != Guid.Empty
+                    && _str != null && _str[i + j] != null
+                    && _dt != null && _dt[i + j] != DateTime.MinValue
+                    && _val != null && _val[i + j] != 0)
+                    {
                     id.Add(_id[i + j]);
                     str.Add(_str[i + j]);
                     dt.Add(_dt[i + j]);
                     val.Add(_val[i + j]);
+                    }
                 }
 
                 await writer.WriteTableAsync(columns, len, CancellationToken.None);

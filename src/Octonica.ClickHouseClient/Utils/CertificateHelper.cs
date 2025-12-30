@@ -32,7 +32,8 @@ namespace Octonica.ClickHouseClient.Utils
                     ImportPemCertificates(filePath, collection);
                     break;
                 default:
-                    collection.Import(filePath);
+                    var cert = X509CertificateLoader.LoadCertificateFromFile(filePath);
+                    collection.Add(cert);
                     break;
             }
 

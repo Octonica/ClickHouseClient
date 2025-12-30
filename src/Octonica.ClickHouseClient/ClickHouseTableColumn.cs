@@ -18,6 +18,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient
 {
@@ -67,7 +68,7 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets or sets the time zone. This value is applied to ClickHouse types DateTime and DateTime64.
         /// </summary>
-        public TimeZoneInfo? TimeZone { get; set; }
+        public DateTimeZone? TimeZone { get; set; }
 
         /// <summary>
         /// Gets or sets the rank (a number of dimensions) of an array.

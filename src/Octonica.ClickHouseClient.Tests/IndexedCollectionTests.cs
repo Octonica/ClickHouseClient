@@ -184,7 +184,7 @@ namespace Octonica.ClickHouseClient.Tests
                                 break;
 
                             default:
-                                Assert.True(false, $"Unknown method: {removeMethod}");
+                                Assert.Fail($"Unknown method: {removeMethod}");
                                 break;
                         }
 

@@ -1,18 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1;net6.0;net8.0</TargetFrameworks>
+    <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-
   <PropertyGroup>
     <Version Condition="'$(ClickHouseClientVersion)' != ''">$(ClickHouseClientVersion)</Version>
     <Version Condition="'$(Version)' == ''">2.2.10</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version).0</AssemblyVersion>
     <Version Condition="'$(ClickHouseClientVersionSuffix)' != ''">$(Version)$(ClickHouseClientVersionSuffix)</Version>
-
     <Company>Octonica</Company>
     <Copyright>© 2019 – 2024 Octonica</Copyright>
     <Product>Octonica.ClickHouseClient</Product>
@@ -24,10 +21,9 @@
     <RepositoryUrl>https://github.com/Octonica/ClickHouseClient.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="K4os.Compression.LZ4" Version="1.3.6" />
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
+    <PackageReference Include="NodaTime" Version="3.2.2" />
     <PackageReference Include="TimeZoneConverter" Version="6.1.0" Condition="'$(TargetFramework)' == 'netcoreapp3.1'" />
   </ItemGroup>
-
 </Project>

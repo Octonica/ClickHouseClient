@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -57,7 +58,7 @@ namespace Octonica.ClickHouseClient.Types
         /// <summary>
         /// Gets the time zone. This value is applied to ClickHouse types DateTime and DateTime64.
         /// </summary>
-        TimeZoneInfo? TimeZone { get; }
+        DateTimeZone? TimeZone { get; }
 
         /// <summary>
         /// Gets the rank (a number of dimensions) of an array.
