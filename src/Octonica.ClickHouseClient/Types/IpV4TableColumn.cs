@@ -21,7 +21,7 @@ using System.Runtime.InteropServices;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal sealed class IpV4TableColumn: IClickHouseTableColumn<IPAddress>
+    internal sealed class IpV4TableColumn : IClickHouseTableColumn<IPAddress>
     {
         private readonly ReadOnlyMemory<byte> _buffer;
 
@@ -42,9 +42,9 @@ namespace Octonica.ClickHouseClient.Types
         public IPAddress GetValue(int index)
         {
             Span<int> address = stackalloc int[1];
-            var addressSpan = MemoryMarshal.AsBytes(address);
+            Span<byte> addressSpan = MemoryMarshal.AsBytes(address);
             _buffer.Slice(index * sizeof(uint), sizeof(uint)).Span.CopyTo(addressSpan);
-            
+
             address[0] = IPAddress.NetworkToHostOrder(address[0]);
             return new IPAddress(addressSpan);
         }
@@ -82,7 +82,7 @@ namespace Octonica.ClickHouseClient.Types
                 result = new ReinterpretedTableColumn<int?>(this, new NullableStructTableColumn<int>(null, new RawIpV4TableColumn<int>(_buffer, m => BitConverter.ToInt32(m.Span))));
             }
 
-            return (IClickHouseTableColumn<T>?) result;
+            return (IClickHouseTableColumn<T>?)result;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

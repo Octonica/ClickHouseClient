@@ -19,7 +19,7 @@ namespace Octonica.ClickHouseClient.Protocol
 {
     internal sealed class ServerPongMessage : IServerMessage
     {
-        public static readonly ServerPongMessage Instance = new ServerPongMessage();
+        public static readonly ServerPongMessage Instance = new();
 
         public ServerMessageCode MessageCode => ServerMessageCode.Pong;
 

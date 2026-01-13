@@ -31,23 +31,29 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override char[] GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
-            var charCount = encoding.GetCharCount(span);
-            var result = new char[charCount];
+            int charCount = encoding.GetCharCount(span);
+            char[] result = new char[charCount];
 
-            encoding.GetChars(span, result);
+            _ = encoding.GetChars(span, result);
 
             int pos;
             for (pos = result.Length - 1; pos >= 0; pos--)
             {
                 if (result[pos] != 0)
+                {
                     break;
+                }
             }
 
             if (pos == 0)
+            {
                 return Array.Empty<char>();
+            }
 
             if (pos + 1 < result.Length)
+            {
                 Array.Resize(ref result, pos + 1);
+            }
 
             return result;
         }

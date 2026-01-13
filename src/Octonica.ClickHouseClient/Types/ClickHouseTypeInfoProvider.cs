@@ -15,6 +15,10 @@
  */
 #endregion
 
+using NodaTime;
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,10 +27,6 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Numerics;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
-using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -46,7 +46,7 @@ namespace Octonica.ClickHouseClient.Types
         /// Use <see cref="ClickHouseTypeInfoProvider.Instance"/> instead of <see cref="Instance"/>.
         /// </remarks>
         [Obsolete(nameof(DefaultTypeInfoProvider) + " was renamed to " + nameof(ClickHouseTypeInfoProvider) + ".")]
-        public static readonly new DefaultTypeInfoProvider Instance = new DefaultTypeInfoProvider();
+        public static new readonly DefaultTypeInfoProvider Instance = new();
 
         private DefaultTypeInfoProvider()
             : this(GetDefaultTypes())
@@ -79,7 +79,7 @@ namespace Octonica.ClickHouseClient.Types
         /// <summary>
         /// The instance of <see cref="ClickHouseTypeInfoProvider"/> provides access to all types supported by ClickHouseClient.
         /// </summary>
-        public static readonly ClickHouseTypeInfoProvider Instance = new ClickHouseTypeInfoProvider();
+        public static readonly ClickHouseTypeInfoProvider Instance = new();
 
         private readonly Dictionary<string, IClickHouseColumnTypeInfo> _types;
 
@@ -96,7 +96,9 @@ namespace Octonica.ClickHouseClient.Types
         protected ClickHouseTypeInfoProvider(IEnumerable<IClickHouseColumnTypeInfo> types)
         {
             if (types == null)
+            {
                 throw new ArgumentNullException(nameof(types));
+            }
 
             _types = types.ToDictionary(t => t.TypeName);
         }
@@ -104,10 +106,10 @@ namespace Octonica.ClickHouseClient.Types
         /// <inheritdoc/>
         public IClickHouseColumnTypeInfo GetTypeInfo(string typeName)
         {
-            var typeNameMem = typeName.AsMemory();
-            var (baseTypeName, options) = ParseTypeName(typeNameMem);
-            
-            var result = typeNameMem.Span == baseTypeName.Span ? GetTypeInfo(typeName, options) : GetTypeInfo(baseTypeName.ToString(), options);
+            ReadOnlyMemory<char> typeNameMem = typeName.AsMemory();
+            (ReadOnlyMemory<char> baseTypeName, List<ReadOnlyMemory<char>>? options) = ParseTypeName(typeNameMem);
+
+            IClickHouseColumnTypeInfo? result = typeNameMem.Span == baseTypeName.Span ? GetTypeInfo(typeName, options) : GetTypeInfo(baseTypeName.ToString(), options);
 
             return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName}\" is not supported.");
         }
@@ -115,30 +117,36 @@ namespace Octonica.ClickHouseClient.Types
         /// <inheritdoc/>
         public IClickHouseColumnTypeInfo GetTypeInfo(ReadOnlyMemory<char> typeName)
         {
-            var (baseTypeName, options) = ParseTypeName(typeName);
-            var result = GetTypeInfo(baseTypeName.ToString(), options);
+            (ReadOnlyMemory<char> baseTypeName, List<ReadOnlyMemory<char>>? options) = ParseTypeName(typeName);
+            IClickHouseColumnTypeInfo? result = GetTypeInfo(baseTypeName.ToString(), options);
 
-            return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName.ToString()}\" is not supported.");
+            return result ?? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeName}\" is not supported.");
         }
 
         private IClickHouseColumnTypeInfo? GetTypeInfo(string baseTypeName, List<ReadOnlyMemory<char>>? options)
         {
-            if (!_types.TryGetValue(baseTypeName, out var typeInfo))
+            if (!_types.TryGetValue(baseTypeName, out IClickHouseColumnTypeInfo? typeInfo))
+            {
                 return null;
+            }
 
             if (options != null && options.Count > 0)
+            {
                 typeInfo = typeInfo.GetDetailedTypeInfo(options, this);
+            }
 
             return typeInfo;
         }
 
         private static (ReadOnlyMemory<char> baseTypeName, List<ReadOnlyMemory<char>>? options) ParseTypeName(ReadOnlyMemory<char> typeName)
         {
-            var typeNameSpan = typeName.Span;
+            ReadOnlySpan<char> typeNameSpan = typeName.Span;
 
-            var pOpenIdx = typeNameSpan.IndexOf('(');
+            int pOpenIdx = typeNameSpan.IndexOf('(');
             if (pOpenIdx == 0)
-                throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The name of the type (\"{typeNameSpan.ToString()}\") can't start with \"(\".");
+            {
+                throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The name of the type (\"{typeNameSpan}\") can't start with \"(\".");
+            }
 
             ReadOnlyMemory<char> baseTypeName;
             List<ReadOnlyMemory<char>>? options = null;
@@ -148,7 +156,7 @@ namespace Octonica.ClickHouseClient.Types
             }
             else
             {
-                baseTypeName = typeName.Slice(0, pOpenIdx).Trim();
+                baseTypeName = typeName[..pOpenIdx].Trim();
 
                 int count = 1;
                 int currentIdx = pOpenIdx;
@@ -157,19 +165,25 @@ namespace Octonica.ClickHouseClient.Types
                 do
                 {
                     if (typeNameSpan.Length - 1 == currentIdx)
+                    {
                         break;
+                    }
 
-                    var pNextIdx = typeNameSpan.Slice(currentIdx + 1).IndexOfAny(significantChars);
+                    int pNextIdx = typeNameSpan[(currentIdx + 1)..].IndexOfAny(significantChars);
                     if (pNextIdx < 0)
+                    {
                         break;
+                    }
 
                     pNextIdx += currentIdx + 1;
                     currentIdx = pNextIdx;
                     if ("'`".Contains(typeNameSpan[currentIdx]))
                     {
-                        var len = ClickHouseSyntaxHelper.GetQuotedTokenLength(typeNameSpan.Slice(currentIdx), typeNameSpan[currentIdx]);
+                        int len = ClickHouseSyntaxHelper.GetQuotedTokenLength(typeNameSpan[currentIdx..], typeNameSpan[currentIdx]);
                         if (len < 0)
+                        {
                             break;
+                        }
 
                         Debug.Assert(len > 0);
                         currentIdx += len - 1;
@@ -182,40 +196,52 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         --count;
                         if (count == 0)
+                        {
                             break;
+                        }
                     }
                     else if (count == 1)
                     {
-                        var currentOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
+                        ReadOnlyMemory<char> currentOption = typeName[optionStartIdx..currentIdx].Trim();
                         optionStartIdx = currentIdx + 1;
 
                         if (options != null)
+                        {
                             options.Add(currentOption);
+                        }
                         else
-                            options = new List<ReadOnlyMemory<char>>(2) {currentOption};
+                        {
+                            options = new List<ReadOnlyMemory<char>>(2) { currentOption };
+                        }
                     }
 
                 } while (true);
 
                 if (count != 0)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The number of open parentheses doesn't match to the number of close parentheses in the type name \"{typeNameSpan.ToString()}\".");
+                {
+                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The number of open parentheses doesn't match to the number of close parentheses in the type name \"{typeNameSpan}\".");
+                }
 
                 if (currentIdx != typeNameSpan.Length - 1)
                 {
-                    var unexpectedString = typeNameSpan.Slice(currentIdx + 1);
+                    ReadOnlySpan<char> unexpectedString = typeNameSpan[(currentIdx + 1)..];
                     if (!unexpectedString.Trim().IsEmpty)
                     {
                         throw new ClickHouseException(
                             ClickHouseErrorCodes.InvalidTypeName,
-                            $"There are unexpected characters (\"{unexpectedString.ToString()}\") in the type name \"{typeNameSpan.ToString()}\" after closing parenthesis.");
+                            $"There are unexpected characters (\"{unexpectedString}\") in the type name \"{typeNameSpan}\" after closing parenthesis.");
                     }
                 }
 
-                var lastOption = typeName.Slice(optionStartIdx, currentIdx - optionStartIdx).Trim();
+                ReadOnlyMemory<char> lastOption = typeName[optionStartIdx..currentIdx].Trim();
                 if (options != null)
+                {
                     options.Add(lastOption);
+                }
                 else
-                    options = new List<ReadOnlyMemory<char>>(1) {lastOption};
+                {
+                    options = [lastOption];
+                }
             }
 
             return (baseTypeName, options);
@@ -292,7 +318,9 @@ namespace Octonica.ClickHouseClient.Types
                     break;
                 case ClickHouseDbType.Object:
                     if (typeDescriptor.ValueType != typeof(DBNull))
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeDescriptor.ClickHouseDbType}\" is not supported.");
+                    }
 
                     typeName = "Nothing";
                     break;
@@ -330,8 +358,10 @@ namespace Octonica.ClickHouseClient.Types
                     break;
                 case ClickHouseDbType.StringFixedLength:
                     if (typeDescriptor.Size <= 0)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The size of the fixed string must be a positive number.");
-                    
+                    }
+
                     typeName = string.Format(CultureInfo.InvariantCulture, "FixedString({0})", typeDescriptor.Size);
                     break;
                 case ClickHouseDbType.DateTime2:
@@ -373,7 +403,7 @@ namespace Octonica.ClickHouseClient.Types
             {
                 // Derive nullability from the value's type. It's important to know whether the value is nullable or not because
                 // nullability is a part of ClickHouse type
-                var autoType = GetTypeFromValue(typeDescriptor.ValueType, typeDescriptor.IsNullable ?? false, typeDescriptor.TimeZone);
+                IntermediateClickHouseTypeInfo autoType = GetTypeFromValue(typeDescriptor.ValueType, typeDescriptor.IsNullable ?? false, typeDescriptor.TimeZone);
                 typeInfo = new IntermediateClickHouseTypeInfo(typeDescriptor.ClickHouseDbType.Value, typeName, autoType.IsNullable, typeDescriptor.ArrayRank ?? 0);
             }
 
@@ -383,23 +413,22 @@ namespace Octonica.ClickHouseClient.Types
 
             bool isNull = typeDescriptor.ValueType == typeof(DBNull);
             if (isNull && typeDescriptor.IsNullable == false)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The value of the type \"{typeDescriptor.ValueType}\" can't be declared as non-nullable.");
+            }
 
-            bool isNullable;
-            if (typeDescriptor.IsNullable != null)
-                isNullable = typeDescriptor.IsNullable.Value;
-            else if (isNull)
-                isNullable = true;
-            else
-                isNullable = typeInfo.IsNullable;
-
+            bool isNullable = typeDescriptor.IsNullable != null ? typeDescriptor.IsNullable.Value : isNull || typeInfo.IsNullable;
             typeName = typeInfo.ClickHouseType;
             if (isNullable)
+            {
                 typeName = $"Nullable({typeName})";
+            }
 
-            var arrayRank = typeDescriptor?.ArrayRank ?? typeInfo.ArrayRank;
+            int arrayRank = typeDescriptor?.ArrayRank ?? typeInfo.ArrayRank;
             for (int i = 0; i < arrayRank; i++)
+            {
                 typeName = $"Array({typeName})";
+            }
 
             return GetTypeInfo(typeName);
         }
@@ -407,48 +436,100 @@ namespace Octonica.ClickHouseClient.Types
         internal static IntermediateClickHouseTypeInfo GetTypeFromValue(Type valueType, bool valueCanBeNull, DateTimeZone? timeZone)
         {
             if (valueType == typeof(string))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.String, "String", valueCanBeNull, 0);
+            }
+
             if (valueType == typeof(byte))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Byte, "UInt8", false, 0);
+            }
+
             if (valueType == typeof(bool))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Boolean, "Bool", false, 0);
+            }
+
             if (valueType == typeof(decimal))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Decimal, string.Format(CultureInfo.InvariantCulture, "Decimal({0}, {1})", DecimalTypeInfoBase.DefaultPrecision, DecimalTypeInfoBase.DefaultScale), false, 0);
+            }
+
             if (valueType == typeof(double))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Double, "Float64", false, 0);
+            }
+
             if (valueType == typeof(Guid))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Guid, "UUID", false, 0);
+            }
+
             if (valueType == typeof(short))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int16, "Int16", false, 0);
+            }
+
             if (valueType == typeof(int))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int32, "Int32", false, 0);
+            }
+
             if (valueType == typeof(long))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int64, "Int64", false, 0);
+            }
+
             if (valueType == typeof(sbyte))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.SByte, "Int8", false, 0);
+            }
+
             if (valueType == typeof(BigInteger))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Int256, "Int256", false, 0);
+            }
+
             if (valueType == typeof(float))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Single, "Float32", false, 0);
+            }
+
             if (valueType == typeof(ushort))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt16, "UInt16", false, 0);
+            }
+
             if (valueType == typeof(uint))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt32, "UInt32", false, 0);
+            }
+
             if (valueType == typeof(ulong))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.UInt64, "UInt64", false, 0);
+            }
+
             if (valueType == typeof(IPAddress))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.IpV6, "IPv6", valueCanBeNull, 0);
+            }
+
             if (valueType == typeof(DBNull))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Nothing, "Nothing", true, 0);
+            }
 
 #if NET6_0_OR_GREATER
             if (valueType == typeof(DateOnly))
+            {
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.Date, "Date", false, 0);
+            }
 #endif
 
             if (valueType == typeof(DateTime) || valueType == typeof(DateTimeOffset))
             {
-                var tzCode = GetTimeZoneCode(timeZone);
+                string? tzCode = GetTimeZoneCode(timeZone);
                 return new IntermediateClickHouseTypeInfo(ClickHouseDbType.DateTime, tzCode == null ? "DateTime" : $"DateTime('{tzCode}')", false, 0);
             }
 
@@ -467,15 +548,19 @@ namespace Octonica.ClickHouseClient.Types
             }
             else
             {
-                foreach (var itf in valueType.GetInterfaces())
+                foreach (Type itf in valueType.GetInterfaces())
                 {
                     if (!itf.IsGenericType)
+                    {
                         continue;
+                    }
 
                     if (itf.GetGenericTypeDefinition() != typeof(IReadOnlyList<>))
+                    {
                         continue;
+                    }
 
-                    var listElementType = itf.GetGenericArguments()[0];
+                    Type listElementType = itf.GetGenericArguments()[0];
                     if (elementType != null)
                     {
                         throw new ClickHouseException(
@@ -489,14 +574,16 @@ namespace Octonica.ClickHouseClient.Types
 
             if (elementType == null && valueType.IsGenericType)
             {
-                var valueTypeDef = valueType.GetGenericTypeDefinition();
+                Type valueTypeDef = valueType.GetGenericTypeDefinition();
                 if (valueTypeDef == typeof(Memory<>) || valueTypeDef == typeof(ReadOnlyMemory<>))
                 {
                     elementType = valueType.GetGenericArguments()[0];
 
                     // Memory<char> or ReadOnlyMemory<char> should be interpreted as string
                     if (elementType == typeof(char))
+                    {
                         return GetTypeFromValue(typeof(string), false, timeZone);
+                    }
                 }
             }
 
@@ -504,13 +591,15 @@ namespace Octonica.ClickHouseClient.Types
             {
                 try
                 {
-                    var elementInfo = GetTypeFromValue(elementType, arrayRank > 0 || valueCanBeNull, timeZone);
+                    IntermediateClickHouseTypeInfo elementInfo = GetTypeFromValue(elementType, arrayRank > 0 || valueCanBeNull, timeZone);
                     return new IntermediateClickHouseTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, elementInfo.IsNullable, elementInfo.ArrayRank + arrayRank);
                 }
                 catch (ClickHouseException ex)
                 {
                     if (ex.ErrorCode != ClickHouseErrorCodes.TypeNotSupported)
+                    {
                         throw;
+                    }
 
                     throw new ClickHouseException(
                         ClickHouseErrorCodes.TypeNotSupported,
@@ -524,13 +613,15 @@ namespace Octonica.ClickHouseClient.Types
                 elementType = valueType.GetGenericArguments()[0];
                 try
                 {
-                    var elementInfo = GetTypeFromValue(elementType, false, timeZone);
+                    IntermediateClickHouseTypeInfo elementInfo = GetTypeFromValue(elementType, false, timeZone);
                     return new IntermediateClickHouseTypeInfo(elementInfo.DbType, elementInfo.ClickHouseType, true, elementInfo.ArrayRank);
                 }
                 catch (ClickHouseException ex)
                 {
                     if (ex.ErrorCode != ClickHouseErrorCodes.TypeNotSupported)
+                    {
                         throw;
+                    }
 
                     throw new ClickHouseException(
                         ClickHouseErrorCodes.TypeNotSupported,
@@ -545,19 +636,15 @@ namespace Octonica.ClickHouseClient.Types
         [return: NotNullIfNotNull("timeZone")]
         private static string? GetTimeZoneCode(DateTimeZone? timeZone)
         {
-            if (timeZone == null)
-                return null;
-
-            return TimeZoneHelper.GetTimeZoneId(timeZone);
+            return timeZone == null ? null : TimeZoneHelper.GetTimeZoneId(timeZone);
         }
 
         /// <inheritdoc/>
         public IClickHouseTypeInfoProvider Configure(ClickHouseServerInfo serverInfo)
         {
-            if (serverInfo == null)
-                throw new ArgumentNullException(nameof(serverInfo));
-
-            return new ClickHouseTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
+            return serverInfo == null
+                ? throw new ArgumentNullException(nameof(serverInfo))
+                : (IClickHouseTypeInfoProvider)new ClickHouseTypeInfoProvider(_types.Values.Select(t => (t as IClickHouseConfigurableTypeInfo)?.Configure(serverInfo) ?? t));
         }
 
         /// <summary>

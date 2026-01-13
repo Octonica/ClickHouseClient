@@ -15,19 +15,19 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
-    internal class ClickHouseBinaryProtocolReader: IDisposable
+    internal class ClickHouseBinaryProtocolReader : IDisposable
     {
         private readonly ReadWriteBuffer _buffer;
         private readonly Stream _stream;
@@ -65,8 +65,7 @@ namespace Octonica.ClickHouseClient
                     _currentCompression = algorithm;
                     return;
                 case CompressionAlgorithm.Lz4:
-                    if (_compressionDecoder == null)
-                        _compressionDecoder = new Lz4CompressionDecoder(_bufferSize);
+                    _compressionDecoder ??= new Lz4CompressionDecoder(_bufferSize);
 
                     _currentCompression = algorithm;
                     break;
@@ -82,45 +81,51 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<string> ReadString(bool async, CancellationToken cancellationToken)
         {
-            var size = await ReadSize(async, cancellationToken);
+            int size = await ReadSize(async, cancellationToken);
             if (size == 0)
+            {
                 return string.Empty;
+            }
 
             ReadOnlySequence<byte> readResult;
             do
             {
                 readResult = await Read(async, cancellationToken);
                 if (readResult.Length >= size)
+                {
                     break;
+                }
 
                 AdvanceReader(readResult, 0);
                 await Advance(async, cancellationToken);
             } while (true);
 
             string result;
-            var encoding = Encoding.UTF8;
-            var stringSpan = readResult.Slice(readResult.Start, readResult.GetPosition(size));
+            Encoding encoding = Encoding.UTF8;
+            ReadOnlySequence<byte> stringSpan = readResult.Slice(readResult.Start, readResult.GetPosition(size));
             if (stringSpan.IsSingleSegment)
             {
                 result = encoding.GetString(stringSpan.FirstSpan);
             }
             else
             {
-                var buffer = stringSpan.ToArray();
+                byte[] buffer = stringSpan.ToArray();
                 result = encoding.GetString(buffer);
             }
 
-            AdvanceReader(readResult, (int) stringSpan.Length);
+            AdvanceReader(readResult, (int)stringSpan.Length);
             return result;
         }
 
         public async ValueTask<int> Read7BitInt32(bool async, CancellationToken cancellationToken)
         {
-            var longValue = await Read7BitInteger(async, cancellationToken);
+            ulong longValue = await Read7BitInteger(async, cancellationToken);
             if (longValue > uint.MaxValue)
+            {
                 throw new FormatException(); //TODO: exception
+            }
 
-            return unchecked((int) longValue);
+            return unchecked((int)longValue);
         }
 
         public ValueTask<ulong> Read7BitUInt64(bool async, CancellationToken cancellationToken)
@@ -132,7 +137,7 @@ namespace Octonica.ClickHouseClient
         {
             do
             {
-                var readResult = await Read(async, cancellationToken);
+                ReadOnlySequence<byte> readResult = await Read(async, cancellationToken);
                 if (readResult.Length < sizeof(int))
                 {
                     AdvanceReader(readResult, 0);
@@ -142,10 +147,12 @@ namespace Octonica.ClickHouseClient
 
                 int result;
                 if (readResult.FirstSpan.Length >= sizeof(int))
+                {
                     result = BitConverter.ToInt32(readResult.FirstSpan);
+                }
                 else
                 {
-                    var tmpArr = readResult.Slice(0, sizeof(int)).ToArray();
+                    byte[] tmpArr = readResult.Slice(0, sizeof(int)).ToArray();
                     result = BitConverter.ToInt32(tmpArr, 0);
                 }
 
@@ -157,11 +164,13 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<int> ReadSize(bool async, CancellationToken cancellationToken)
         {
-            var longValue = await Read7BitInteger(async, cancellationToken);
+            ulong longValue = await Read7BitInteger(async, cancellationToken);
             if (longValue > int.MaxValue)
+            {
                 throw new FormatException(); //TODO: exception
+            }
 
-            return (int) longValue;
+            return (int)longValue;
         }
 
         public async ValueTask<bool> ReadBool(bool async, CancellationToken cancellationToken)
@@ -171,8 +180,8 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<byte> ReadByte(bool async, CancellationToken cancellationToken)
         {
-            var readResult = await Read(async, cancellationToken);
-            var result = readResult.FirstSpan[0];
+            ReadOnlySequence<byte> readResult = await Read(async, cancellationToken);
+            byte result = readResult.FirstSpan[0];
             AdvanceReader(readResult, 1);
             return result;
         }
@@ -181,8 +190,8 @@ namespace Octonica.ClickHouseClient
         {
             do
             {
-                var readResult = await Read(async, cancellationToken);
-                if (!TryRead7BitInteger(readResult, out var result, out var bytesRead))
+                ReadOnlySequence<byte> readResult = await Read(async, cancellationToken);
+                if (!TryRead7BitInteger(readResult, out ulong result, out int bytesRead))
                 {
                     AdvanceReader(readResult, 0);
                     await Advance(async, cancellationToken);
@@ -198,10 +207,12 @@ namespace Octonica.ClickHouseClient
         public async ValueTask<SequenceSize> ReadRaw(Func<ReadOnlySequence<byte>, SequenceSize> readBytes, bool async, CancellationToken cancellationToken)
         {
             if (readBytes == null)
+            {
                 throw new ArgumentNullException(nameof(readBytes));
+            }
 
-            var readResult = await Read(async, cancellationToken);
-            var size = readBytes(readResult);
+            ReadOnlySequence<byte> readResult = await Read(async, cancellationToken);
+            SequenceSize size = readBytes(readResult);
             AdvanceReader(readResult, size.Bytes);
 
             return size;
@@ -210,16 +221,20 @@ namespace Octonica.ClickHouseClient
         public async ValueTask SkipBytes(int bytesCount, bool async, CancellationToken cancellationToken)
         {
             if (bytesCount < 0)
+            {
                 throw new ArgumentException("The number of bytes for is negative.", nameof(bytesCount));
+            }
 
             if (bytesCount == 0)
+            {
                 return;
+            }
 
-            var c = bytesCount;
+            int c = bytesCount;
             while (c > 0)
             {
-                var readResult = await Read(async, cancellationToken);
-                var consumed = Math.Min(c, (int)readResult.Length);
+                ReadOnlySequence<byte> readResult = await Read(async, cancellationToken);
+                int consumed = Math.Min(c, (int)readResult.Length);
                 AdvanceReader(readResult, consumed);
                 c -= consumed;
             }
@@ -228,9 +243,11 @@ namespace Octonica.ClickHouseClient
         internal bool TryPeekByte(out byte value)
         {
             if (_currentCompression != CompressionAlgorithm.None)
+            {
                 throw new NotImplementedException();
+            }
 
-            var readResult = _buffer.Read();
+            ReadOnlySequence<byte> readResult = _buffer.Read();
             if (readResult.IsEmpty)
             {
                 value = 0;
@@ -243,7 +260,7 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<IServerMessage> ReadMessage(int protocolRevision, bool throwOnUnknownMessage, bool async, CancellationToken cancellationToken)
         {
-            var messageCode = (ServerMessageCode) await Read7BitInt32(async, cancellationToken);
+            ServerMessageCode messageCode = (ServerMessageCode)await Read7BitInt32(async, cancellationToken);
             switch (messageCode)
             {
                 case ServerMessageCode.Hello:
@@ -288,7 +305,9 @@ namespace Octonica.ClickHouseClient
 
                 default:
                     if (throwOnUnknownMessage)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Not supported message code (0x{messageCode:X}) received from the server.");
+                    }
 
                     return new UnknownServerMessage(messageCode);
             }
@@ -297,15 +316,21 @@ namespace Octonica.ClickHouseClient
         private async ValueTask<ReadOnlySequence<byte>> Read(bool async, CancellationToken cancellationToken)
         {
             if (_currentCompression == CompressionAlgorithm.None)
+            {
                 return await ReadFromPipe(async, cancellationToken);
+            }
 
             if (_compressionDecoder == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
+            }
 
             if (!_compressionDecoder.IsCompleted)
+            {
                 await Advance(async, cancellationToken);
+            }
 
-            var sequence = _compressionDecoder.Read();
+            ReadOnlySequence<byte> sequence = _compressionDecoder.Read();
             while (sequence.IsEmpty)
             {
                 await Advance(async, cancellationToken);
@@ -319,9 +344,11 @@ namespace Octonica.ClickHouseClient
         {
             do
             {
-                var readResult = _buffer.Read();
+                ReadOnlySequence<byte> readResult = _buffer.Read();
                 if (!readResult.IsEmpty)
+                {
                     return readResult;
+                }
 
                 await AdvanceBuffer(async, cancellationToken);
             } while (true);
@@ -336,7 +363,9 @@ namespace Octonica.ClickHouseClient
             else
             {
                 if (_compressionDecoder == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. A decoder is not initialized.");
+                }
 
                 _compressionDecoder.AdvanceReader(readResult.GetPosition(consumedPosition));
             }
@@ -347,14 +376,16 @@ namespace Octonica.ClickHouseClient
             if (_currentCompression != CompressionAlgorithm.None)
             {
                 if (_compressionDecoder == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. A decoder is not initialized.");
+                }
 
                 if (_compressionDecoder.IsCompleted)
                 {
                     while (true)
                     {
-                        var buffer = await ReadFromPipe(async, cancellationToken);
-                        var size = _compressionDecoder.ReadHeader(buffer);
+                        ReadOnlySequence<byte> buffer = await ReadFromPipe(async, cancellationToken);
+                        int size = _compressionDecoder.ReadHeader(buffer);
                         if (size >= 0)
                         {
                             _buffer.ConfirmRead(size);
@@ -367,8 +398,8 @@ namespace Octonica.ClickHouseClient
 
                 while (!_compressionDecoder.IsCompleted)
                 {
-                    var sequence = await ReadFromPipe(async, cancellationToken);
-                    var consumed = _compressionDecoder.ConsumeNext(sequence);
+                    ReadOnlySequence<byte> sequence = await ReadFromPipe(async, cancellationToken);
+                    int consumed = _compressionDecoder.ConsumeNext(sequence);
                     _buffer.ConfirmRead(consumed);
                 }
 
@@ -380,15 +411,15 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask AdvanceBuffer(bool async, CancellationToken cancellationToken)
         {
-            var buffer = _buffer.GetMemory();
+            Memory<byte> buffer = _buffer.GetMemory();
 
             int bytesRead;
             if (async)
             {
                 if (cancellationToken == CancellationToken.None && _stream.ReadTimeout >= 0)
                 {
-                    var timeout = TimeSpan.FromMilliseconds(_stream.ReadTimeout);
-                    using var tokenSource = new CancellationTokenSource(timeout);
+                    TimeSpan timeout = TimeSpan.FromMilliseconds(_stream.ReadTimeout);
+                    using CancellationTokenSource tokenSource = new(timeout);
                     try
                     {
                         bytesRead = await _stream.ReadAsync(buffer, tokenSource.Token);
@@ -410,7 +441,9 @@ namespace Octonica.ClickHouseClient
             }
 
             if (bytesRead == 0)
+            {
                 throw new EndOfStreamException($"Reached an unexpected end of the server's response. {ClickHouseConnectionStringBuilder.DefaultClientName} expected at least one more byte in the response.");
+            }
 
             _buffer.ConfirmWrite(bytesRead);
             _buffer.Flush();
@@ -420,19 +453,21 @@ namespace Octonica.ClickHouseClient
         {
             ulong result = 0;
             int i = 0, shiftSize = 0;
-            foreach (var slice in sequence)
+            foreach (ReadOnlyMemory<byte> slice in sequence)
             {
                 for (int j = 0; j < slice.Length; j++)
                 {
-                    var byteValue = slice.Span[j];
+                    byte byteValue = slice.Span[j];
                     result |= (byteValue & (ulong)0x7F) << shiftSize;
                     i++;
 
                     if ((byteValue & 0x80) == 0x80)
                     {
                         shiftSize += 7;
-                        if (shiftSize > sizeof(ulong) * 8 - 7)
+                        if (shiftSize > (sizeof(ulong) * 8) - 7)
+                        {
                             throw new FormatException(); //TODO: exception
+                        }
                     }
                     else
                     {

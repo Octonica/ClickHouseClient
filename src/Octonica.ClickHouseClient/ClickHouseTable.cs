@@ -15,13 +15,13 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.ObjectModel;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient
 {
-    internal struct ClickHouseTable
+    internal readonly struct ClickHouseTable
     {
         public BlockHeader Header { get; }
 

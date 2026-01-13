@@ -15,10 +15,10 @@
  */
 #endregion
 
-using System;
-using System.Text;
 using Octonica.ClickHouseClient.Types;
 using Octonica.ClickHouseClient.Utils;
+using System;
+using System.Text;
 
 namespace Octonica.ClickHouseClient
 {
@@ -96,10 +96,7 @@ namespace Octonica.ClickHouseClient
 
         internal ITypeDispatcher? GetColumnTypeDispatcher()
         {
-            if (ColumnType == null)
-                return null;
-
-            return _columnTypeDispatcher ??= TypeDispatcher.Create(ColumnType);
+            return ColumnType == null ? null : (_columnTypeDispatcher ??= TypeDispatcher.Create(ColumnType));
         }
     }
 }

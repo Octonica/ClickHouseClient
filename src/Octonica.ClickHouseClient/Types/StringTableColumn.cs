@@ -32,10 +32,7 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override string GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
-            if (span.IsEmpty)
-                return string.Empty;
-
-            return encoding.GetString(span);
+            return span.IsEmpty ? string.Empty : encoding.GetString(span);
         }
     }
 }

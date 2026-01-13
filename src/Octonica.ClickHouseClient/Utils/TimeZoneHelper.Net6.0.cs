@@ -17,12 +17,12 @@
 
 #if NET6_0_OR_GREATER
 
-using System.Runtime.CompilerServices;
 using NodaTime;
+using System.Runtime.CompilerServices;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    partial class TimeZoneHelper
+    internal partial class TimeZoneHelper
     {
         static partial void GetDateTimeZoneImpl(string timeZone, ref DateTimeZone? DateTimeZone)
         {

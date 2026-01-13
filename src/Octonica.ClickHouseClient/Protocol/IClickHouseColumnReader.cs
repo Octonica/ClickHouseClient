@@ -27,6 +27,6 @@ namespace Octonica.ClickHouseClient.Protocol
         /// </summary>
         /// <param name="settings">The settings of the column.</param>
         /// <returns>A column for <see cref="ClickHouseDataReader"/>.</returns>
-        IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings);
+        IClickHouseTableColumn? EndRead(ClickHouseColumnSettings? settings);
     }
 }

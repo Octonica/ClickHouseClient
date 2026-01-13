@@ -35,10 +35,7 @@ namespace Octonica.ClickHouseClient.Types
             _value = value;
             _includeQuotes = includeQuotes;
 
-            if (_includeQuotes)
-                Length = 4 * value.Length + 4;
-            else
-                Length= 4 * _value.Length;
+            Length = _includeQuotes ? (4 * value.Length) + 4 : 4 * _value.Length;
         }
 
         public int Write(Memory<byte> buffer)
@@ -52,7 +49,7 @@ namespace Octonica.ClickHouseClient.Types
                 buffer.Span[count++] = (byte)'\'';
             }
 
-            foreach (var byteValue in _value.Span)
+            foreach (byte byteValue in _value.Span)
             {
                 switch (byteValue)
                 {

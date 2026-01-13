@@ -15,6 +15,9 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections;
@@ -22,9 +25,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -46,7 +46,9 @@ namespace Octonica.ClickHouseClient.Types
         public NullableTypeInfo(IClickHouseColumnTypeInfo underlyingType)
         {
             if (underlyingType is NullableTypeInfo)
+            {
                 throw new ArgumentException("The underlying type can't be nullable.", nameof(underlyingType));
+            }
 
             UnderlyingType = underlyingType ?? throw new ArgumentNullException(nameof(underlyingType));
             ComplexTypeName = $"{TypeName}({UnderlyingType.ComplexTypeName})";
@@ -54,109 +56,106 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            if (UnderlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return new NullableColumnReader(rowCount, UnderlyingType);
+            return UnderlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnReader)new NullableColumnReader(rowCount, UnderlyingType);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            if (UnderlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return new NullableSkippingColumnReader(rowCount, UnderlyingType);
+            return UnderlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnReaderBase)new NullableSkippingColumnReader(rowCount, UnderlyingType);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateSkippingColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateSkippingColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (UnderlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
+            return UnderlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnWriter)new NullableColumnWriter<T>(columnName, rows, columnSettings, UnderlyingType);
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (UnderlyingType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 return (IClickHouseParameterWriter<T>)(object)new NullableParameterWriter<DBNull>(this, NothingTypeInfo.NothingParameterWriter.Instance);
+            }
 
             if (type.IsValueType && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
             {
-                var valueType = type.GetGenericArguments()[0];
-                var dispatcherType = typeof(NullableStructParameterWriterDispatcher<>).MakeGenericType(valueType);
-                var dispatcher = (INullableParameterWriterDispatcher<T>?)Activator.CreateInstance(dispatcherType);
+                Type valueType = type.GetGenericArguments()[0];
+                Type dispatcherType = typeof(NullableStructParameterWriterDispatcher<>).MakeGenericType(valueType);
+                INullableParameterWriterDispatcher<T>? dispatcher = (INullableParameterWriterDispatcher<T>?)Activator.CreateInstance(dispatcherType);
                 Debug.Assert(dispatcher != null);
 
                 return dispatcher.Dispatch(this);
             }
 
             // The type is either a non-value or a non-nullable stucture. In both cases it can be interpreted as non-nullable.
-            var underlyingWriter = UnderlyingType.CreateParameterWriter<T>();
+            IClickHouseParameterWriter<T> underlyingWriter = UnderlyingType.CreateParameterWriter<T>();
             return new NullableParameterWriter<T>(this, underlyingWriter);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (UnderlyingType != null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
+            }
 
             if (options.Count > 1)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
+            }
 
-            var underlyingType = typeInfoProvider.GetTypeInfo(options[0]);
+            IClickHouseColumnTypeInfo underlyingType = typeInfoProvider.GetTypeInfo(options[0]);
             return new NullableTypeInfo(underlyingType);
         }
 
         public Type GetFieldType()
         {
             if (UnderlyingType == null)
+            {
                 return typeof(DBNull);
+            }
 
-            var underlyingFieldType = UnderlyingType.GetFieldType();
-            if (underlyingFieldType.IsValueType)
-                return typeof(Nullable<>).MakeGenericType(underlyingFieldType);
-
-            return underlyingFieldType;
+            Type underlyingFieldType = UnderlyingType.GetFieldType();
+            return underlyingFieldType.IsValueType ? typeof(Nullable<>).MakeGenericType(underlyingFieldType) : underlyingFieldType;
         }
 
         public ClickHouseDbType GetDbType()
         {
-            if (UnderlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return UnderlyingType.GetDbType();
+            return UnderlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : UnderlyingType.GetDbType();
         }
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
-            if (UnderlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            if (index != 0)
-                throw new IndexOutOfRangeException();
-
-            return UnderlyingType;
+            return UnderlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : index != 0 ? throw new IndexOutOfRangeException() : (IClickHouseTypeInfo)UnderlyingType;
         }
 
         private sealed class NullableColumnReader : IClickHouseColumnReader
@@ -180,42 +179,47 @@ namespace Octonica.ClickHouseClient.Types
                 int bytesCount = 0;
                 if (_baseColumnReader == null)
                 {
-                    foreach (var mem in sequence)
+                    foreach (ReadOnlyMemory<byte> mem in sequence)
                     {
                         if (_nullFlagPosition == _rowCount)
+                        {
                             break;
+                        }
 
-                        foreach (var byteVal in mem.Span)
+                        foreach (byte byteVal in mem.Span)
                         {
                             if (byteVal != 0)
                             {
-                                if (_nullFlags == null)
-                                    _nullFlags = new BitArray(_rowCount, false);
+                                _nullFlags ??= new BitArray(_rowCount, false);
 
                                 _nullFlags[_nullFlagPosition] = true;
                             }
 
                             bytesCount++;
                             if (_rowCount == ++_nullFlagPosition)
+                            {
                                 break;
+                            }
                         }
                     }
 
                     if (_nullFlagPosition < _rowCount)
+                    {
                         return new SequenceSize(bytesCount, 0);
+                    }
 
                     _baseColumnReader = _underlyingType.CreateColumnReader(_rowCount);
                 }
 
-                var baseResult = _baseColumnReader.ReadNext(sequence.Slice(bytesCount));
+                SequenceSize baseResult = _baseColumnReader.ReadNext(sequence.Slice(bytesCount));
 
                 return new SequenceSize(bytesCount + baseResult.Bytes, baseResult.Elements);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var baseReader = _baseColumnReader ?? _underlyingType.CreateColumnReader(0);
-                return NullableTableColumn.MakeNullableColumn(_nullFlags, baseReader.EndRead(settings));
+                IClickHouseColumnReader baseReader = _baseColumnReader ?? _underlyingType.CreateColumnReader(0);
+                return NullableTableColumn.MakeNullableColumn(_nullFlags, baseReader.EndRead(settings)!);
             }
         }
 
@@ -237,13 +241,15 @@ namespace Octonica.ClickHouseClient.Types
             {
                 if (_baseReader != null)
                 {
-                    var result = _baseReader.ReadNext(sequence);
+                    SequenceSize result = _baseReader.ReadNext(sequence);
                     return result;
-                }                
+                }
 
-                var prefixBytesCount = _rowCount - _position;
+                int prefixBytesCount = _rowCount - _position;
                 if (prefixBytesCount < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
                 if (sequence.Length <= prefixBytesCount)
                 {
@@ -256,7 +262,7 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 _baseReader = _underlyingType.CreateSkippingColumnReader(_rowCount);
-                var baseSize = _baseReader.ReadNext(sequence.Slice(prefixBytesCount));
+                SequenceSize baseSize = _baseReader.ReadNext(sequence.Slice(prefixBytesCount));
 
                 return new SequenceSize(baseSize.Bytes + prefixBytesCount, baseSize.Elements);
             }
@@ -276,16 +282,18 @@ namespace Octonica.ClickHouseClient.Types
             public NullableColumnWriter(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
             {
                 if (underlyingTypeInfo == null)
+                {
                     throw new ArgumentNullException(nameof(underlyingTypeInfo));
-                
+                }
+
                 _rows = rows ?? throw new ArgumentNullException(nameof(rows));
                 ColumnName = columnName ?? throw new ArgumentNullException(nameof(columnName));
 
                 if (typeof(T).IsValueType && typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Nullable<>))
                 {
-                    var valueType = typeof(T).GetGenericArguments()[0];
-                    var dispatcherType = typeof(ValueOrDefaultListDispatcher<>).MakeGenericType(valueType);
-                    var columnDispatcher = (IValueOrDefaultListDispatcherBase) Activator.CreateInstance(dispatcherType)!;
+                    Type valueType = typeof(T).GetGenericArguments()[0];
+                    Type dispatcherType = typeof(ValueOrDefaultListDispatcher<>).MakeGenericType(valueType);
+                    IValueOrDefaultListDispatcherBase columnDispatcher = (IValueOrDefaultListDispatcherBase)Activator.CreateInstance(dispatcherType)!;
                     _internalColumnWriter = columnDispatcher.Dispatch(columnName, rows, columnSettings, underlyingTypeInfo);
                 }
                 else
@@ -299,20 +307,24 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
                 if (_position == _rows.Count)
+                {
                     return _internalColumnWriter.WriteNext(writeTo);
+                }
 
-                var len = Math.Min(_rows.Count - _position, writeTo.Length);
+                int len = Math.Min(_rows.Count - _position, writeTo.Length);
                 for (int i = 0; i < len; i++)
                 {
-                    writeTo[i] = _rows[_position + i] == null ? (byte) 1 : (byte) 0;
+                    writeTo[i] = _rows[_position + i] == null ? (byte)1 : (byte)0;
                 }
 
                 _position += len;
 
                 if (_position < _rows.Count)
+                {
                     return new SequenceSize(len, 0);
+                }
 
-                var size = _internalColumnWriter.WriteNext(writeTo.Slice(len));
+                SequenceSize size = _internalColumnWriter.WriteNext(writeTo[len..]);
                 return new SequenceSize(size.Bytes + len, size.Elements);
             }
         }
@@ -327,8 +339,8 @@ namespace Octonica.ClickHouseClient.Types
         {
             public IClickHouseColumnWriter Dispatch(string columnName, object rows, ClickHouseColumnSettings? columnSettings, IClickHouseColumnTypeInfo underlyingTypeInfo)
             {
-                var genericList = (IReadOnlyList<TValue?>) rows;
-                var listWrapper = MappedReadOnlyList<TValue?, TValue>.Map(genericList, item => item ?? default);
+                IReadOnlyList<TValue?> genericList = (IReadOnlyList<TValue?>)rows;
+                IReadOnlyListExt<TValue> listWrapper = MappedReadOnlyList<TValue?, TValue>.Map(genericList, item => item ?? default);
                 return underlyingTypeInfo.CreateColumnWriter(columnName, listWrapper, columnSettings);
             }
         }
@@ -344,7 +356,7 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseParameterWriter<T?> Dispatch(NullableTypeInfo typeInfo)
             {
                 Debug.Assert(typeInfo.UnderlyingType != null);
-                var underlyingWriter = typeInfo.UnderlyingType.CreateParameterWriter<T>();
+                IClickHouseParameterWriter<T> underlyingWriter = typeInfo.UnderlyingType.CreateParameterWriter<T>();
                 return new NullableStructParameterWriter<T>(typeInfo, underlyingWriter);
             }
         }
@@ -376,13 +388,13 @@ namespace Octonica.ClickHouseClient.Types
             {
                 if (value != null)
                 {
-                    queryBuilder.Append("CAST((");
-                    _underlyingWritrer.Interpolate(queryBuilder, value.Value);
-                    queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                    _ = queryBuilder.Append("CAST((");
+                    _ = _underlyingWritrer.Interpolate(queryBuilder, value.Value);
+                    _ = queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                 }
                 else
                 {
-                    queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
+                    _ = queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
                 }
 
                 return queryBuilder;
@@ -397,18 +409,22 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         // The value of the type Nullable(Nothing) can't be passed as a parameter
                         if (typeInfo.ComplexTypeName != "Nothing")
+                        {
                             return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                        }
                     }
 
-                    var nullableTypeInfo = typeInfo;
+                    IClickHouseColumnTypeInfo nullableTypeInfo = typeInfo;
                     if (nullableTypeInfo.TypeName != "Nullable")
+                    {
                         nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+                    }
 
                     return writeValue(qb, nullableTypeInfo, (qb2, realWrite) =>
                     {
-                        qb2.Append("CAST((");
-                        writeElement(qb2, realWrite);
-                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        _ = qb2.Append("CAST((");
+                        _ = writeElement(qb2, realWrite);
+                        _ = qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                         return qb2;
                     });
                 });
@@ -441,13 +457,13 @@ namespace Octonica.ClickHouseClient.Types
             {
                 if (value != null)
                 {
-                    queryBuilder.Append("CAST((");
-                    _underlyingWritrer.Interpolate(queryBuilder, value);
-                    queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                    _ = queryBuilder.Append("CAST((");
+                    _ = _underlyingWritrer.Interpolate(queryBuilder, value);
+                    _ = queryBuilder.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                 }
                 else
                 {
-                    queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
+                    _ = queryBuilder.Append("null::").Append(_typeIfno.ComplexTypeName);
                 }
 
                 return queryBuilder;
@@ -462,18 +478,22 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         // The value of the type Nullable(Nothing) can't be passed as a parameter
                         if (typeInfo.ComplexTypeName != "Nothing")
+                        {
                             return writeValue(qb, _typeIfno, FunctionHelper.Apply);
+                        }
                     }
 
-                    var nullableTypeInfo = typeInfo;
+                    IClickHouseColumnTypeInfo nullableTypeInfo = typeInfo;
                     if (nullableTypeInfo.TypeName != "Nullable")
-                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
-
-                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite)=>
                     {
-                        qb2.Append("CAST((");
-                        writeElement(qb2, realWrite);
-                        qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
+                        nullableTypeInfo = new NullableTypeInfo(nullableTypeInfo);
+                    }
+
+                    return writeValue(qb, nullableTypeInfo, (qb2, realWrite) =>
+                    {
+                        _ = qb2.Append("CAST((");
+                        _ = writeElement(qb2, realWrite);
+                        _ = qb2.Append(") AS ").Append(_typeIfno.ComplexTypeName).Append(')');
                         return qb2;
                     });
                 });

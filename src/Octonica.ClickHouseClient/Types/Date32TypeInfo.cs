@@ -37,7 +37,7 @@ namespace Octonica.ClickHouseClient.Types
         private static readonly DateTime MaxDateTimeValue = DateTime.UnixEpoch.AddDays(MaxValue + 1).Subtract(TimeSpan.FromTicks(1));
 
         public Date32TypeInfo()
-            :base("Date32")
+            : base("Date32")
         {
         }
 
@@ -60,7 +60,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             protected override bool BitwiseCopyAllowed => true;
 
-            public Date32Reader(int rowCount) 
+            public Date32Reader(int rowCount)
                 : base(sizeof(int), rowCount)
             {
             }
@@ -86,14 +86,14 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(DateTime value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
                 return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, DateTime value)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 return queryBuilder.Append('\'').Append(strVal).Append("\'::").Append(_typeInfo.ComplexTypeName);
             }
 
@@ -105,13 +105,11 @@ namespace Octonica.ClickHouseClient.Types
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static string ValueToString(DateTime value)
             {
-                if (value == default)
-                    return DefaultValueStr;
-
-                if (value < MinDateTimeValue || value > MaxDateTimeValue)
-                    throw new OverflowException($"The value must be in range [{MinDateTimeValue}, {MaxDateTimeValue}].");
-
-                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
+                return value == default
+                    ? DefaultValueStr
+                    : value < MinDateTimeValue || value > MaxDateTimeValue
+                    ? throw new OverflowException($"The value must be in range [{MinDateTimeValue}, {MaxDateTimeValue}].")
+                    : value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

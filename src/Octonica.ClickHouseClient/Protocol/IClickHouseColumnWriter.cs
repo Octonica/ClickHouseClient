@@ -50,6 +50,9 @@ namespace Octonica.ClickHouseClient.Protocol
         /// The prefix is counted for a single element, so the number of elements (<see cref="SequenceSize.Elements"/>)
         /// can be either 0 or 1.
         /// </returns>
-        SequenceSize WritePrefix(Span<byte> writeTo) => new SequenceSize(0, 1);
+        SequenceSize WritePrefix(Span<byte> writeTo)
+        {
+            return new SequenceSize(0, 1);
+        }
     }
 }

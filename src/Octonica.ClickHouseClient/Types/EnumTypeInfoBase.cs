@@ -15,15 +15,15 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -54,10 +54,10 @@ namespace Octonica.ClickHouseClient.Types
             ComplexTypeName = complexTypeName;
 
             _enumMap = new Dictionary<string, TValue>(StringComparer.Ordinal);
-            _reversedEnumMap = new Dictionary<TValue, string>();
-            _mapOrder = new List<string>();
+            _reversedEnumMap = [];
+            _mapOrder = [];
 
-            foreach (var pair in values)
+            foreach (KeyValuePair<string, TValue> pair in values)
             {
                 _enumMap.Add(pair.Key, pair.Value);
                 _reversedEnumMap.Add(pair.Value, pair.Key);
@@ -83,10 +83,12 @@ namespace Octonica.ClickHouseClient.Types
         public object GetTypeArgument(int index)
         {
             if (_mapOrder == null || _enumMap == null)
+            {
                 throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+            }
 
-            var key = _mapOrder[index];
-            var value = _enumMap[key];
+            string key = _mapOrder[index];
+            TValue value = _enumMap[key];
 
             return new KeyValuePair<string, TValue>(key, value);
         }
@@ -94,32 +96,35 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             if (_enumMap == null || _reversedEnumMap == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
+            }
 
-            var internalReader = CreateInternalColumnReader(rowCount);
+            StructureReaderBase<TValue> internalReader = CreateInternalColumnReader(rowCount);
             return CreateColumnReader(internalReader, _reversedEnumMap);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            if (_enumMap == null || _reversedEnumMap == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
-
-            return CreateInternalSkippingColumnReader(rowCount);
+            return _enumMap == null || _reversedEnumMap == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.")
+                : (IClickHouseColumnReaderBase)CreateInternalSkippingColumnReader(rowCount);
         }
 
-        protected abstract EnumColumnReaderBase CreateColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap);        
+        protected abstract EnumColumnReaderBase CreateColumnReader(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap);
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_enumMap == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
+            }
 
             if (typeof(T) == typeof(string))
             {
-                var list = MappedReadOnlyList<string, TValue>.Map(
+                IReadOnlyListExt<TValue> list = MappedReadOnlyList<string, TValue>.Map(
                     (IReadOnlyList<string>)rows,
-                    key => key == null ? default : _enumMap.TryGetValue(key, out var value) ? value : throw new InvalidCastException($"The value \"{key}\" can't be converted to {ComplexTypeName}."));
+                    key => key == null ? default : _enumMap.TryGetValue(key, out TValue value) ? value : throw new InvalidCastException($"The value \"{key}\" can't be converted to {ComplexTypeName}."));
                 return CreateInternalColumnWriter(columnName, list);
             }
 
@@ -130,35 +135,45 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
-            var parsedOptions = new List<KeyValuePair<string, TValue>>(options.Count);
-            var complexNameBuilder = new StringBuilder(TypeName).Append('(');
+            List<KeyValuePair<string, TValue>> parsedOptions = new(options.Count);
+            StringBuilder complexNameBuilder = new StringBuilder(TypeName).Append('(');
             bool isFirst = true;
-            foreach (var option in options)
+            foreach (ReadOnlyMemory<char> option in options)
             {
                 if (isFirst)
+                {
                     isFirst = false;
+                }
                 else
-                    complexNameBuilder.Append(", ");
+                {
+                    _ = complexNameBuilder.Append(", ");
+                }
 
-                var keyStrLen = ClickHouseSyntaxHelper.GetSingleQuoteStringLength(option.Span);
+                int keyStrLen = ClickHouseSyntaxHelper.GetSingleQuoteStringLength(option.Span);
                 if (keyStrLen < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The fragment \"{option}\" is not recognized as an item of the enum.");
+                }
 
-                var key = ClickHouseSyntaxHelper.GetSingleQuoteString(option.Slice(0, keyStrLen).Span);
-                var valuePart = option.Slice(keyStrLen);
-                var eqSignIdx = valuePart.Span.IndexOf('=');
+                string key = ClickHouseSyntaxHelper.GetSingleQuoteString(option[..keyStrLen].Span);
+                ReadOnlyMemory<char> valuePart = option[keyStrLen..];
+                int eqSignIdx = valuePart.Span.IndexOf('=');
                 if (eqSignIdx < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The fragment \"{option}\" is not recognized as an item of the enum.");
+                }
 
-                valuePart = valuePart.Slice(eqSignIdx + 1).Trim();                      
-                if (!TryParse(valuePart.Span, out var value))
+                valuePart = valuePart[(eqSignIdx + 1)..].Trim();
+                if (!TryParse(valuePart.Span, out TValue value))
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value {valuePart} is not a valid value of {TypeName}.");
+                }
 
-                complexNameBuilder.Append(option);
+                _ = complexNameBuilder.Append(option);
                 parsedOptions.Add(new KeyValuePair<string, TValue>(key, value));
             }
 
-            var complexName = complexNameBuilder.Append(')').ToString();
+            string complexName = complexNameBuilder.Append(')').ToString();
             return CreateDetailedTypeInfo(complexName, parsedOptions);
         }
 
@@ -176,7 +191,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly StructureReaderBase<TValue> _internalReader;
             private readonly IReadOnlyDictionary<TValue, string> _reversedEnumMap;
-            
+
             public EnumColumnReaderBase(StructureReaderBase<TValue> internalReader, IReadOnlyDictionary<TValue, string> reversedEnumMap)
             {
                 _internalReader = internalReader;
@@ -190,11 +205,11 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var column = _internalReader.EndRead(null);
-                var enumConverter = settings?.EnumConverter;
+                IClickHouseTableColumn<TValue> column = _internalReader.EndRead(null);
+                IClickHouseEnumConverter? enumConverter = settings?.EnumConverter;
                 if (enumConverter != null)
                 {
-                    var dispatcher = CreateColumnDispatcher(column, _reversedEnumMap);
+                    EnumTableColumnDispatcherBase dispatcher = CreateColumnDispatcher(column, _reversedEnumMap);
                     return enumConverter.Dispatch(dispatcher);
                 }
 
@@ -218,11 +233,13 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseTableColumn Dispatch<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter)
                 where TEnum : Enum
             {
-                var map = new Dictionary<TValue, TEnum>(_reversedEnumMap.Count);
-                foreach (var pair in _reversedEnumMap)
+                Dictionary<TValue, TEnum> map = new(_reversedEnumMap.Count);
+                foreach (KeyValuePair<TValue, string> pair in _reversedEnumMap)
                 {
-                    if (TryMap(enumConverter, pair.Key, pair.Value, out var enumValue))
+                    if (TryMap(enumConverter, pair.Key, pair.Value, out TEnum? enumValue))
+                    {
                         map.Add(pair.Key, enumValue);
+                    }
                 }
 
                 return new EnumTableColumn<TValue, TEnum>(_column, map, _reversedEnumMap);
@@ -245,13 +262,13 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(string value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var enumValue = Convert(value);
+                TValue enumValue = Convert(value);
                 return _writer.TryCreateParameterValueWriter(enumValue, isNested, out valueWriter);
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, string value)
             {
-                var enumValue = Convert(value);
+                TValue enumValue = Convert(value);
                 return _writer.Interpolate(queryBuilder, enumValue);
             }
 
@@ -262,13 +279,12 @@ namespace Octonica.ClickHouseClient.Types
 
             private TValue Convert(string value)
             {
-                var enumMap = _type._enumMap;
+                Dictionary<string, TValue>? enumMap = _type._enumMap;
                 Debug.Assert(enumMap != null);
 
-                if (enumMap.TryGetValue(value, out var enumValue))
-                    return enumValue;
-
-                throw new InvalidCastException($"The value \"{value}\" can't be converted to the ClickHouse type \"{_type.ComplexTypeName}\".");
+                return enumMap.TryGetValue(value, out TValue enumValue)
+                    ? enumValue
+                    : throw new InvalidCastException($"The value \"{value}\" can't be converted to the ClickHouse type \"{_type.ComplexTypeName}\".");
             }
         }
     }

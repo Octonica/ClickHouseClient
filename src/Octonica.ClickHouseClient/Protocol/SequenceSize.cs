@@ -25,7 +25,7 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The size of an empty sequence that has zero elements and zero bytes.
         /// </summary>
-        public static readonly SequenceSize Empty = new SequenceSize(0, 0);
+        public static readonly SequenceSize Empty = new(0, 0);
 
         /// <summary>
         /// The number of bytes in the sequence.

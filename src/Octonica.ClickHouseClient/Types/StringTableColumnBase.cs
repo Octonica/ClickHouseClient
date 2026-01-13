@@ -47,11 +47,13 @@ namespace Octonica.ClickHouseClient.Types
         [return: NotNull]
         public TOut GetValue(int index)
         {
-            var(segmentIndex, offset, length) = _layouts[index];
+            (int segmentIndex, int offset, int length) = _layouts[index];
             if (length == 0)
+            {
                 return GetValue(_encoding, Span<byte>.Empty);
+            }
 
-            var span = _segments[segmentIndex].Slice(offset, length).Span;
+            Span<byte> span = _segments[segmentIndex].Slice(offset, length).Span;
             return GetValue(_encoding, span);
         }
 
@@ -65,14 +67,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(byte[]))
-                return (IClickHouseTableColumn<T>)(object)new StringByteArrayTableColumn(_encoding, _layouts, _segments);
-            if (typeof(T) == typeof(string))
-                return (IClickHouseTableColumn<T>)(object)new StringTableColumn(_encoding, _layouts, _segments);
-            if (typeof(T) == typeof(char[]))
-                return (IClickHouseTableColumn<T>)(object)new StringCharArrayTableColumn(_encoding, _layouts, _segments);
-
-            return null;
+            return typeof(T) == typeof(byte[])
+                ? (IClickHouseTableColumn<T>)(object)new StringByteArrayTableColumn(_encoding, _layouts, _segments)
+                : typeof(T) == typeof(string)
+                ? (IClickHouseTableColumn<T>)(object)new StringTableColumn(_encoding, _layouts, _segments)
+                : typeof(T) == typeof(char[])
+                ? (IClickHouseTableColumn<T>)(object)new StringCharArrayTableColumn(_encoding, _layouts, _segments)
+                : null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -83,15 +84,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public int CopyTo(int index, Span<byte> buffer, int dataOffset)
         {
-            var (segmentIndex, offset, length) = _layouts[index];
+            (int segmentIndex, int offset, int length) = _layouts[index];
             if (dataOffset < 0 || dataOffset > length)
+            {
                 throw new ArgumentOutOfRangeException(nameof(dataOffset));
+            }
 
             if (length == 0)
+            {
                 return 0;
+            }
 
-            var maxLength = Math.Min(length - dataOffset, buffer.Length);
-            var slice = _segments[segmentIndex].Slice(offset + dataOffset, maxLength);
+            int maxLength = Math.Min(length - dataOffset, buffer.Length);
+            Memory<byte> slice = _segments[segmentIndex].Slice(offset + dataOffset, maxLength);
             slice.Span.CopyTo(buffer);
             return maxLength;
         }

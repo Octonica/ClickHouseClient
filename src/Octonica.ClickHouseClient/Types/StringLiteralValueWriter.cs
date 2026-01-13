@@ -33,24 +33,24 @@ namespace Octonica.ClickHouseClient.Types
 
         public StringLiteralValueWriter(ReadOnlyMemory<char> value, bool includeQuotes)
         {
-            var encoding = Encoding.UTF8;
+            Encoding encoding = Encoding.UTF8;
             int length = includeQuotes ? 4 : 0, i = 0;
             while (i < value.Length)
             {
-                var idx = value.Span.Slice(i).IndexOfAny("\\'\r\n\t");
+                int idx = value.Span[i..].IndexOfAny("\\'\r\n\t");
                 if (idx >= 0)
                 {
                     _escapeIndices ??= new List<int>(4);
 
                     length += 4;
                     _escapeIndices.Add(i + idx);
-                    var slice = value.Slice(i, idx).Span;
+                    ReadOnlySpan<char> slice = value.Slice(i, idx).Span;
                     length += encoding.GetByteCount(slice);
                     i += idx + 1;
                 }
                 else
                 {
-                    var slice = value.Slice(i).Span;
+                    ReadOnlySpan<char> slice = value[i..].Span;
                     length += encoding.GetByteCount(slice);
                     i = value.Length;
                 }
@@ -65,7 +65,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             Debug.Assert(buffer.Length >= Length);
 
-            var encoding = Encoding.UTF8;
+            Encoding encoding = Encoding.UTF8;
             int i = 0, bytesWritten = 0;
             if (_includeQuotes)
             {
@@ -75,11 +75,11 @@ namespace Octonica.ClickHouseClient.Types
 
             if (_escapeIndices != null)
             {
-                foreach (var escapeIdx in _escapeIndices)
+                foreach (int escapeIdx in _escapeIndices)
                 {
-                    var slice = _value.Slice(i, escapeIdx - i);
-                    bytesWritten += encoding.GetBytes(slice.Span, buffer.Slice(bytesWritten).Span);
-                    var escapeBuffer = buffer.Slice(bytesWritten).Span;
+                    ReadOnlyMemory<char> slice = _value[i..escapeIdx];
+                    bytesWritten += encoding.GetBytes(slice.Span, buffer[bytesWritten..].Span);
+                    Span<byte> escapeBuffer = buffer[bytesWritten..].Span;
 
                     escapeBuffer[0] = (byte)'\\';
                     escapeBuffer[1] = (byte)'\\';
@@ -98,7 +98,9 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (i < _value.Length)
-                bytesWritten += encoding.GetBytes(_value.Slice(i).Span, buffer.Slice(bytesWritten).Span);
+            {
+                bytesWritten += encoding.GetBytes(_value[i..].Span, buffer[bytesWritten..].Span);
+            }
 
             if (_includeQuotes)
             {

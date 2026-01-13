@@ -23,15 +23,15 @@ namespace Octonica.ClickHouseClient.Protocol
     {
         public ClientMessageCode MessageCode => ClientMessageCode.Hello;
 
-        public string ClientName { get;  }
+        public string ClientName { get; }
 
         public ClickHouseVersion ClientVersion { get; }
 
-        public int ProtocolRevision { get;  }
+        public int ProtocolRevision { get; }
 
-        public string? Database { get;  }
+        public string? Database { get; }
 
-        public string User { get;  }
+        public string User { get; }
 
         public string? Password { get; }
 
@@ -50,7 +50,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
         {
-            writer.Write7BitInt32((int) MessageCode);
+            writer.Write7BitInt32((int)MessageCode);
 
             writer.WriteString(ClientName);
             writer.Write7BitInt32(ClientVersion.Major);

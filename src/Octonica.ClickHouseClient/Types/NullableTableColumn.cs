@@ -15,11 +15,11 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -38,18 +38,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool IsNull(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return true;
-
-            return _baseColumn.IsNull(index);
+            return (_nullFlags != null && _nullFlags[index]) || _baseColumn.IsNull(index);
         }
 
         public object GetValue(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return DBNull.Value;
-
-            return _baseColumn.GetValue(index);
+            return _nullFlags != null && _nullFlags[index] ? DBNull.Value : _baseColumn.GetValue(index);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
@@ -59,15 +53,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public static IClickHouseTableColumn MakeNullableColumn(BitArray? nullFlags, IClickHouseTableColumn baseColumn)
         {
-            if (!baseColumn.TryDipatch(new NullableTableColumnDispatcher(nullFlags), out var result) || result == null)
+            if (!baseColumn.TryDipatch(new NullableTableColumnDispatcher(nullFlags), out IClickHouseTableColumn? result) || result == null)
+            {
                 result = new NullableTableColumn(nullFlags, baseColumn);
+            }
 
             return result;
         }
 
         public static IClickHouseTableColumn<T>? TryMakeNullableColumn<T>(BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
         {
-            return (IClickHouseTableColumn<T>?) TryMakeNullableColumn(typeof(T), nullFlags, notNullableColumn);
+            return (IClickHouseTableColumn<T>?)TryMakeNullableColumn(typeof(T), nullFlags, notNullableColumn);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
@@ -83,11 +79,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public static IClickHouseArrayTableColumn<T>? TryMakeNullableArrayColumn<T>(IClickHouseTableColumn reinterpretationRoot, BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
         {
-            var notNullableArrayColumn = notNullableColumn as IClickHouseArrayTableColumn<T> ?? notNullableColumn.TryReinterpretAsArray<T>();
-            if (notNullableArrayColumn == null)
-                return null;
-
-            return new NullableArrayTableColumn<T>(reinterpretationRoot, nullFlags, notNullableArrayColumn);
+            IClickHouseArrayTableColumn<T>? notNullableArrayColumn = notNullableColumn as IClickHouseArrayTableColumn<T> ?? notNullableColumn.TryReinterpretAsArray<T>();
+            return notNullableArrayColumn == null
+                ? null
+                : (IClickHouseArrayTableColumn<T>)new NullableArrayTableColumn<T>(reinterpretationRoot, nullFlags, notNullableArrayColumn);
         }
 
         private static IClickHouseTableColumn? TryMakeNullableColumn(Type underlyingType, BitArray? nullFlags, IClickHouseTableColumn notNullableColumn)
@@ -96,7 +91,7 @@ namespace Octonica.ClickHouseClient.Types
             bool reinterpretAsNotNullable = false;
             if (underlyingType.IsValueType)
             {
-                var columnType = Nullable.GetUnderlyingType(underlyingType);
+                Type? columnType = Nullable.GetUnderlyingType(underlyingType);
                 if (columnType == null)
                 {
                     reinterpretAsNotNullable = true;
@@ -114,7 +109,7 @@ namespace Octonica.ClickHouseClient.Types
                 return null;
             }
 
-            var dispatcher = (INullableColumnDispatcher) Activator.CreateInstance(dispatcherType)!;
+            INullableColumnDispatcher dispatcher = (INullableColumnDispatcher)Activator.CreateInstance(dispatcherType)!;
 
             return dispatcher.Dispatch(nullFlags, notNullableColumn, reinterpretAsNotNullable);
         }
@@ -129,15 +124,14 @@ namespace Octonica.ClickHouseClient.Types
         {
             public IClickHouseTableColumn? Dispatch(BitArray? nullFlags, IClickHouseTableColumn notNullableColumn, bool reinterpretAsNotNullable)
             {
-                var reinterpretedColumn = notNullableColumn as IClickHouseTableColumn<TStruct> ?? notNullableColumn.TryReinterpret<TStruct>();
+                IClickHouseTableColumn<TStruct>? reinterpretedColumn = notNullableColumn as IClickHouseTableColumn<TStruct> ?? notNullableColumn.TryReinterpret<TStruct>();
                 if (reinterpretedColumn == null)
+                {
                     return null;
+                }
 
-                var result = new NullableStructTableColumn<TStruct>(nullFlags, reinterpretedColumn);
-                if (!reinterpretAsNotNullable)
-                    return result;
-
-                return result.AsNotNullable();
+                NullableStructTableColumn<TStruct> result = new(nullFlags, reinterpretedColumn);
+                return !reinterpretAsNotNullable ? result : result.AsNotNullable();
             }
         }
 
@@ -148,14 +142,10 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(!reinterpretAsNotNullable);
 
-                var reinterpretedColumn = notNullableColumn as IClickHouseTableColumn<TObj> ?? notNullableColumn.TryReinterpret<TObj>();
-                if (reinterpretedColumn == null)
-                    return null;
-
-                if (nullFlags == null)
-                    return reinterpretedColumn;
-                
-                return new NullableObjTableColumn<TObj>(nullFlags, reinterpretedColumn);
+                IClickHouseTableColumn<TObj>? reinterpretedColumn = notNullableColumn as IClickHouseTableColumn<TObj> ?? notNullableColumn.TryReinterpret<TObj>();
+                return reinterpretedColumn == null
+                    ? null
+                    : nullFlags == null ? reinterpretedColumn : (IClickHouseTableColumn)new NullableObjTableColumn<TObj>(nullFlags, reinterpretedColumn);
             }
         }
 
@@ -174,7 +164,7 @@ namespace Octonica.ClickHouseClient.Types
                 Type dispatcherType;
                 if (type.IsValueType)
                 {
-                    var columnType = Nullable.GetUnderlyingType(type) ?? type;
+                    Type columnType = Nullable.GetUnderlyingType(type) ?? type;
                     dispatcherType = typeof(NullableStructTableColumnDispatcher<>).MakeGenericType(columnType);
                 }
                 else if (type.IsClass)
@@ -186,7 +176,7 @@ namespace Octonica.ClickHouseClient.Types
                     return null;
                 }
 
-                var dispatcher = (INullableColumnDispatcher)Activator.CreateInstance(dispatcherType)!;
+                INullableColumnDispatcher dispatcher = (INullableColumnDispatcher)Activator.CreateInstance(dispatcherType)!;
                 return dispatcher.Dispatch(_nullFlags, column, false);
             }
         }
@@ -210,18 +200,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool IsNull(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return true;
-
-            return _baseColumn.IsNull(index);
+            return (_nullFlags != null && _nullFlags[index]) || _baseColumn.IsNull(index);
         }
 
         public TStruct? GetValue(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return null;
-
-            return _baseColumn.GetValue(index);
+            return _nullFlags != null && _nullFlags[index] ? null : _baseColumn.GetValue(index);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
@@ -242,15 +226,12 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            return (object?) GetValue(index) ?? DBNull.Value;
+            return (object?)GetValue(index) ?? DBNull.Value;
         }
 
         public IClickHouseTableColumn<TStruct> AsNotNullable()
         {
-            if (_nullFlags == null)
-                return _baseColumn;
-
-            return new NullableStructTableColumnNotNullableAdapter<TStruct>(_nullFlags, _baseColumn);
+            return _nullFlags == null ? _baseColumn : new NullableStructTableColumnNotNullableAdapter<TStruct>(_nullFlags, _baseColumn);
         }
     }
 
@@ -277,10 +258,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public TStruct GetValue(int index)
         {
-            if (_nullFlags[index])
-                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Can't convert NULL to \"{typeof(TStruct)}\".");
-
-            return _baseColumn.GetValue(index);
+            return _nullFlags[index]
+                ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Can't convert NULL to \"{typeof(TStruct)}\".")
+                : _baseColumn.GetValue(index);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
@@ -301,10 +281,7 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return DBNull.Value;
-
-            return _baseColumn.GetValue(index);
+            return _nullFlags != null && _nullFlags[index] ? DBNull.Value : _baseColumn.GetValue(index);
         }
 
         public NullableStructTableColumn<TStruct> Unguard()
@@ -336,33 +313,24 @@ namespace Octonica.ClickHouseClient.Types
 
         public TObj? GetValue(int index)
         {
-            if (_nullFlags[index])
-                return null;
-
-            return _baseColumn.GetValue(index);
+            return _nullFlags[index] ? null : _baseColumn.GetValue(index);
         }
 
         public NullableObjTableColumn<TRes> ReinterpretAsObj<TRes>(Func<TObj, TRes> convert)
             where TRes : class
         {
-            IClickHouseTableColumn<TRes> updColumn;
-            if (_baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted)
-                updColumn = baseReinterpreted.Chain(convert);
-            else
-                updColumn = new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
-
+            IClickHouseTableColumn<TRes> updColumn = _baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted
+                ? baseReinterpreted.Chain(convert)
+                : (IClickHouseTableColumn<TRes>)new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
             return new NullableObjTableColumn<TRes>(_nullFlags, updColumn);
         }
 
         public NullableStructTableColumn<TRes> ReinterpretAsStruct<TRes>(Func<TObj, TRes> convert)
             where TRes : struct
         {
-            IClickHouseTableColumn<TRes> updColumn;
-            if (_baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted)
-                updColumn = baseReinterpreted.Chain(convert);
-            else
-                updColumn = new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
-
+            IClickHouseTableColumn<TRes> updColumn = _baseColumn is IClickHouseReinterpretedTableColumn<TObj> baseReinterpreted
+                ? baseReinterpreted.Chain(convert)
+                : (IClickHouseTableColumn<TRes>)new ReinterpretedTableColumn<TObj, TRes>(_baseColumn, convert);
             return new NullableStructTableColumn<TRes>(_nullFlags, updColumn);
         }
 
@@ -384,7 +352,7 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            return (object?) GetValue(index) ?? DBNull.Value;
+            return (object?)GetValue(index) ?? DBNull.Value;
         }
     }
 
@@ -405,10 +373,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetValue(int index)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                return DBNull.Value;
-
-            return _arrayColumn.GetValue(index);
+            return _nullFlags != null && _nullFlags[index] ? DBNull.Value : _arrayColumn.GetValue(index);
         }
 
         public bool IsNull(int index)
@@ -434,10 +399,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
         {
-            if (_nullFlags != null && _nullFlags[index])
-                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.");
-
-            return _arrayColumn.CopyTo(index, buffer, dataOffset);
+            return _nullFlags != null && _nullFlags[index]
+                ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.")
+                : _arrayColumn.CopyTo(index, buffer, dataOffset);
         }
     }
 }

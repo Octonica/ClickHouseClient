@@ -60,14 +60,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(string))
-                return (IClickHouseTableColumn<T>)(object)new FixedStringDecodedTableColumn(_buffer, _rowSize, _encoding);
-            if (typeof(T) == typeof(byte[]))
-                return (IClickHouseTableColumn<T>)(object)new FixedStringTableColumn(_buffer, _rowSize, _encoding);
-            if (typeof(T) == typeof(char[]))
-                return (IClickHouseTableColumn<T>)(object)new FixedStringDecodedCharArrayTableColumn(_buffer, _rowSize, _encoding);
-
-            return null;
+            return typeof(T) == typeof(string)
+                ? (IClickHouseTableColumn<T>)(object)new FixedStringDecodedTableColumn(_buffer, _rowSize, _encoding)
+                : typeof(T) == typeof(byte[])
+                ? (IClickHouseTableColumn<T>)(object)new FixedStringTableColumn(_buffer, _rowSize, _encoding)
+                : typeof(T) == typeof(char[])
+                ? (IClickHouseTableColumn<T>)(object)new FixedStringDecodedCharArrayTableColumn(_buffer, _rowSize, _encoding)
+                : null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -79,10 +78,12 @@ namespace Octonica.ClickHouseClient.Types
         public int CopyTo(int index, Span<byte> buffer, int dataOffset)
         {
             if (dataOffset < 0 || dataOffset > _rowSize)
+            {
                 throw new ArgumentOutOfRangeException(nameof(dataOffset));
+            }
 
-            var length = Math.Min(_rowSize - dataOffset, buffer.Length);
-            _buffer.Span.Slice(index * _rowSize + dataOffset, length).CopyTo(buffer);
+            int length = Math.Min(_rowSize - dataOffset, buffer.Length);
+            _buffer.Span.Slice((index * _rowSize) + dataOffset, length).CopyTo(buffer);
             return length;
         }
     }

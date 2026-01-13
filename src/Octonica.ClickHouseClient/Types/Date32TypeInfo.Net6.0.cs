@@ -29,7 +29,7 @@ using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    partial class Date32TypeInfo
+    internal partial class Date32TypeInfo
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
 
@@ -43,22 +43,21 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            IReadOnlyList<DateOnly> dateOnlyRows;
-            if (typeof(T) == typeof(DateOnly))
-                dateOnlyRows = (IReadOnlyList<DateOnly>)rows;
-            else if (typeof(T) == typeof(DateTime))
-                dateOnlyRows = ((IReadOnlyList<DateTime>)rows).Map(DateOnly.FromDateTime);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
+            IReadOnlyList<DateOnly> dateOnlyRows = typeof(T) == typeof(DateOnly)
+                ? (IReadOnlyList<DateOnly>)rows
+                : typeof(T) == typeof(DateTime)
+                ? ((IReadOnlyList<DateTime>)rows).Map(DateOnly.FromDateTime)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             return new Date32Writer(columnName, ComplexTypeName, dateOnlyRows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object writer = default(T) switch
             {
@@ -73,16 +72,17 @@ namespace Octonica.ClickHouseClient.Types
         private static int DateOnlyToDays(DateOnly value)
         {
             if (value == default)
+            {
                 return MinValue;
+            }
 
-            var days = value.DayNumber - UnixEpoch.DayNumber;
-            if (days < MinValue || days > MaxValue)
-                throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].");
-
-            return days;
+            int days = value.DayNumber - UnixEpoch.DayNumber;
+            return days is < MinValue or > MaxValue
+                ? throw new OverflowException("The value must be in range [1925-01-01, 2283-11-11].")
+                : days;
         }
 
-        partial class Date32Reader : StructureReaderBase<int, DateOnly>
+        private partial class Date32Reader : StructureReaderBase<int, DateOnly>
         {
             protected override IClickHouseTableColumn<DateOnly> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<int> buffer)
             {
@@ -90,7 +90,7 @@ namespace Octonica.ClickHouseClient.Types
             }
         }
 
-        partial class Date32Writer : StructureWriterBase<DateOnly, int>
+        private partial class Date32Writer : StructureWriterBase<DateOnly, int>
         {
             public Date32Writer(string columnName, string columnType, IReadOnlyList<DateOnly> rows)
                 : base(columnName, columnType, sizeof(int), rows)
@@ -114,9 +114,11 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(DateOnly value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 if (isNested)
+                {
                     strVal = $"'{strVal}'";
+                }
 
                 valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
                 return true;
@@ -124,7 +126,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, DateOnly value)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 return queryBuilder.Append('\'').Append(strVal).Append("'::").Append(_typeInfo.ComplexTypeName);
             }
 
@@ -136,13 +138,11 @@ namespace Octonica.ClickHouseClient.Types
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static string ValueToString(DateOnly value)
             {
-                if (value == default)
-                    return DefaultValueStr;
-
-                if (value < MinDateOnlyValue || value > MaxDateOnlyValue)
-                    throw new OverflowException($"The value must be in range [{MinDateOnlyValue}, {MaxDateOnlyValue}].");
-
-                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
+                return value == default
+                    ? DefaultValueStr
+                    : value < MinDateOnlyValue || value > MaxDateOnlyValue
+                    ? throw new OverflowException($"The value must be in range [{MinDateOnlyValue}, {MaxDateOnlyValue}].")
+                    : value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

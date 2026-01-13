@@ -15,10 +15,10 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -41,22 +41,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (typeof(T) != typeof(sbyte))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
-            return new Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
+            return typeof(T) != typeof(sbyte)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+                : (IClickHouseColumnWriter)new Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
-            if (type == typeof(DBNull))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
-
-            if (type == typeof(sbyte))
-                return (IClickHouseParameterWriter<T>)(object)new SimpleParameterWriter<sbyte>(this, appendTypeCast: true);
-
-            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            Type type = typeof(T);
+            return type == typeof(DBNull)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.")
+                : type == typeof(sbyte)
+                ? (IClickHouseParameterWriter<T>)(object)new SimpleParameterWriter<sbyte>(this, appendTypeCast: true)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public override Type GetFieldType()
@@ -80,7 +77,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override sbyte ReadElement(ReadOnlySpan<byte> source)
             {
-                return unchecked((sbyte) source[0]);
+                return unchecked((sbyte)source[0]);
             }
 
             protected override IClickHouseTableColumn<sbyte> EndRead(ClickHouseColumnSettings? settings, ReadOnlyMemory<sbyte> buffer)
@@ -108,10 +105,12 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var size = Math.Min(writeTo.Length, _rows.Count - _position);
+                int size = Math.Min(writeTo.Length, _rows.Count - _position);
 
                 for (int i = 0; i < size; i++, _position++)
-                    writeTo[i] = unchecked((byte) _rows[_position]);
+                {
+                    writeTo[i] = unchecked((byte)_rows[_position]);
+                }
 
                 return new SequenceSize(size, size);
             }

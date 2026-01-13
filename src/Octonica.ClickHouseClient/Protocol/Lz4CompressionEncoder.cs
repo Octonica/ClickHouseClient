@@ -15,9 +15,9 @@
  */
 #endregion
 
-using System;
 using K4os.Compression.LZ4;
 using K4os.Compression.LZ4.Encoders;
+using System;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -49,15 +49,17 @@ namespace Octonica.ClickHouseClient.Protocol
         protected override int EncodeNext(byte[] target, int offset, int length)
         {
             if (_compressedAvailable == 0)
+            {
                 return 0;
+            }
 
-            if (_compressedAvailable <0)
+            if (_compressedAvailable < 0)
             {
                 _compressedSize = _encoder.Encode(_compressedBuffer, 0, _compressedBuffer.Length, false);
                 _compressedAvailable = _compressedSize;
             }
 
-            var maxLen = Math.Min(length, _compressedAvailable);
+            int maxLen = Math.Min(length, _compressedAvailable);
             Array.Copy(_compressedBuffer, _compressedSize - _compressedAvailable, target, offset, maxLen);
             _compressedAvailable -= maxLen;
 
@@ -67,15 +69,17 @@ namespace Octonica.ClickHouseClient.Protocol
         protected override int EncodeFinal(byte[] target, int offset, int length)
         {
             if (_compressedAvailable == 0)
+            {
                 return 0;
+            }
 
             if (_compressedAvailable < 0)
             {
-                _encoder.FlushAndEncode(_compressedBuffer, 0, _compressedBuffer.Length, false, out _compressedSize);
+                _ = _encoder.FlushAndEncode(_compressedBuffer, 0, _compressedBuffer.Length, false, out _compressedSize);
                 _compressedAvailable = _compressedSize;
             }
 
-            var maxLen = Math.Min(length, _compressedAvailable);
+            int maxLen = Math.Min(length, _compressedAvailable);
             Array.Copy(_compressedBuffer, _compressedSize - _compressedAvailable, target, offset, maxLen);
             _compressedAvailable -= maxLen;
 

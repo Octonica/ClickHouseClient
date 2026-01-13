@@ -46,24 +46,17 @@ namespace Octonica.ClickHouseClient
                 return new ClickHouseReaderColumnSettings(column, Reinterpreter);
             }
 
-            Debug.Assert((column.ColumnType == null) == (reinterpreter == null));
+            Debug.Assert(column.ColumnType == null == (reinterpreter == null));
             return new ClickHouseReaderColumnSettings(column, reinterpreter);
         }
 
         public ClickHouseReaderColumnSettings WithUserDefinedReader(string columnName, IClickHouseColumnReinterpreter? reinterpreter)
         {
-            if (reinterpreter == null)
-            {
-                if (Column?.ColumnType != null || Reinterpreter == null)
-                    return this;
-
-                return new ClickHouseReaderColumnSettings(Column, null);
-            }
-
-            if(Column?.ColumnType != null)
-                throw new ClickHouseException(ClickHouseErrorCodes.InvalidColumnSettings, $"An external callback function for converting values can't be set for the column \"{columnName}\" because the type of the column was already defined in the column settings.");
-
-            return new ClickHouseReaderColumnSettings(Column, reinterpreter);
+            return reinterpreter == null
+                ? Column?.ColumnType != null || Reinterpreter == null ? this : new ClickHouseReaderColumnSettings(Column, null)
+                : Column?.ColumnType != null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.InvalidColumnSettings, $"An external callback function for converting values can't be set for the column \"{columnName}\" because the type of the column was already defined in the column settings.")
+                : new ClickHouseReaderColumnSettings(Column, reinterpreter);
         }
     }
 }

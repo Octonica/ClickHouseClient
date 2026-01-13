@@ -22,7 +22,7 @@ namespace Octonica.ClickHouseClient.Types
     internal sealed class DecimalTableColumn : IClickHouseTableColumn<decimal>
     {
         private const int MaxDecimalScale = 28;
-        private static readonly uint[] Scales = {10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000};
+        private static readonly uint[] Scales = { 10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000 };
 
         private readonly ReadOnlyMemory<uint> _buffer;
         private readonly int _elementSize;
@@ -34,8 +34,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public DecimalTableColumn(ReadOnlyMemory<uint> buffer, int elementSize, byte scale)
         {
-            if (elementSize != 1 && elementSize != 2 && elementSize != 4)
+            if (elementSize is not 1 and not 2 and not 4)
+            {
                 throw new ArgumentOutOfRangeException(nameof(elementSize));
+            }
 
             _buffer = buffer;
             _elementSize = elementSize;
@@ -49,16 +51,18 @@ namespace Octonica.ClickHouseClient.Types
 
         public decimal GetValue(int index)
         {
-            var startIndex = index * _elementSize;
-            var span = _buffer.Span;
-            var lowLow = span[startIndex];
+            int startIndex = index * _elementSize;
+            ReadOnlySpan<uint> span = _buffer.Span;
+            uint lowLow = span[startIndex];
             bool isNegative;
             uint lowHigh, highLow;
             if (_elementSize == 1)
             {
-                isNegative = (lowLow & unchecked((uint) int.MinValue)) != 0;
+                isNegative = (lowLow & unchecked((uint)int.MinValue)) != 0;
                 if (isNegative)
+                {
                     lowLow = unchecked(0 - lowLow);
+                }
 
                 lowHigh = highLow = 0;
             }
@@ -66,7 +70,7 @@ namespace Octonica.ClickHouseClient.Types
             {
                 lowHigh = span[startIndex + 1];
 
-                isNegative = (lowHigh & unchecked((uint) int.MinValue)) != 0;
+                isNegative = (lowHigh & unchecked((uint)int.MinValue)) != 0;
                 if (isNegative)
                 {
                     if (lowLow == 0)
@@ -86,9 +90,9 @@ namespace Octonica.ClickHouseClient.Types
             {
                 lowHigh = span[startIndex + 1];
                 highLow = span[startIndex + 2];
-                var highHigh = span[startIndex + 3];
+                uint highHigh = span[startIndex + 3];
 
-                isNegative = (highHigh & unchecked((uint) int.MinValue)) != 0;
+                isNegative = (highHigh & unchecked((uint)int.MinValue)) != 0;
                 if (isNegative)
                 {
                     if (lowLow == 0)
@@ -125,7 +129,7 @@ namespace Octonica.ClickHouseClient.Types
                 {
                     uint mll = lowLow, mlh = lowHigh, mhl = highLow, mhh = highHigh;
                     byte scale = _scale;
-                    var deltaScale = _scale > MaxDecimalScale ? _scale - MaxDecimalScale : 0;
+                    int deltaScale = _scale > MaxDecimalScale ? _scale - MaxDecimalScale : 0;
                     // Attempt to rescale the value without loss of significant digits. It should work for values written by this DB driver.
                     while (mhh != 0 || deltaScale != 0)
                     {
@@ -133,44 +137,48 @@ namespace Octonica.ClickHouseClient.Types
                         if (deltaScale > 0)
                         {
                             scaleIndex = Math.Min(deltaScale, Scales.Length) - 1;
-                            deltaScale -= (byte) (scaleIndex + 1);
+                            deltaScale -= (byte)(scaleIndex + 1);
                         }
                         else
                         {
                             for (; scaleIndex < Scales.Length - 1; scaleIndex++)
                             {
                                 if (mhh < Scales[scaleIndex])
+                                {
                                     break;
+                                }
                             }
                         }
 
-                        var mul = Scales[scaleIndex];
+                        uint mul = Scales[scaleIndex];
 
                         ulong rem = mhh % mul;
                         mhh /= mul;
 
-                        var val = mhl | rem << 32;
+                        ulong val = mhl | (rem << 32);
                         rem = val % mul;
-                        mhl = (uint) (val / mul);
+                        mhl = (uint)(val / mul);
 
-                        val = mlh | rem << 32;
+                        val = mlh | (rem << 32);
                         rem = val % mul;
-                        mlh = (uint) (val / mul);
+                        mlh = (uint)(val / mul);
 
-                        val = mll | rem << 32;
+                        val = mll | (rem << 32);
                         rem = val % mul;
                         if (rem != 0 || scaleIndex >= scale)
+                        {
                             throw new NotSupportedException($"Value 0x{highHigh:x8}_{highLow:x8}_{lowHigh:x8}_{lowLow:x8} is too long for the type \"{typeof(decimal).FullName}\".");
+                        }
 
-                        mll = (uint) (val / mul);
-                        scale = (byte) (scale - scaleIndex - 1);
+                        mll = (uint)(val / mul);
+                        scale = (byte)(scale - scaleIndex - 1);
                     }
 
-                    return new decimal(unchecked((int) mll), unchecked((int) mlh), unchecked((int) mhl), isNegative, scale);
+                    return new decimal(unchecked((int)mll), unchecked((int)mlh), unchecked((int)mhl), isNegative, scale);
                 }
             }
 
-            return new decimal(unchecked((int) lowLow), unchecked((int) lowHigh), unchecked((int) highLow), isNegative, _scale);
+            return new decimal(unchecked((int)lowLow), unchecked((int)lowHigh), unchecked((int)highLow), isNegative, _scale);
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -180,10 +188,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(decimal?))
-                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<decimal>(null, this);
-
-            return null;
+            return typeof(T) == typeof(decimal?) ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<decimal>(null, this) : null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

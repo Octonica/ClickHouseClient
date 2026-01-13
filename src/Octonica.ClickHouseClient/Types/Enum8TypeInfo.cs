@@ -15,10 +15,10 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -56,30 +56,30 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override IClickHouseColumnWriter CreateInternalColumnWriter<T>(string columnName, IReadOnlyList<T> rows)
         {
-            if (typeof(T) != typeof(sbyte))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{TypeName}\".");
-
-            return new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
+            return typeof(T) != typeof(sbyte)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{TypeName}\".")
+                : (IClickHouseColumnWriter)new Int8TypeInfo.Int8Writer(columnName, ComplexTypeName, (IReadOnlyList<sbyte>)rows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             // TODO: ClickHouseDbType.Enum is not supported in DefaultTypeInfoProvider.GetTypeInfo
             if (_enumMap == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (typeof(T) == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
-            object writer;
-            if (type == typeof(string))
-                writer = new EnumParameterWriter(this);
-            else if (type == typeof(sbyte))
-                writer = new SimpleParameterWriter<sbyte>(this);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
+            object writer = type == typeof(string)
+                ? new EnumParameterWriter(this)
+                : type == typeof(sbyte)
+                ? (object)new SimpleParameterWriter<sbyte>(this)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             return (IClickHouseParameterWriter<T>)writer;
         }
 

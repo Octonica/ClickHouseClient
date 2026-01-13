@@ -113,10 +113,14 @@ namespace Octonica.ClickHouseClient
         internal ClickHouseConnectionSettings(ClickHouseConnectionStringBuilder builder)
         {
             if (string.IsNullOrWhiteSpace(builder.Host))
+            {
                 throw new ArgumentException("The host is not defined.", nameof(builder));
+            }
 
             if (builder.BufferSize <= 0)
+            {
                 throw new ArgumentException("The size of the buffer must be a positive number.", nameof(builder));
+            }
 
             Host = builder.Host;
             Port = builder.Port;
@@ -139,48 +143,63 @@ namespace Octonica.ClickHouseClient
         private static byte[]? ParseHashString(string? hashString)
         {
             if (string.IsNullOrEmpty(hashString))
+            {
                 return null;
+            }
 
             int resultPos = 0;
-            var result = new byte[hashString.Length / 2];
+            byte[] result = new byte[hashString.Length / 2];
             for (int i = 0; i < hashString.Length; i++)
             {
-                var ch = hashString[i];
+                char ch = hashString[i];
                 if (char.IsWhiteSpace(ch) || ch == '-')
+                {
                     continue;
+                }
 
                 if (i + 1 == hashString.Length)
+                {
                     throw new ArgumentException("Unexpected end of the hash string. Expected at least one more significant character.", nameof(hashString));
+                }
 
-                byte byteVal;
-                if (ch >= '0' && ch <= '9')
-                    byteVal = (byte)(ch - '0');
-                else if (ch >= 'a' && ch <= 'f')
-                    byteVal = (byte)(ch - 'a' + 0xA);
-                else if (ch >= 'A' && ch <= 'F')
-                    byteVal = (byte)(ch - 'A' + 0xA);
-                else
-                    throw new ArgumentException($"Unexpected character '{ch}' at the position {i} in the hash string.", nameof(hashString));
-
+                byte byteVal = ch is >= '0' and <= '9'
+                    ? (byte)(ch - '0')
+                    : ch is >= 'a' and <= 'f'
+                        ? (byte)(ch - 'a' + 0xA)
+                        : ch is >= 'A' and <= 'F'
+                    ? (byte)(ch - 'A' + 0xA)
+                    : throw new ArgumentException($"Unexpected character '{ch}' at the position {i} in the hash string.", nameof(hashString));
                 byteVal <<= 4;
                 ch = hashString[++i];
-                if (ch >= '0' && ch <= '9')
+                if (ch is >= '0' and <= '9')
+                {
                     byteVal |= (byte)(ch - '0');
-                else if (ch >= 'a' && ch <= 'f')
+                }
+                else if (ch is >= 'a' and <= 'f')
+                {
                     byteVal |= (byte)(ch - 'a' + 0xA);
-                else if (ch >= 'A' && ch <= 'F')
+                }
+                else if (ch is >= 'A' and <= 'F')
+                {
                     byteVal |= (byte)(ch - 'A' + 0xA);
+                }
                 else
+                {
                     throw new ArgumentException($"Unexpected character '{ch}' at the position {i} in the hash string.", nameof(hashString));
+                }
 
                 result[resultPos++] = byteVal;
             }
 
             if (resultPos == 0)
+            {
                 return null;
+            }
 
             if (result.Length != resultPos)
+            {
                 Array.Resize(ref result, resultPos);
+            }
 
             return result;
         }

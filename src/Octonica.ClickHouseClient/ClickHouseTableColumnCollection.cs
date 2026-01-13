@@ -16,7 +16,6 @@
 #endregion
 
 using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections;
@@ -85,9 +84,11 @@ namespace Octonica.ClickHouseClient
         /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn<T>(string columnName, IReadOnlyList<T> column)
         {
-            var result = AddColumn(columnName, column, typeof(T));
+            ClickHouseTableColumn result = AddColumn(columnName, column, typeof(T));
             if (result.Settings?.ColumnType == null)
+            {
                 result.Settings = new ClickHouseColumnSettings(result.Settings?.StringEncoding, result.Settings?.EnumConverter, typeof(T));
+            }
 
             return result;
         }
@@ -125,9 +126,11 @@ namespace Octonica.ClickHouseClient
         public ClickHouseTableColumn AddColumn(string columnName, object column)
         {
             if (column == null)
+            {
                 throw new ArgumentNullException(nameof(column));
+            }
 
-            var columnType = column.GetType();
+            Type columnType = column.GetType();
             Type? enumerable = null;
             Type? altEnumerable = null;
             Type? asyncEnumerable = null;
@@ -136,12 +139,14 @@ namespace Octonica.ClickHouseClient
             Type? altReadOnlyList = null;
             Type? list = null;
             Type? altList = null;
-            foreach (var ifs in columnType.GetInterfaces())
+            foreach (Type ifs in columnType.GetInterfaces())
             {
                 if (!ifs.IsGenericType)
+                {
                     continue;
+                }
 
-                var ifsDefinition = ifs.GetGenericTypeDefinition();
+                Type ifsDefinition = ifs.GetGenericTypeDefinition();
                 if (ifsDefinition == typeof(IEnumerable<>) && ifs.GetGenericArguments()[0] != typeof(object))
                 {
                     altEnumerable ??= enumerable;
@@ -168,28 +173,36 @@ namespace Octonica.ClickHouseClient
             if (readOnlyList != null)
             {
                 if (altReadOnlyList != null)
+                {
                     throw CreateInterfaceAmbiguousException(readOnlyList, altReadOnlyList);
+                }
 
                 genericCollectionType = readOnlyList;
             }
             else if (list != null)
             {
                 if (altList != null)
+                {
                     throw CreateInterfaceAmbiguousException(list, altList);
+                }
 
                 genericCollectionType = list;
             }
             else if (asyncEnumerable != null)
             {
                 if (altAsyncEnumerable != null)
+                {
                     throw CreateInterfaceAmbiguousException(asyncEnumerable, altAsyncEnumerable);
+                }
 
                 genericCollectionType = asyncEnumerable;
             }
             else if (enumerable != null)
             {
                 if (altEnumerable != null)
+                {
                     throw CreateInterfaceAmbiguousException(enumerable, altEnumerable);
+                }
 
                 genericCollectionType = enumerable;
             }
@@ -198,11 +211,13 @@ namespace Octonica.ClickHouseClient
                 throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, "The column is not a generic collection. A type of the column can't be detected.");
             }
 
-            var elementType = genericCollectionType.GetGenericArguments()[0];
+            Type elementType = genericCollectionType.GetGenericArguments()[0];
 
-            var result = AddColumn(columnName, column, elementType);
+            ClickHouseTableColumn result = AddColumn(columnName, column, elementType);
             if (result.Settings?.ColumnType == null)
+            {
                 result.Settings = new ClickHouseColumnSettings(result.Settings?.StringEncoding, result.Settings?.EnumConverter, elementType);
+            }
 
             return result;
         }
@@ -241,7 +256,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>A new column.</returns>
         public ClickHouseTableColumn AddColumn(string columnName, object column, Type columnType)
         {
-            var result = new ClickHouseTableColumn(columnName, column, columnType);
+            ClickHouseTableColumn result = new(columnName, column, columnType);
             Add(result);
             return result;
         }

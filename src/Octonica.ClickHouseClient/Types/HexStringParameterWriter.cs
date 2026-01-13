@@ -51,12 +51,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public static StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlySpan<byte> value)
         {
-            queryBuilder.Append('\'');
-            foreach (var byteValue in value)
+            _ = queryBuilder.Append('\'');
+            foreach (byte byteValue in value)
             {
-                queryBuilder.Append("\\x");
-                queryBuilder.Append(HexDigits[byteValue >> 4]);
-                queryBuilder.Append(HexDigits[byteValue & 0xF]);
+                _ = queryBuilder.Append("\\x");
+                _ = queryBuilder.Append(HexDigits[byteValue >> 4]);
+                _ = queryBuilder.Append(HexDigits[byteValue & 0xF]);
             }
             return queryBuilder.Append('\'');
         }
@@ -69,26 +69,26 @@ namespace Octonica.ClickHouseClient.Types
         public static HexStringParameterWriter<T> Create<T>(IClickHouseColumnTypeInfo typeInfo)
             where T : struct
         {
-            var dummy = default(T);
-            var dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
-            var binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
+            T dummy = default;
+            ReadOnlySpan<byte> dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
+            string binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
             return new HexStringParameterWriter<T>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, Convert);
         }
 
         public static HexStringParameterWriter<TIn> Create<TIn, TOut>(IClickHouseColumnTypeInfo typeInfo, Func<TIn, TOut> convert)
             where TOut : struct
         {
-            var dummy = default(TOut);
-            var dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
-            var binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
+            TOut dummy = default;
+            ReadOnlySpan<byte> dummyBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref dummy, 1));
+            string binaryTypeName = $"FixedString({dummyBytes.Length.ToString(CultureInfo.InvariantCulture)})";
             return new HexStringParameterWriter<TIn>(typeInfo, HexStringLiteralWriterCastMode.Reinterpret, binaryTypeName, v => Convert(convert(v)));
         }
 
         private static ReadOnlyMemory<byte> Convert<T>(T value)
             where T : struct
         {
-            var src = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref value, 1));
-            var dst = new byte[src.Length];
+            ReadOnlySpan<byte> src = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref value, 1));
+            byte[] dst = new byte[src.Length];
             src.CopyTo(dst);
             return dst;
         }
@@ -116,23 +116,23 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
         {
-            var bytes = _convert(value);
+            ReadOnlyMemory<byte> bytes = _convert(value);
             valueWriter = new HexStringLiteralValueWriter(bytes, isNested);
             return true;
         }
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
-            var bytes = _convert(value);
+            ReadOnlyMemory<byte> bytes = _convert(value);
 
             switch (_castMode)
             {
                 case HexStringLiteralWriterCastMode.Cast:
-                    queryBuilder.Append("CAST(");
+                    _ = queryBuilder.Append("CAST(");
                     break;
 
                 case HexStringLiteralWriterCastMode.Reinterpret:
-                    queryBuilder.Append("reinterpret(");
+                    _ = queryBuilder.Append("reinterpret(");
                     break;
 
                 case HexStringLiteralWriterCastMode.None:
@@ -143,21 +143,25 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (_valueType != null)
-                queryBuilder.Append("CAST(");
+            {
+                _ = queryBuilder.Append("CAST(");
+            }
 
-            HexStringParameterWriter.Interpolate(queryBuilder, bytes.Span);
+            _ = HexStringParameterWriter.Interpolate(queryBuilder, bytes.Span);
 
             if (_valueType != null)
-                queryBuilder.Append(" AS ").Append(_valueType).Append(')');
+            {
+                _ = queryBuilder.Append(" AS ").Append(_valueType).Append(')');
+            }
 
             switch (_castMode)
             {
                 case HexStringLiteralWriterCastMode.Cast:
-                    queryBuilder.Append(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
+                    _ = queryBuilder.Append(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
                     break;
 
                 case HexStringLiteralWriterCastMode.Reinterpret:
-                    queryBuilder.Append(",'").Append(_typeInfo.ComplexTypeName.Replace("'", "''")).Append("')");
+                    _ = queryBuilder.Append(",'").Append(_typeInfo.ComplexTypeName.Replace("'", "''")).Append("')");
                     break;
             }
 
@@ -167,29 +171,33 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
             if (_valueType == null)
+            {
                 return writeValue(queryBuilder, _typeInfo, FunctionHelper.Apply);
+            }
 
-            var valueType = typeInfoProvider.GetTypeInfo(_valueType);
+            IClickHouseColumnTypeInfo valueType = typeInfoProvider.GetTypeInfo(_valueType);
 
-            var castMode = _castMode;
+            HexStringLiteralWriterCastMode castMode = _castMode;
             if (_typeInfo.ComplexTypeName == valueType.ComplexTypeName)
+            {
                 castMode = HexStringLiteralWriterCastMode.None;
+            }
 
             switch (castMode)
             {
                 case HexStringLiteralWriterCastMode.Cast:
                     return writeValue(queryBuilder, valueType, (qb, realWrite) =>
                     {
-                        qb.Append('(');
-                        realWrite(qb);
+                        _ = qb.Append('(');
+                        _ = realWrite(qb);
                         return qb.Append("::").Append(_typeInfo.ComplexTypeName).Append(')');
                     });
 
                 case HexStringLiteralWriterCastMode.Reinterpret:
                     return writeValue(queryBuilder, valueType, (qb, realWrite) =>
                     {
-                        qb.Append("reinterpret(");
-                        realWrite(qb);
+                        _ = qb.Append("reinterpret(");
+                        _ = realWrite(qb);
                         return qb.Append(",'").Append(_typeInfo.ComplexTypeName.Replace("'", "''")).Append("')");
                     });
 

@@ -28,17 +28,17 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets the name of the table.
         /// </summary>
-        public string TableName { get; }
+        string TableName { get; }
 
         /// <summary>
         /// Gets the number of columns in the table.
         /// </summary>
-        public int ColumnCount { get; }
+        int ColumnCount { get; }
 
         /// <summary>
         /// Gets the number of rows in the table.
         /// </summary>
-        public int RowCount { get; }
+        int RowCount { get; }
 
         /// <summary>
         /// Gets the descriptor of the column at the specified index.

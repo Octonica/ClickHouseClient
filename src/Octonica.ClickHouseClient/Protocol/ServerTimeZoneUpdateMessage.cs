@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -33,7 +33,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async ValueTask<ServerTimeZoneUpdateMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
         {
-            var timezone = await reader.ReadString(async, cancellationToken);
+            string timezone = await reader.ReadString(async, cancellationToken);
             return new ServerTimeZoneUpdateMessage(timezone);
         }
     }

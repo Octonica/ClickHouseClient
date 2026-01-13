@@ -25,7 +25,9 @@ namespace Octonica.ClickHouseClient.Utils
         private readonly IReadOnlyList<IReadOnlyList<T>?> _list;
 
         public ReadOnlyCollectionList(IReadOnlyList<IReadOnlyList<T>?> list)
-            => _list = list;
+        {
+            _list = list;
+        }
 
         public int Count => _list.Count;
 
@@ -33,12 +35,18 @@ namespace Octonica.ClickHouseClient.Utils
             => _list[listIndex]![index];
 
         public IEnumerable<T> GetItems()
-            => _list.SelectMany(list => list ?? Enumerable.Empty<T>());
+        {
+            return _list.SelectMany(list => list ?? Enumerable.Empty<T>());
+        }
 
         public IEnumerable<int> GetListLengths()
-            => _list.Select(item => item?.Count ?? 0);
+        {
+            return _list.Select(item => item?.Count ?? 0);
+        }
 
         public int GetLength(int listIndex)
-            => _list[listIndex]?.Count ?? 0;
+        {
+            return _list[listIndex]?.Count ?? 0;
+        }
     }
 }

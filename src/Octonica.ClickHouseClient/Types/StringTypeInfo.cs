@@ -15,13 +15,13 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -45,32 +45,40 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (typeof(T) == typeof(string))
-                return new StringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string>) rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            {
+                return new StringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string>)rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            }
 
             if (typeof(T) == typeof(char[]))
             {
-                var mappedList = MappedReadOnlyList<char[]?, ReadOnlyMemory<char>>.Map((IReadOnlyList<char[]?>)rows, m => m.AsMemory());
+                IReadOnlyListExt<ReadOnlyMemory<char>> mappedList = MappedReadOnlyList<char[]?, ReadOnlyMemory<char>>.Map((IReadOnlyList<char[]?>)rows, m => m.AsMemory());
                 return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
             }
 
             if (typeof(T) == typeof(ReadOnlyMemory<char>))
-                return new StringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>) rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            {
+                return new StringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>)rows, columnSettings?.StringEncoding ?? Encoding.UTF8);
+            }
 
             if (typeof(T) == typeof(Memory<char>))
             {
-                var mappedList = MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>.Map((IReadOnlyList<Memory<char>>) rows, m => m);
+                IReadOnlyListExt<ReadOnlyMemory<char>> mappedList = MappedReadOnlyList<Memory<char>, ReadOnlyMemory<char>>.Map((IReadOnlyList<Memory<char>>)rows, m => m);
                 return new StringSpanColumnWriter(columnName, ComplexTypeName, mappedList, columnSettings?.StringEncoding ?? Encoding.UTF8);
             }
 
             if (typeof(T) == typeof(byte[]))
-                return new BinaryStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<byte[]>) rows);
+            {
+                return new BinaryStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<byte[]>)rows);
+            }
 
             if (typeof(T) == typeof(ReadOnlyMemory<byte>))
-                return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>) rows);
+            {
+                return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>)rows);
+            }
 
             if (typeof(T) == typeof(Memory<byte>))
             {
-                var mappedList = MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>.Map((IReadOnlyList<Memory<byte>>) rows, m => m);
+                IReadOnlyListExt<ReadOnlyMemory<byte>> mappedList = MappedReadOnlyList<Memory<byte>, ReadOnlyMemory<byte>>.Map((IReadOnlyList<Memory<byte>>)rows, m => m);
                 return new BinaryStringSpanColumnWriter(columnName, ComplexTypeName, mappedList);
             }
 
@@ -79,27 +87,39 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object writer;
             if (type == typeof(string))
+            {
                 writer = new StringParameterWriter<string>(this, str => str.AsMemory());
+            }
             else if (type == typeof(char[]))
+            {
                 writer = new StringParameterWriter<char[]>(this, arr => arr);
+            }
             else if (type == typeof(ReadOnlyMemory<char>))
+            {
                 writer = new StringParameterWriter(this);
+            }
             else if (type == typeof(Memory<char>))
+            {
                 writer = new StringParameterWriter<Memory<char>>(this, mem => mem);
-            else if (type == typeof(byte[]))
-                writer = new HexStringParameterWriter<byte[]>(this, arr => arr);
-            else if (type == typeof(ReadOnlyMemory<byte>))
-                writer = new HexStringParameterWriter(this);
-            else if (type == typeof(Memory<byte>))
-                writer = new HexStringParameterWriter<Memory<byte>>(this, mem => mem);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                writer = type == typeof(byte[])
+                    ? new HexStringParameterWriter<byte[]>(this, arr => arr)
+                    : type == typeof(ReadOnlyMemory<byte>)
+                    ? new HexStringParameterWriter(this)
+                    : type == typeof(Memory<byte>)
+                ? (object)new HexStringParameterWriter<Memory<byte>>(this, mem => mem)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return (IClickHouseParameterWriter<T>)writer;
         }
@@ -118,9 +138,9 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly int _rowCount;
             private readonly int _bufferSize;
-            
+
             private readonly List<(int segmentIndex, int offset, int length)> _layouts;
-            private readonly List<Memory<byte>> _segments = new List<Memory<byte>>(1);
+            private readonly List<Memory<byte>> _segments = new(1);
 
             private int _position;
 
@@ -134,19 +154,25 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (_layouts.Count >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
                 int expectedElementsCount = _rowCount - _layouts.Count;
                 int elementsCount = 0, bytesCount = 0;
                 while (elementsCount < expectedElementsCount)
                 {
-                    var slice = sequence.Slice(bytesCount);
-                    if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(slice, out var longSize, out var bytesRead))
+                    ReadOnlySequence<byte> slice = sequence.Slice(bytesCount);
+                    if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(slice, out ulong longSize, out int bytesRead))
+                    {
                         break;
+                    }
 
-                    var size = (int) longSize;
+                    int size = (int)longSize;
                     if (slice.Length - bytesRead < size)
+                    {
                         break;
+                    }
 
                     if (size == 0)
                     {
@@ -154,8 +180,8 @@ namespace Octonica.ClickHouseClient.Types
                     }
                     else
                     {
-                        var lastSegment = _segments.Count == 0 ? default : _segments[^1];
-                        lastSegment = lastSegment.Slice(_position);
+                        Memory<byte> lastSegment = _segments.Count == 0 ? default : _segments[^1];
+                        lastSegment = lastSegment[_position..];
                         if (lastSegment.Length < size)
                         {
                             lastSegment = new Memory<byte>(new byte[Math.Max(_bufferSize, size)]);
@@ -163,7 +189,7 @@ namespace Octonica.ClickHouseClient.Types
                             _segments.Add(lastSegment);
                         }
 
-                        var stringBytes = slice.Slice(bytesRead, size);
+                        ReadOnlySequence<byte> stringBytes = slice.Slice(bytesRead, size);
                         stringBytes.CopyTo(lastSegment.Span);
 
                         _layouts.Add((_segments.Count - 1, _position, size));
@@ -196,24 +222,30 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var maxElementsCount = _rowCount - _position;
+                int maxElementsCount = _rowCount - _position;
                 if (maxElementsCount <= 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
                 int offset = 0;
                 int count = 0;
                 while (count < maxElementsCount)
                 {
-                    var slice = sequence.Slice(offset);
-                    if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(slice, out var size, out var bytesRead))
+                    ReadOnlySequence<byte> slice = sequence.Slice(offset);
+                    if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(slice, out ulong size, out int bytesRead))
+                    {
                         break;
+                    }
 
-                    var totalLength = bytesRead + (int) size;
+                    int totalLength = bytesRead + (int)size;
                     if (slice.Length < totalLength)
+                    {
                         break;
+                    }
 
                     offset += totalLength;
-                    ++count;                    
+                    ++count;
                 }
 
                 _position += count;
@@ -283,16 +315,13 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override int GetByteCount(int rowIndex)
             {
-                var str = _rows[rowIndex];
-                if (string.IsNullOrEmpty(str))
-                    return 0;
-
-                return _encoding.GetByteCount(str);
+                string str = _rows[rowIndex];
+                return string.IsNullOrEmpty(str) ? 0 : _encoding.GetByteCount(str);
             }
 
             protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
             {
-                _encoding.GetBytes(_rows[rowIndex], writeTo);
+                _ = _encoding.GetBytes(_rows[rowIndex], writeTo);
             }
         }
 
@@ -317,7 +346,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteBytes(int rowIndex, Span<byte> writeTo)
             {
-                _encoding.GetBytes(_rows[rowIndex].Span, writeTo);
+                _ = _encoding.GetBytes(_rows[rowIndex].Span, writeTo);
             }
         }
 
@@ -339,18 +368,22 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var rowCount = RowCount;
+                int rowCount = RowCount;
                 if (_position == rowCount)
+                {
                     return new SequenceSize(0, 0);
+                }
 
-                var result = new SequenceSize(0, 0);
+                SequenceSize result = new(0, 0);
                 for (; _position < rowCount; _position++)
                 {
-                    var span = writeTo.Slice(result.Bytes);
+                    Span<byte> span = writeTo[result.Bytes..];
                     if (span.IsEmpty)
+                    {
                         break;
+                    }
 
-                    var byteCount = GetByteCount(_position);
+                    int byteCount = GetByteCount(_position);
                     if (byteCount == 0)
                     {
                         span[0] = 0;
@@ -358,9 +391,11 @@ namespace Octonica.ClickHouseClient.Types
                     }
                     else
                     {
-                        var prefixLength = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(span, checked((ulong) byteCount));
+                        int prefixLength = ClickHouseBinaryProtocolWriter.TryWrite7BitInteger(span, checked((ulong)byteCount));
                         if (prefixLength <= 0 || prefixLength + byteCount > span.Length)
+                        {
                             return result;
+                        }
 
                         WriteBytes(_position, span.Slice(prefixLength, byteCount));
                         result = new SequenceSize(result.Bytes + prefixLength + byteCount, result.Elements + 1);

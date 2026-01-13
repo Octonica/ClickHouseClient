@@ -37,7 +37,7 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets the collection of table's columns.
         /// </summary>
-        public ClickHouseTableColumnCollection Columns { get; } = new ClickHouseTableColumnCollection();
+        public ClickHouseTableColumnCollection Columns { get; } = [];
 
         /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseTableProvider"/> class with specified table name and number of rows.
@@ -47,9 +47,14 @@ namespace Octonica.ClickHouseClient
         public ClickHouseTableProvider(string tableName, int rowCount)
         {
             if (string.IsNullOrWhiteSpace(tableName))
+            {
                 throw new ArgumentNullException("The name of a table must be a non-empty string.", nameof(tableName));
+            }
+
             if (rowCount < 0)
+            {
                 throw new ArgumentException("The number of rows must be a positive number.", nameof(rowCount));
+            }
 
             TableName = tableName;
             RowCount = rowCount;

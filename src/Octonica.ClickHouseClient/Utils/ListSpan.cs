@@ -32,11 +32,19 @@ namespace Octonica.ClickHouseClient.Utils
         private ListSpan(IList<T> innerList, int offset, int count)
         {
             if (innerList == null)
+            {
                 throw new ArgumentNullException(nameof(innerList));
+            }
+
             if (offset < 0 || offset > innerList.Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(offset));
+            }
+
             if (count < 0 || offset + count > innerList.Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
 
             _innerList = innerList;
             _offset = offset;
@@ -55,12 +63,11 @@ namespace Octonica.ClickHouseClient.Utils
 
         public IReadOnlyListExt<T> Slice(int start, int length)
         {
-            if (start < 0 || start > Count)
-                throw new ArgumentOutOfRangeException(nameof(start));
-            if (start + length > Count)
-                throw new ArgumentOutOfRangeException(nameof(length));
-
-            return new ListSpan<T>(_innerList, start + _offset, length);
+            return start < 0 || start > Count
+                ? throw new ArgumentOutOfRangeException(nameof(start))
+                : start + length > Count
+                ? throw new ArgumentOutOfRangeException(nameof(length))
+                : (IReadOnlyListExt<T>)new ListSpan<T>(_innerList, start + _offset, length);
         }
 
         public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
@@ -71,40 +78,32 @@ namespace Octonica.ClickHouseClient.Utils
         public int CopyTo(Span<T> span, int start)
         {
             if (start < 0 || start > Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(start));
-            
-            var length = Math.Min(Count - start, span.Length);
+            }
+
+            int length = Math.Min(Count - start, span.Length);
             if (_innerList is T[] array)
             {
                 new ReadOnlySpan<T>(array, _offset + start, length).CopyTo(span);
             }
             else
             {
-                var end = _offset + start + length;
+                int end = _offset + start + length;
                 for (int i = _offset + start, j = 0; i < end; i++, j++)
+                {
                     span[j] = _innerList[i];
+                }
             }
 
-            return length;            
+            return length;
         }
 
-        public T this[int index]
-        {
-            get
-            {
-                if (index < 0 || index >= Count)
-                    throw new IndexOutOfRangeException();
-
-                return _innerList[index + _offset];
-            }
-        }
+        public T this[int index] => index < 0 || index >= Count ? throw new IndexOutOfRangeException() : _innerList[index + _offset];
 
         public static IReadOnlyListExt<T> Slice(IList<T> list, int offset, int count)
         {
-            if (list is IReadOnlyListExt<T> readOnlyListExt)
-                return readOnlyListExt.Slice(offset, count);
-
-            return new ListSpan<T>(list, offset, count);
+            return list is IReadOnlyListExt<T> readOnlyListExt ? readOnlyListExt.Slice(offset, count) : new ListSpan<T>(list, offset, count);
         }
     }
 }

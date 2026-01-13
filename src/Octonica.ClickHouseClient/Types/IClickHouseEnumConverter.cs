@@ -32,7 +32,7 @@ namespace Octonica.ClickHouseClient.Types
         /// <typeparam name="T">The type of the returned value.</typeparam>
         /// <param name="dispatcher">The dispatcher that requires the type of enum to be passed as the generic parameter.</param>
         /// <returns>The value returned by the dispatcher.</returns>
-        public T Dispatch<T>(IClickHouseEnumConverterDispatcher<T> dispatcher);
+        T Dispatch<T>(IClickHouseEnumConverterDispatcher<T> dispatcher);
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ namespace Octonica.ClickHouseClient.Types
         /// <param name="enumConverter">The enum converter for the enum of the specified type.</param>
         /// <returns>The result of an executed operations.</returns>
         /// <remarks>This method can be viewed as a closure of the type argument.</remarks>
-        public T Dispatch<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter)
+        T Dispatch<TEnum>(IClickHouseEnumConverter<TEnum> enumConverter)
             where TEnum : Enum;
     }
 }

@@ -15,6 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -25,10 +29,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Types;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -42,8 +42,6 @@ namespace Octonica.ClickHouseClient
         private readonly ReadOnlyCollection<ColumnInfo> _columns;
 
         private ClickHouseColumnSettings?[]? _columnSettings;
-
-        private int? _rowsPerBlock;
         private bool _endOfStream;
 
         /// <summary>
@@ -63,13 +61,15 @@ namespace Octonica.ClickHouseClient
         /// <returns>The maximal number of rows in a single block of data. <see langword="null"/> if the size of the block is not limited.</returns>
         public int? MaxBlockSize
         {
-            get => _rowsPerBlock;
+            get;
             set
             {
                 if (value <= 0)
+                {
                     throw new ArgumentException("A number of rows in a block must be greater than zero.");
+                }
 
-                _rowsPerBlock = value;
+                field = value;
             }
         }
 
@@ -79,17 +79,12 @@ namespace Octonica.ClickHouseClient
             _query = query ?? throw new ArgumentNullException(nameof(query));
             _columns = columns;
 
-            if (columns.Count <= 100)
-                MaxBlockSize = 8000;
-            else if (columns.Count >= 1000)
-                MaxBlockSize = 800;
-            else
-                MaxBlockSize = 8800 - 8 * columns.Count;
+            MaxBlockSize = columns.Count <= 100 ? 8000 : columns.Count >= 1000 ? 800 : 8800 - (8 * columns.Count);
         }
 
         internal static async ValueTask<ClickHouseTable> ReadTableMetadata(ClickHouseTcpClient.Session session, string queryText, bool async, CancellationToken cancellationToken)
         {
-            var msg = await session.ReadMessage(async, cancellationToken);
+            IServerMessage msg = await session.ReadMessage(async, cancellationToken);
             switch (msg.MessageCode)
             {
                 case ServerMessageCode.Error:
@@ -103,29 +98,23 @@ namespace Octonica.ClickHouseClient
             }
 
             msg = await session.ReadMessage(async, cancellationToken);
-            ClickHouseTable data;
-            switch (msg.MessageCode)
+            ClickHouseTable data = msg.MessageCode switch
             {
-                case ServerMessageCode.Error:
-                    throw ((ServerErrorMessage)msg).Exception.CopyWithQuery(queryText);
-
-                case ServerMessageCode.Data:
-                    data = await session.ReadTable((ServerDataMessage)msg, null, async, cancellationToken);
-                    break;
-
-                default:
-                    throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}.");
-            }
-
+                ServerMessageCode.Error => throw ((ServerErrorMessage)msg).Exception.CopyWithQuery(queryText),
+                ServerMessageCode.Data => await session.ReadTable((ServerDataMessage)msg, null, async, cancellationToken),
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message. Received the message of type {msg.MessageCode}."),
+            };
             return data;
         }
 
         /// <inheritdoc cref="ClickHouseDataReader.ConfigureColumn(string, ClickHouseColumnSettings)"/>
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
         {
-            var index = GetOrdinal(name);
+            int index = GetOrdinal(name);
             if (index < 0)
+            {
                 throw new ArgumentException($"A column with the name \"{name}\" not found.", nameof(name));
+            }
 
             ConfigureColumn(index, columnSettings);
         }
@@ -133,8 +122,7 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc cref="ClickHouseDataReader.ConfigureColumn(int, ClickHouseColumnSettings)"/>
         public void ConfigureColumn(int ordinal, ClickHouseColumnSettings columnSettings)
         {
-            if (_columnSettings == null)
-                _columnSettings = new ClickHouseColumnSettings?[_columns.Count];
+            _columnSettings ??= new ClickHouseColumnSettings?[_columns.Count];
 
             _columnSettings[ordinal] = columnSettings;
         }
@@ -142,11 +130,12 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc cref="ClickHouseDataReader.ConfigureDataReader(ClickHouseColumnSettings)"/>
         public void ConfigureColumnWriter(ClickHouseColumnSettings columnSettings)
         {
-            if (_columnSettings == null)
-                _columnSettings = new ClickHouseColumnSettings?[_columns.Count];
+            _columnSettings ??= new ClickHouseColumnSettings?[_columns.Count];
 
             for (int i = 0; i < _columns.Count; i++)
+            {
                 _columnSettings[i] = columnSettings;
+            }
         }
 
         /// <inheritdoc cref="ClickHouseDataReader.GetFieldTypeInfo(int)"/>
@@ -172,7 +161,7 @@ namespace Octonica.ClickHouseClient
         {
             // This method should implement the same logic as ClickHouseDataReader.GetFieldType
 
-            var type = _columnSettings?[ordinal]?.ColumnType;
+            Type? type = _columnSettings?[ordinal]?.ColumnType;
             type ??= _columns[ordinal].TypeInfo.GetFieldType();
             return Nullable.GetUnderlyingType(type) ?? type;
         }
@@ -180,10 +169,7 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc cref="ClickHouseDataReader.GetOrdinal(string)"/>
         public int GetOrdinal(string name)
         {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
-
-            return CommonUtils.GetColumnIndex(_columns, name);
+            return name == null ? throw new ArgumentNullException(nameof(name)) : CommonUtils.GetColumnIndex(_columns, name);
         }
 
         /// <summary>
@@ -277,18 +263,22 @@ namespace Octonica.ClickHouseClient
         private async ValueTask WriteRow(IReadOnlyCollection<object?> values, bool commit, bool async, CancellationToken cancellationToken)
         {
             if (values == null)
+            {
                 throw new ArgumentNullException(nameof(values));
+            }
 
             if (values.Count != _columns.Count)
+            {
                 throw new ArgumentException("The number of values must be equal to the number of columns.");
+            }
 
             var columnWriters = new List<IClickHouseColumnWriter>(_columns.Count);
-            foreach (var value in values)
+            foreach (object? value in values)
             {
                 int i = columnWriters.Count;
 
-                var columnInfo = _columns[i];
-                var settings = _columnSettings?[i];
+                ColumnInfo columnInfo = _columns[i];
+                ClickHouseColumnSettings? settings = _columnSettings?[i];
 
                 if (settings?.ColumnType == typeof(object))
                 {
@@ -299,10 +289,10 @@ namespace Octonica.ClickHouseClient
 
                 ITypeDispatcher? typeDispatcher;
                 SingleRowColumnWriterDispatcher dispatcher;
-                if (value != null && !(value is DBNull))
+                if (value is not null and not DBNull)
                 {
                     dispatcher = new SingleRowColumnWriterDispatcher(value, columnInfo, _columnSettings?[i]);
-                    var valueType = value.GetType();
+                    Type valueType = value.GetType();
 
                     if (settings?.ColumnType != null)
                     {
@@ -342,7 +332,7 @@ namespace Octonica.ClickHouseClient
                     }
                     else
                     {
-                        var fieldType = columnInfo.TypeInfo.GetFieldType();
+                        Type fieldType = columnInfo.TypeInfo.GetFieldType();
                         typeDispatcher = TypeDispatcher.Create(fieldType);
                     }
                 }
@@ -511,15 +501,21 @@ namespace Octonica.ClickHouseClient
         private async ValueTask WriteTable(IReadOnlyDictionary<string, object?> columns, int rowCount, ClickHouseTransactionMode mode, bool async, CancellationToken cancellationToken)
         {
             if (columns == null)
+            {
                 throw new ArgumentNullException(nameof(columns));
+            }
 
             var list = new List<object?>(_columns.Count);
-            foreach (var columnInfo in _columns)
+            foreach (ColumnInfo columnInfo in _columns)
             {
-                if (columns.TryGetValue(columnInfo.Name, out var column))
+                if (columns.TryGetValue(columnInfo.Name, out object? column))
+                {
                     list.Add(column);
+                }
                 else
+                {
                     list.Add(null);
+                }
             }
 
             await WriteTable(list, rowCount, mode, async, cancellationToken);
@@ -528,26 +524,39 @@ namespace Octonica.ClickHouseClient
         private async ValueTask WriteTable(IReadOnlyList<object?> columns, int rowCount, ClickHouseTransactionMode mode, bool async, CancellationToken cancellationToken)
         {
             if (columns == null)
+            {
                 throw new ArgumentNullException(nameof(columns));
+            }
+
             if (columns.Count != _columns.Count)
+            {
                 throw new ArgumentException("The number of columns for writing must be equal to the number of columns in the table.", nameof(columns));
+            }
+
             if (rowCount < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(rowCount));
+            }
+
             if (rowCount == 0)
+            {
                 throw new ArgumentException("The number of rows must be greater than zero.", nameof(rowCount));
+            }
 
             if (IsClosed)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The writer is closed.");
+            }
 
             var writerFactories = new List<IClickHouseColumnWriterFactory>(_columns.Count);
             for (int i = 0; i < _columns.Count; i++)
             {
-                var factory = await CreateColumnWriterFactory(_columns[i], columns[i], i, rowCount, _columnSettings?[i], async, cancellationToken);
+                IClickHouseColumnWriterFactory factory = await CreateColumnWriterFactory(_columns[i], columns[i], i, rowCount, _columnSettings?[i], async, cancellationToken);
                 writerFactories.Add(factory);
             }
 
             int offset;
-            var blockSize = MaxBlockSize ?? rowCount;
+            int blockSize = MaxBlockSize ?? rowCount;
             bool commitBlock = mode == ClickHouseTransactionMode.Block;
             for (offset = 0; offset + blockSize < rowCount; offset += blockSize)
             {
@@ -555,7 +564,7 @@ namespace Octonica.ClickHouseClient
                 await SendTable(table, commitBlock, async, cancellationToken);
             }
 
-            var finalBlockSize = rowCount - offset;
+            int finalBlockSize = rowCount - offset;
             var finalTable = new ClickHouseTableWriter(string.Empty, finalBlockSize, writerFactories.Select(w => w.Create(offset, finalBlockSize)));
             bool commit = commitBlock || mode == ClickHouseTransactionMode.Default || mode == ClickHouseTransactionMode.Auto;
             await SendTable(finalTable, commit, async, cancellationToken);
@@ -564,14 +573,18 @@ namespace Octonica.ClickHouseClient
         private async ValueTask SendTable(ClickHouseTableWriter table, bool commit, bool async, CancellationToken cancellationToken)
         {
             if (_endOfStream)
+            {
                 await RepeatQuery(async, cancellationToken);
+            }
 
             try
             {
                 await _session.SendTable(table, async, cancellationToken);
 
                 if (commit)
+                {
                     await EndWrite(TerminationMode.Confirm, closeSession: false, async, cancellationToken);
+                }
             }
             catch (ClickHouseHandledException)
             {
@@ -579,9 +592,11 @@ namespace Octonica.ClickHouseClient
             }
             catch (Exception ex)
             {
-                var aggrEx = await _session.SetFailed(ex, false, async);
+                Exception? aggrEx = await _session.SetFailed(ex, false, async);
                 if (aggrEx != null)
+                {
                     throw aggrEx;
+                }
 
                 throw;
             }
@@ -608,9 +623,11 @@ namespace Octonica.ClickHouseClient
             }
             catch (Exception ex)
             {
-                var aggrEx = await _session.SetFailed(ex, false, async);
+                Exception? aggrEx = await _session.SetFailed(ex, false, async);
                 if (aggrEx != null)
+                {
                     throw aggrEx;
+                }
 
                 throw;
             }
@@ -618,20 +635,26 @@ namespace Octonica.ClickHouseClient
             try
             {
                 // Repeating the query is almost the same as opening a new independent column writer. So we must check that the structure of the table wasn't changed.
-                var newColumns = data.Header.Columns;
+                ReadOnlyCollection<ColumnInfo> newColumns = data.Header.Columns;
                 if (newColumns.Count != _columns.Count)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TableModified, "The number of columns returned by the query has changed.");
+                }
 
                 for (int i = 0; i < data.Columns.Count; i++)
                 {
-                    var newCol = newColumns[i];
-                    var origCol = _columns[i];
+                    ColumnInfo newCol = newColumns[i];
+                    ColumnInfo origCol = _columns[i];
 
                     if (!string.Equals(origCol.Name, newCol.Name, StringComparison.Ordinal))
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.TableModified, $"Unexpected column \"{newCol.Name}\" at the position {i}. Expected \"{origCol.Name}\".");
+                    }
 
                     if (!string.Equals(origCol.TypeInfo.ComplexTypeName, newCol.TypeInfo.ComplexTypeName, StringComparison.Ordinal))
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.TableModified, $"The type of the column \"{origCol.Name}\" has changed from \"{origCol.TypeInfo.ComplexTypeName}\" to \"{newCol.TypeInfo.ComplexTypeName}\" between queries.");
+                    }
                 }
             }
             catch (Exception ex)
@@ -647,7 +670,9 @@ namespace Octonica.ClickHouseClient
 
                 var hEx = ClickHouseHandledException.Wrap(ex);
                 if (ReferenceEquals(hEx, ex))
+                {
                     throw;
+                }
 
                 throw hEx;
             }
@@ -720,12 +745,16 @@ namespace Octonica.ClickHouseClient
             Debug.Assert(closeSession || mode != TerminationMode.Dispose);
 
             if (IsClosed)
+            {
                 return;
+            }
 
             if (_endOfStream)
             {
                 if (closeSession)
+                {
                     await _session.Dispose(async);
+                }
 
                 return;
             }
@@ -752,12 +781,14 @@ namespace Octonica.ClickHouseClient
                 do
                 {
                     isProfileEvents = false;
-                    var message = await _session.ReadMessage(async, CancellationToken.None);
+                    IServerMessage message = await _session.ReadMessage(async, CancellationToken.None);
                     switch (message.MessageCode)
                     {
                         case ServerMessageCode.EndOfStream:
                             if (closeSession)
+                            {
                                 await _session.Dispose(async);
+                            }
 
                             _endOfStream = true;
                             break;
@@ -765,10 +796,10 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.Error:
                             // Connection state can't be resotred if the server raised an exception.
                             // This error is probably caused by the wrong formatted data.
-                            var exception = ((ServerErrorMessage)message).Exception;
+                            ClickHouseServerException exception = ((ServerErrorMessage)message).Exception;
                             if (mode == TerminationMode.Dispose)
                             {
-                                await _session.SetFailed(exception, false, async);
+                                _ = await _session.SetFailed(exception, false, async);
                                 break;
                             }
 
@@ -777,7 +808,7 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.ProfileEvents:
                             isProfileEvents = true;
                             var profileEventsMessage = (ServerDataMessage)message;
-                            await _session.SkipTable(profileEventsMessage, async, cancellationToken);
+                            _ = await _session.SkipTable(profileEventsMessage, async, cancellationToken);
                             break;
 
                         default:
@@ -788,16 +819,20 @@ namespace Octonica.ClickHouseClient
             catch (ClickHouseHandledException ex)
             {
                 if (mode != TerminationMode.Dispose)
+                {
                     throw;
+                }
 
                 // Connection state can't be restored
-                await _session.SetFailed(ex.InnerException, false, async);
+                _ = await _session.SetFailed(ex.InnerException, false, async);
             }
             catch (Exception ex)
             {
-                var aggrEx = await _session.SetFailed(ex, false, async);
+                Exception? aggrEx = await _session.SetFailed(ex, false, async);
                 if (aggrEx != null)
+                {
                     throw aggrEx;
+                }
 
                 throw;
             }
@@ -837,7 +872,9 @@ namespace Octonica.ClickHouseClient
             if (column == null)
             {
                 if (!columnInfo.TypeInfo.TypeName.StartsWith("Nullable"))
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {columnIndex} doesn't support nulls.");
+                }
 
                 ITypeDispatcher? typeDispatcher;
                 if (settings?.ColumnType != null)
@@ -857,11 +894,11 @@ namespace Octonica.ClickHouseClient
                     typeDispatcher = TypeDispatcher.Create(columnInfo.TypeInfo.GetFieldType());
                 }
 
-                var constColumn = typeDispatcher.Dispatch(new NullColumnWriterDispatcher(columnInfo, settings, rowCount));
+                IClickHouseColumnWriterFactory constColumn = typeDispatcher.Dispatch(new NullColumnWriterDispatcher(columnInfo, settings, rowCount));
                 return constColumn;
             }
 
-            var columnType = column.GetType();
+            Type columnType = column.GetType();
             Type? enumerable = null;
             Type? altEnumerable = null;
             Type? asyncEnumerable = null;
@@ -870,12 +907,14 @@ namespace Octonica.ClickHouseClient
             Type? altReadOnlyList = null;
             Type? list = null;
             Type? altList = null;
-            foreach (var ifs in columnType.GetInterfaces())
+            foreach (Type ifs in columnType.GetInterfaces())
             {
                 if (!ifs.IsGenericType)
+                {
                     continue;
+                }
 
-                var ifsDefinition = ifs.GetGenericTypeDefinition();
+                Type ifsDefinition = ifs.GetGenericTypeDefinition();
                 if (ifsDefinition == typeof(IEnumerable<>) && ifs.GetGenericArguments()[0] != typeof(object))
                 {
                     altEnumerable ??= enumerable;
@@ -907,7 +946,7 @@ namespace Octonica.ClickHouseClient
              * 5. IEnumerable
              */
 
-            var explicitTypeDispatcher = settings?.GetColumnTypeDispatcher();
+            ITypeDispatcher? explicitTypeDispatcher = settings?.GetColumnTypeDispatcher();
             IClickHouseColumnWriterFactory? columnWriter;
             if (explicitTypeDispatcher != null)
             {
@@ -917,7 +956,9 @@ namespace Octonica.ClickHouseClient
                 // of this type or throw an exception.
                 columnWriter = explicitTypeDispatcher.Dispatch(new ColumnWriterDispatcher(column, columnInfo, settings, rowCount, columnIndex, async));
                 if (columnWriter != null)
+                {
                     return columnWriter;
+                }
 
                 if (async && typeof(IAsyncEnumerable<>).MakeGenericType(settings.ColumnType).IsAssignableFrom(columnType))
                 {
@@ -929,7 +970,9 @@ namespace Octonica.ClickHouseClient
                 bool ignoreNonGenericEnumerable = readOnlyList != null || list != null || asyncEnumerable != null || enumerable != null;
                 columnWriter = explicitTypeDispatcher.Dispatch(new ColumnWriterObjectCollectionDispatcher(column, columnInfo, settings, rowCount, columnIndex, async, ignoreNonGenericEnumerable));
                 if (columnWriter != null)
+                {
                     return columnWriter;
+                }
 
                 if (async && column is IAsyncEnumerable<object?> aeCol)
                 {
@@ -963,14 +1006,18 @@ namespace Octonica.ClickHouseClient
             if (readOnlyList != null)
             {
                 if (altReadOnlyList != null)
+                {
                     throw CreateInterfaceAmbiguousException(readOnlyList, altReadOnlyList, columnInfo.Name, columnIndex);
+                }
 
                 dispatchedElementType = readOnlyList.GetGenericArguments()[0];
             }
             else if (list != null)
             {
                 if (altList != null)
+                {
                     throw CreateInterfaceAmbiguousException(list, altList, columnInfo.Name, columnIndex);
+                }
 
                 dispatchedElementType = list.GetGenericArguments()[0];
             }
@@ -979,18 +1026,22 @@ namespace Octonica.ClickHouseClient
                 if (async && asyncEnumerable != null)
                 {
                     if (altAsyncEnumerable != null)
+                    {
                         throw CreateInterfaceAmbiguousException(asyncEnumerable, altAsyncEnumerable, columnInfo.Name, columnIndex);
+                    }
 
-                    var genericArg = asyncEnumerable.GetGenericArguments()[0];
+                    Type genericArg = asyncEnumerable.GetGenericArguments()[0];
                     var asyncDispatcher = new AsyncColumnWriterDispatcher(column, columnInfo, settings, rowCount, columnIndex, cancellationToken);
-                    var asyncColumn = await TypeDispatcher.Dispatch(genericArg, asyncDispatcher);
+                    IClickHouseColumnWriterFactory asyncColumn = await TypeDispatcher.Dispatch(genericArg, asyncDispatcher);
                     return asyncColumn;
                 }
 
                 if (enumerable != null)
                 {
                     if (altEnumerable != null)
+                    {
                         throw CreateInterfaceAmbiguousException(enumerable, altEnumerable, columnInfo.Name, columnIndex);
+                    }
 
                     dispatchedElementType = enumerable.GetGenericArguments()[0];
                 }
@@ -1000,9 +1051,9 @@ namespace Octonica.ClickHouseClient
                     // In this case assume that the type of the table's field is equal to the type of the column.
 
                     dispatchedElementType = columnInfo.TypeInfo.GetFieldType();
-                    var typeDispatcher = TypeDispatcher.Create(dispatchedElementType);
+                    ITypeDispatcher typeDispatcher = TypeDispatcher.Create(dispatchedElementType);
                     var objDispatcher = new ColumnWriterObjectCollectionDispatcher(column, columnInfo, settings, rowCount, columnIndex, async);
-                    var objColumnWriter = typeDispatcher.Dispatch(objDispatcher);
+                    IClickHouseColumnWriterFactory? objColumnWriter = typeDispatcher.Dispatch(objDispatcher);
                     if (async && objColumnWriter == null && column is IAsyncEnumerable<object?> aeCol)
                     {
                         var asyncDispatcher = new AsyncObjectColumnWriterDispatcher(aeCol, columnInfo, settings, rowCount, columnIndex, cancellationToken);
@@ -1013,7 +1064,7 @@ namespace Octonica.ClickHouseClient
                     {
                         if (!async && (asyncEnumerable != null || column is IAsyncEnumerable<object?>))
                         {
-                            var aeInterface = asyncEnumerable ?? typeof(IAsyncEnumerable<object?>);
+                            Type aeInterface = asyncEnumerable ?? typeof(IAsyncEnumerable<object?>);
                             throw new ClickHouseException(
                                 ClickHouseErrorCodes.NotSupportedInSyncronousMode,
                                 $"The column \"{columnInfo.Name}\" at the position {columnIndex} implements interface \"{aeInterface}\". Call async method \"{nameof(WriteTableAsync)}\".");
@@ -1029,10 +1080,7 @@ namespace Octonica.ClickHouseClient
             var dispatcher = new ColumnWriterDispatcher(column, columnInfo, settings, rowCount, columnIndex, false);
             columnWriter = TypeDispatcher.Dispatch(dispatchedElementType, dispatcher);
 
-            if (columnWriter == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {columnIndex} is not a collection.");
-
-            return columnWriter;
+            return columnWriter ?? throw new ClickHouseException(ClickHouseErrorCodes.ColumnTypeMismatch, $"The column \"{columnInfo.Name}\" at the position {columnIndex} is not a collection.");
         }
 
         private static ClickHouseException CreateInterfaceAmbiguousException(Type itf, Type altItf, string columnName, int columnIndex)
@@ -1056,7 +1104,7 @@ namespace Octonica.ClickHouseClient
 
             public IClickHouseColumnWriter Create(int offset, int length)
             {
-                var slice = _rows.Slice(offset, length);
+                IReadOnlyList<T> slice = _rows.Slice(offset, length);
                 return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, slice, _columnSettings);
             }
         }
@@ -1109,7 +1157,9 @@ namespace Octonica.ClickHouseClient
             public async Task<IClickHouseColumnWriterFactory> Dispatch<T>()
             {
                 if (_rowCount == 0)
+                {
                     return new ColumnWriterFactory<T>(_columnInfo, Array.Empty<T>(), _columnSettings);
+                }
 
                 ConfiguredCancelableAsyncEnumerable<T>.Enumerator enumerator = default;
                 bool disposeEnumerator = false;
@@ -1136,7 +1186,9 @@ namespace Octonica.ClickHouseClient
                 finally
                 {
                     if (disposeEnumerator)
+                    {
                         await enumerator.DisposeAsync();
+                    }
                 }
             }
         }
@@ -1169,7 +1221,9 @@ namespace Octonica.ClickHouseClient
             public async Task<IClickHouseColumnWriterFactory> Dispatch<T>()
             {
                 if (_rowCount == 0)
+                {
                     return new ColumnWriterFactory<T>(_columnInfo, Array.Empty<T>(), _columnSettings);
+                }
 
                 ConfiguredCancelableAsyncEnumerable<object?>.Enumerator enumerator = default;
                 bool disposeEnumerator = false;
@@ -1196,7 +1250,9 @@ namespace Octonica.ClickHouseClient
                 finally
                 {
                     if (disposeEnumerator)
+                    {
                         await enumerator.DisposeAsync();
+                    }
                 }
             }
         }
@@ -1238,7 +1294,9 @@ namespace Octonica.ClickHouseClient
                     }
 
                     if (readOnlyList.Count > _rowCount)
+                    {
                         readOnlyList = readOnlyList.Slice(0, _rowCount);
+                    }
 
                     return new ColumnWriterFactory<T>(_columnInfo, readOnlyList, _columnSettings);
                 }
@@ -1252,7 +1310,7 @@ namespace Octonica.ClickHouseClient
                             $"The column \"{_columnInfo.Name}\" at the position {_columnIndex} has only {list.Count} row(s), but the required number of rows is {_rowCount}.");
                     }
 
-                    var listSpan = list.Slice(0, _rowCount);
+                    IReadOnlyList<T> listSpan = list.Slice(0, _rowCount);
                     return new ColumnWriterFactory<T>(_columnInfo, listSpan, _columnSettings);
                 }
 
@@ -1264,7 +1322,7 @@ namespace Octonica.ClickHouseClient
 
                 if (_collection is IEnumerable<T> genericEnumerable)
                 {
-                    using var enumerator = genericEnumerable.GetEnumerator();
+                    using IEnumerator<T> enumerator = genericEnumerable.GetEnumerator();
 
                     T[] rows = new T[_rowCount];
                     for (int i = 0; i < _rowCount; i++)
@@ -1326,7 +1384,9 @@ namespace Octonica.ClickHouseClient
                     }
 
                     if (readOnlyList.Count > _rowCount)
+                    {
                         readOnlyList = readOnlyList.Slice(0, _rowCount);
+                    }
                 }
                 else if (_collection is IList<object?> list)
                 {
@@ -1346,7 +1406,7 @@ namespace Octonica.ClickHouseClient
                 }
                 else if (_collection is IEnumerable<object?> genericEnumerable)
                 {
-                    using var enumerator = genericEnumerable.GetEnumerator();
+                    using IEnumerator<object?> enumerator = genericEnumerable.GetEnumerator();
 
                     T[] rows = new T[_rowCount];
                     for (int i = 0; i < _rowCount; i++)
@@ -1395,7 +1455,7 @@ namespace Octonica.ClickHouseClient
                     return null;
                 }
 
-                var mappedList = readOnlyList.Map(CastTo<T>);
+                IReadOnlyList<T> mappedList = readOnlyList.Map(CastTo<T>);
                 return new ColumnWriterFactory<T>(_columnInfo, mappedList, _columnSettings);
             }
 
@@ -1403,10 +1463,7 @@ namespace Octonica.ClickHouseClient
             public static T CastTo<T>(object? value)
             {
                 // T may be nullable but there is no way to declare T?
-                if (value == DBNull.Value)
-                    return (T)(default(T) is null ? null! : value);
-
-                return (T)value!;
+                return value == DBNull.Value ? (T)(default(T) is null ? null! : value) : (T)value!;
             }
         }
 
@@ -1425,7 +1482,7 @@ namespace Octonica.ClickHouseClient
 
             public IClickHouseColumnWriter Dispatch<T>()
             {
-                var rows = new ConstantReadOnlyList<T>((T) _value, 1);
+                var rows = new ConstantReadOnlyList<T>((T)_value, 1);
                 return _columnInfo.TypeInfo.CreateColumnWriter(_columnInfo.Name, rows, _columnSettings);
             }
         }

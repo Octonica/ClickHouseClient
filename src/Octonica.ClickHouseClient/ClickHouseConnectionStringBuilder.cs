@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Reflection;
 
 namespace Octonica.ClickHouseClient
 {
@@ -96,7 +97,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The IP port of the server. The default value is <see cref="DefaultPort"/>.</returns>
         public ushort Port
         {
-            get => (ushort) GetInt32OrDefault(nameof(Port), DefaultPort);
+            get => (ushort)GetInt32OrDefault(nameof(Port), DefaultPort);
             set => this[nameof(Port)] = value;
         }
 
@@ -190,11 +191,8 @@ namespace Octonica.ClickHouseClient
         {
             get
             {
-                var value = GetString(nameof(ClientVersion));
-                if (value == null)
-                    return DefaultClientVersion;
-
-                return ClickHouseVersion.Parse(value);
+                string? value = GetString(nameof(ClientVersion));
+                return value == null ? DefaultClientVersion : ClickHouseVersion.Parse(value);
             }
             set => this[nameof(ClientVersion)] = value.ToString();
         }
@@ -218,11 +216,8 @@ namespace Octonica.ClickHouseClient
         {
             get
             {
-                var value = GetString(nameof(RootCertificate));
-                if (string.IsNullOrWhiteSpace(value))
-                    return null;
-
-                return value;
+                string? value = GetString(nameof(RootCertificate));
+                return string.IsNullOrWhiteSpace(value) ? null : value;
             }
             set => this[nameof(RootCertificate)] = value;
         }
@@ -237,11 +232,8 @@ namespace Octonica.ClickHouseClient
         {
             get
             {
-                var value = GetString(nameof(ServerCertificateHash));
-                if (string.IsNullOrWhiteSpace(value))
-                    return null;
-
-                return value;
+                string? value = GetString(nameof(ServerCertificateHash));
+                return string.IsNullOrWhiteSpace(value) ? null : value;
             }
             set => this[nameof(ServerCertificateHash)] = value;
         }
@@ -268,8 +260,8 @@ namespace Octonica.ClickHouseClient
 
         static ClickHouseConnectionStringBuilder()
         {
-            var asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
-            var version = asm.GetName().Version;
+            Assembly asm = typeof(ClickHouseConnectionStringBuilder).Assembly;
+            Version? version = asm.GetName().Version;
             DefaultClientVersion = new ClickHouseVersion(version?.Major ?? 1, version?.Minor ?? 0, version?.Build ?? 0);
 
             AllProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -316,7 +308,9 @@ namespace Octonica.ClickHouseClient
         public ClickHouseConnectionStringBuilder(ClickHouseConnectionSettings settings)
         {
             if (settings == null)
+            {
                 throw new ArgumentNullException(nameof(settings));
+            }
 
             Host = settings.Host;
             Port = settings.Port;
@@ -334,10 +328,14 @@ namespace Octonica.ClickHouseClient
             QuotaKey = settings.QuotaKey;
 
             if (settings.ClientName != DefaultClientName)
+            {
                 ClientName = settings.ClientName;
+            }
 
             if (settings.ClientVersion != DefaultClientVersion)
+            {
                 ClientVersion = settings.ClientVersion;
+            }
         }
 
         /// <inheritdoc/>
@@ -348,7 +346,9 @@ namespace Octonica.ClickHouseClient
             set
             {
                 if (!AllProperties.Contains(keyword))
+                {
                     throw new ArgumentException($"\"{keyword}\" is not a valid connection parameter name.", nameof(keyword));
+                }
 
                 base[keyword] = value;
             }
@@ -365,77 +365,59 @@ namespace Octonica.ClickHouseClient
 
         private string? GetString(string key)
         {
-            return TryGetValue(key, out var value) ? (string) value : null;
+            return TryGetValue(key, out object? value) ? (string)value : null;
         }
 
         private string GetStringOrDefault(string key, string defaultValue)
         {
-            if (!TryGetValue(key, out var value))
-                return defaultValue;
-
-            return (string) value ?? defaultValue;
+            return !TryGetValue(key, out object? value) ? defaultValue : (string)value ?? defaultValue;
         }
 
         private int GetInt32OrDefault(string key, int defaultValue)
         {
-            if (!TryGetValue(key, out var value))
-                return defaultValue;
-
-            if (value is string strValue)
-            {
-                if (!int.TryParse(strValue.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
-                    throw new InvalidOperationException($"The value of the property \"{key}\" must be an integer value.");
-
-                return result;
-            }
-
-            return (int?) value ?? defaultValue;
+            return !TryGetValue(key, out object? value)
+                ? defaultValue
+                : value is string strValue
+                ? !int.TryParse(strValue.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int result)
+                    ? throw new InvalidOperationException($"The value of the property \"{key}\" must be an integer value.")
+                    : result
+                : (int?)value ?? defaultValue;
         }
 
         private bool GetBoolOrDefault(string key, bool defaultValue)
         {
-            if (!TryGetValue(key, out var value))
-                return defaultValue;
-
-            if (value is string strValue)
-            {
-                switch (strValue.Trim().ToLowerInvariant())
+            return !TryGetValue(key, out object? value)
+                ? defaultValue
+                : value is string strValue
+                ? strValue.Trim().ToLowerInvariant() switch
                 {
-                    case "on":
-                    case "true":
-                    case "1":
-                        return true;
-
-                    case "off":
-                    case "false":
-                    case "0":
-                        return false;
-
-                    default:
-                        throw new InvalidOperationException($"The value of the property \"{key}\" is not a valid boolean value.");
+                    "on" or "true" or "1" => true,
+                    "off" or "false" or "0" => false,
+                    _ => throw new InvalidOperationException($"The value of the property \"{key}\" is not a valid boolean value."),
                 }
-            }
-
-            return (bool?) value ?? defaultValue;
+                : (bool?)value ?? defaultValue;
         }
 
         private TEnum GetEnumOrDefault<TEnum>(string key, TEnum defaultValue)
             where TEnum : struct
         {
-            if (!TryGetValue(key, out var value) || value == null)
+            if (!TryGetValue(key, out object? value) || value == null)
+            {
                 return defaultValue;
+            }
 
-            if(value is string strValue)
+            if (value is string strValue)
             {
                 if (string.IsNullOrWhiteSpace(strValue))
+                {
                     return defaultValue;
+                }
 
                 // Enum.TryParse parses an integer value and casts it into enum without additional check.
                 // Check that the value is not an integer before performing an actual enum parsing.
-                if (int.TryParse(strValue.Trim(), out _) || !Enum.TryParse<TEnum>(strValue, true, out var result))
-                    throw new InvalidOperationException($"The value \"{strValue}\" is not a valid value for the property \"{key}\".");
-
-                return result;
+                return int.TryParse(strValue.Trim(), out _) || !Enum.TryParse<TEnum>(strValue, true, out TEnum result)
+                    ? throw new InvalidOperationException($"The value \"{strValue}\" is not a valid value for the property \"{key}\".")
+                    : result;
             }
 
             return (TEnum)value;
@@ -443,22 +425,19 @@ namespace Octonica.ClickHouseClient
 
         private static string? HashToString(ReadOnlyMemory<byte> hashBytes)
         {
-            if (hashBytes.Length == 0)
-                return null;
-
-            return string.Create(hashBytes.Length * 2, hashBytes, HashToString);
+            return hashBytes.Length == 0 ? null : string.Create(hashBytes.Length * 2, hashBytes, HashToString);
         }
 
-        static void HashToString(Span<char> span, ReadOnlyMemory<byte> hashBytes)
+        private static void HashToString(Span<char> span, ReadOnlyMemory<byte> hashBytes)
         {
-            var byteSpan = hashBytes.Span;
+            ReadOnlySpan<byte> byteSpan = hashBytes.Span;
             for (int i = 0; i < hashBytes.Length; i++)
             {
-                var val = byteSpan[i] >> 4;
+                int val = byteSpan[i] >> 4;
                 span[i * 2] = (char)(val + (val >= 0xA ? 'A' - 0xA : '0'));
 
                 val = byteSpan[i] & 0x0F;
-                span[i * 2 + 1] = (char)(val + (val >= 0xA ? 'A' - 0xA : '0'));
+                span[(i * 2) + 1] = (char)(val + (val >= 0xA ? 'A' - 0xA : '0'));
             }
         }
     }

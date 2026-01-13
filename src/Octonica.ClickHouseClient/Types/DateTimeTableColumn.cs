@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System;
 using NodaTime;
+using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -43,25 +43,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public DateTimeOffset GetValue(int index)
         {
-            var seconds = _buffer.Span[index];
-            if (seconds == 0)
-                return default;
-
-            return Instant.FromUnixTimeSeconds(seconds).InZone(_timeZone).ToDateTimeOffset();
+            uint seconds = _buffer.Span[index];
+            return seconds == 0 ? default : Instant.FromUnixTimeSeconds(seconds).InZone(_timeZone).ToDateTimeOffset();
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(DateTime))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime);
-
-            if (typeof(T) == typeof(DateTime?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime));
-
-            if (typeof(T) == typeof(DateTimeOffset?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<DateTimeOffset>(null, this);
-
-            return null;
+            return typeof(T) == typeof(DateTime)
+                ? (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime)
+                : typeof(T) == typeof(DateTime?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime))
+                : typeof(T) == typeof(DateTimeOffset?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTimeOffset>(null, this)
+                : null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

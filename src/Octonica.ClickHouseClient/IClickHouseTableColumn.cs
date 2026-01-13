@@ -57,7 +57,10 @@ namespace Octonica.ClickHouseClient
         /// <typeparam name="T">The desired type of array elements.</typeparam>
         /// <returns>The column converted to the type <see cref="IClickHouseArrayTableColumn{T}"/> or <see langword="null"/> if such conversion is not supported.</returns>
         /// <remarks>This method may or may not return <see langword="null"/> when the column itself implements the interface <see cref="IClickHouseArrayTableColumn{T}"/>.</remarks>
-        IClickHouseArrayTableColumn<T>? TryReinterpretAsArray<T>() => null;
+        IClickHouseArrayTableColumn<T>? TryReinterpretAsArray<T>()
+        {
+            return null;
+        }
 
         /// <summary>
         /// If possible, performs double dispatch and provides this object as an instance of <see cref="IClickHouseTableColumn{TValue}"/>.

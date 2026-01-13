@@ -15,10 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -43,37 +43,32 @@ namespace Octonica.ClickHouseClient.Types
         public bool IsNull(int index)
         {
             if (!_isNullable)
+            {
                 return false;
+            }
 
-            var valueIndex = GetValueIndex(index);
+            int valueIndex = GetValueIndex(index);
             return valueIndex == 0;
         }
 
         public object GetValue(int index)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
-                return DBNull.Value;
-
-            return _values.GetValue(valueIndex);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex == 0 && _isNullable ? DBNull.Value : _values.GetValue(valueIndex);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            var reinterpretedValues = _values as IClickHouseTableColumn<T> ?? _values.TryReinterpret<T>();
-            if (reinterpretedValues == null)
-                return null;
-
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
+            IClickHouseTableColumn<T>? reinterpretedValues = _values as IClickHouseTableColumn<T> ?? _values.TryReinterpret<T>();
+            return reinterpretedValues == null ? null : (IClickHouseTableColumn<T>)new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
-            var reinterpretedValues = _values as IClickHouseArrayTableColumn<T> ?? _values.TryReinterpretAsArray<T>();
-            if (reinterpretedValues == null)
-                return null;
-
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
+            IClickHouseArrayTableColumn<T>? reinterpretedValues = _values as IClickHouseArrayTableColumn<T> ?? _values.TryReinterpretAsArray<T>();
+            return reinterpretedValues == null
+                ? null
+                : (IClickHouseArrayTableColumn<T>)new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
@@ -85,10 +80,12 @@ namespace Octonica.ClickHouseClient.Types
         private int GetValueIndex(int index)
         {
             if (index < 0 || index > RowCount)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index));
+            }
 
             int valueIndex = 0;
-            var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
+            Span<byte> valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1))[.._keySize];
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
             return valueIndex;
@@ -118,22 +115,23 @@ namespace Octonica.ClickHouseClient.Types
         public bool IsNull(int index)
         {
             if (!_isNullable)
+            {
                 return false;
+            }
 
-            var valueIndex = GetValueIndex(index);
+            int valueIndex = GetValueIndex(index);
             return valueIndex == 0;
         }
 
         public TValue GetValue(int index)
         {
-            var valueIndex = GetValueIndex(index);
+            int valueIndex = GetValueIndex(index);
             if (valueIndex == 0 && _isNullable)
             {
-                var defaultValue = default(TValue);
-                if (!(defaultValue is null))
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Can't convert NULL to \"{typeof(TValue)}\".");
-
-                return defaultValue!;
+                TValue? defaultValue = default;
+                return defaultValue is not null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Can't convert NULL to \"{typeof(TValue)}\".")
+                    : defaultValue!;
             }
 
             return _values.GetValue(valueIndex);
@@ -141,29 +139,22 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
-                return DBNull.Value;
-
-            return ((IClickHouseTableColumn) _values).GetValue(valueIndex);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex == 0 && _isNullable ? DBNull.Value : ((IClickHouseTableColumn)_values).GetValue(valueIndex);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            var reinterpretedValues = _values as IClickHouseTableColumn<T> ?? _values.TryReinterpret<T>();
-            if (reinterpretedValues == null)
-                return null;
-
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
+            IClickHouseTableColumn<T>? reinterpretedValues = _values as IClickHouseTableColumn<T> ?? _values.TryReinterpret<T>();
+            return reinterpretedValues == null ? null : (IClickHouseTableColumn<T>)new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
-            var reinterpretedValues = _values as IClickHouseArrayTableColumn<T> ?? _values.TryReinterpretAsArray<T>();
-            if (reinterpretedValues == null)
-                return null;
-
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
+            IClickHouseArrayTableColumn<T>? reinterpretedValues = _values as IClickHouseArrayTableColumn<T> ?? _values.TryReinterpretAsArray<T>();
+            return reinterpretedValues == null
+                ? null
+                : (IClickHouseArrayTableColumn<T>)new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -175,10 +166,12 @@ namespace Octonica.ClickHouseClient.Types
         private int GetValueIndex(int index)
         {
             if (index < 0 || index > RowCount)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index));
+            }
 
             int valueIndex = 0;
-            var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
+            Span<byte> valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1))[.._keySize];
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
             return valueIndex;
@@ -207,28 +200,26 @@ namespace Octonica.ClickHouseClient.Types
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
-                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.");
-
-            return _values.CopyTo(valueIndex, buffer, dataOffset);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex == 0 && _isNullable
+                ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.")
+                : _values.CopyTo(valueIndex, buffer, dataOffset);
         }
 
         public object GetValue(int index)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
-                return DBNull.Value;
-
-            return _values.GetValue(valueIndex);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex == 0 && _isNullable ? DBNull.Value : _values.GetValue(valueIndex);
         }
 
         public bool IsNull(int index)
         {
             if (!_isNullable)
+            {
                 return false;
+            }
 
-            var valueIndex = GetValueIndex(index);
+            int valueIndex = GetValueIndex(index);
             return valueIndex == 0;
         }
 
@@ -251,10 +242,12 @@ namespace Octonica.ClickHouseClient.Types
         private int GetValueIndex(int index)
         {
             if (index < 0 || index > RowCount)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index));
+            }
 
             int valueIndex = 0;
-            var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
+            Span<byte> valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1))[.._keySize];
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
             return valueIndex;

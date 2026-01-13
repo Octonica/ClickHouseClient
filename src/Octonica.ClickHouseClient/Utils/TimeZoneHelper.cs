@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System;
 using NodaTime;
+using System;
 
 namespace Octonica.ClickHouseClient.Utils
 {
@@ -26,20 +26,14 @@ namespace Octonica.ClickHouseClient.Utils
         {
             DateTimeZone? DateTimeZone = null;
             GetDateTimeZoneImpl(timeZone, ref DateTimeZone);
-            if (DateTimeZone == null)
-                throw new NotImplementedException($"Internal error. The method {nameof(GetDateTimeZoneImpl)} is not implemented properly.");
-
-            return DateTimeZone;
+            return DateTimeZone ?? throw new NotImplementedException($"Internal error. The method {nameof(GetDateTimeZoneImpl)} is not implemented properly.");
         }
 
         public static string GetTimeZoneId(DateTimeZone timeZone)
         {
             string? timeZoneCode = null;
             GetTimeZoneIdImpl(timeZone, ref timeZoneCode);
-            if (timeZoneCode == null)
-                throw new NotImplementedException($"Internal error. The method {nameof(GetTimeZoneIdImpl)} is not implemented properly.");
-
-            return timeZoneCode;
+            return timeZoneCode ?? throw new NotImplementedException($"Internal error. The method {nameof(GetTimeZoneIdImpl)} is not implemented properly.");
         }
 
         static partial void GetDateTimeZoneImpl(string timeZone, ref DateTimeZone? DateTimeZone);

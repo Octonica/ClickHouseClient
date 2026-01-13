@@ -15,6 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
@@ -23,10 +27,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Types;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -38,8 +38,6 @@ namespace Octonica.ClickHouseClient
         private readonly ClickHouseTcpClient.Session _session;
         private readonly ClickHouseDataReaderRowLimit _rowLimit;
         private readonly bool _ignoreProfileEvents;
-        private ulong _recordsAffected;
-
         private int _rowIndex = -1;
 
         private IServerMessage? _nextResultMessage;
@@ -59,34 +57,27 @@ namespace Octonica.ClickHouseClient
         /// <returns>A non-negative number of rows affected by the query.</returns>
         /// <exception cref="OverflowException">The number of affected rows is greater than <see cref="int.MaxValue"/>.</exception>
         /// <remarks>Use the property <see cref="RecordsAffectedLong"/> if the query can affect more than <see cref="int.MaxValue"/> rows .</remarks>
-        public override int RecordsAffected
-        {
-            get
-            {
-                if (_recordsAffected <= int.MaxValue)
-                    return (int) _recordsAffected;
-
-                throw new OverflowException($"The number of affected records is too large. Use the property \"{nameof(RecordsAffectedLong)}\" to get this number.");
-            }
-        }
+        public override int RecordsAffected => RecordsAffectedLong <= int.MaxValue
+                    ? (int)RecordsAffectedLong
+                    : throw new OverflowException($"The number of affected records is too large. Use the property \"{nameof(RecordsAffectedLong)}\" to get this number.");
 
         /// <summary>
         /// Gets the number of affected rows.
         /// </summary>
         /// <returns>A number of rows affected by the query.</returns>
-        public ulong RecordsAffectedLong => _recordsAffected;
+        public ulong RecordsAffectedLong { get; private set; }
 
         /// <summary>
         /// Gets a value that indicates whether the reader contains one or more rows.
         /// </summary>
         /// /// <returns><see langword="true"/> if the reader contains one or more rows; otherwise <see langword="false"/>.</returns>
-        public override bool HasRows => _rowIndex < 0 || _recordsAffected > 0;
+        public override bool HasRows => _rowIndex < 0 || RecordsAffectedLong > 0;
 
         /// <summary>
         /// Gets the value indicating whether the reader is closed.
         /// </summary>
         /// <returns><see langword="true"/> if the reader is closed; otherwise <see langword="false"/>.</returns>
-        public override bool IsClosed => State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken;
+        public override bool IsClosed => State is ClickHouseDataReaderState.Closed or ClickHouseDataReaderState.Broken;
 
         /// <summary>
         /// Gets the number of columns.
@@ -106,7 +97,7 @@ namespace Octonica.ClickHouseClient
             _rowLimit = rowLimit;
             _ignoreProfileEvents = ignoreProfileEvents;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
-            _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
+            RecordsAffectedLong = checked((ulong)_currentTable.Header.RowCount);
             State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
         }
 
@@ -118,9 +109,11 @@ namespace Octonica.ClickHouseClient
         /// <param name="columnSettings">The settings.</param>
         public void ConfigureColumn(string name, ClickHouseColumnSettings columnSettings)
         {
-            var index = GetOrdinal(name);
+            int index = GetOrdinal(name);
             if (index < 0)
+            {
                 throw new ArgumentException($"A column with the name \"{name}\" not found.", nameof(name));
+            }
 
             ConfigureColumn(index, columnSettings);
         }
@@ -134,16 +127,22 @@ namespace Octonica.ClickHouseClient
         public void ConfigureColumn(int ordinal, ClickHouseColumnSettings columnSettings)
         {
             if (_rowIndex >= 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+            }
 
             if (State == ClickHouseDataReaderState.ProfileEvents)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
+            }
 
             IClickHouseColumnReinterpreter? reinterpreter = null;
             if (columnSettings.ColumnType != null)
+            {
                 reinterpreter = ClickHouseColumnReinterpreter.Create(columnSettings.ColumnType);
+            }
 
-            var columnName = _currentTable.Header.Columns[ordinal].Name;
+            string columnName = _currentTable.Header.Columns[ordinal].Name;
             if (_columnSettings != null)
             {
                 _columnSettings[ordinal] = _columnSettings[ordinal].WithColumnSettings(columnName, columnSettings, reinterpreter);
@@ -165,9 +164,11 @@ namespace Octonica.ClickHouseClient
         /// <remarks>The callback function (<paramref name="readAs"/>) must never return <see langword="null"/> when its argument is not null.</remarks>
         public void ConfigureColumnReader<T, TResult>(string name, Func<T, TResult>? readAs)
         {
-            var index = GetOrdinal(name);
+            int index = GetOrdinal(name);
             if (index < 0)
+            {
                 throw new ArgumentException($"A column with the name \"{name}\" not found.", nameof(name));
+            }
 
             ConfigureColumnReader(index, readAs);
         }
@@ -183,28 +184,32 @@ namespace Octonica.ClickHouseClient
         public void ConfigureColumnReader<T, TResult>(int ordinal, Func<T, TResult>? readAs)
         {
             if (_rowIndex >= 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+            }
 
             if (State == ClickHouseDataReaderState.ProfileEvents)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
+            }
 
             if (readAs == null && _columnSettings == null)
+            {
                 return;
+            }
 
             IClickHouseColumnReinterpreter? reinterpreter = null;
             if (readAs != null)
             {
-                if (typeof(T) == typeof(object))
-                    reinterpreter = new ClickHouseObjectColumnReinterpreter<TResult>((Func<object, TResult>)(object)readAs);
-                else
-                    reinterpreter = ClickHouseColumnReinterpreter.Create(readAs);
+                reinterpreter = typeof(T) == typeof(object)
+                    ? new ClickHouseObjectColumnReinterpreter<TResult>((Func<object, TResult>)(object)readAs)
+                    : ClickHouseColumnReinterpreter.Create(readAs);
 
                 // Dry run. The interpreter could invoke the function 'readAs' and it could fail.
-                reinterpreter.TryReinterpret(_currentTable.Columns[ordinal]);
+                _ = reinterpreter.TryReinterpret(_currentTable.Columns[ordinal]);
             }
 
-            if (_columnSettings == null)
-                _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+            _columnSettings ??= new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
 
             _columnSettings[ordinal] = _columnSettings[ordinal].WithUserDefinedReader(_currentTable.Header.Columns[ordinal].Name, reinterpreter);
         }
@@ -217,24 +222,32 @@ namespace Octonica.ClickHouseClient
         public void ConfigureDataReader(ClickHouseColumnSettings columnSettings)
         {
             if (_rowIndex >= 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The reader can't be reconfigured during reading.");
+            }
 
             IClickHouseColumnReinterpreter? reinterpreter = null;
             if (columnSettings.ColumnType != null)
+            {
                 reinterpreter = ClickHouseColumnReinterpreter.Create(columnSettings.ColumnType);
+            }
 
             if (_columnSettings == null)
             {
-                var settings = new ClickHouseReaderColumnSettings(columnSettings, reinterpreter);
+                ClickHouseReaderColumnSettings settings = new(columnSettings, reinterpreter);
                 _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
                 for (int i = 0; i < _columnSettings.Length; i++)
+                {
                     _columnSettings[i] = settings;
+                }
             }
             else
             {
-                var settingsCopy = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+                ClickHouseReaderColumnSettings[] settingsCopy = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
                 for (int i = 0; i < settingsCopy.Length; i++)
+                {
                     settingsCopy[i] = _columnSettings[i].WithColumnSettings(_currentTable.Header.Columns[i].Name, columnSettings, reinterpreter);
+                }
 
                 _columnSettings = settingsCopy;
             }
@@ -285,8 +298,8 @@ namespace Octonica.ClickHouseClient
             // GetValue should always return DBNull.Value instead of null.
             // So an actual field type should be unboxed from Nullable<T>.
 
-            var reinterpreter = _columnSettings?[ordinal].Reinterpreter;
-            var type = reinterpreter?.ExternalConvertToType ?? reinterpreter?.BuiltInConvertToType;
+            IClickHouseColumnReinterpreter? reinterpreter = _columnSettings?[ordinal].Reinterpreter;
+            Type? type = reinterpreter?.ExternalConvertToType ?? reinterpreter?.BuiltInConvertToType;
             type ??= _currentTable.Header.Columns[ordinal].TypeInfo.GetFieldType();
             return Nullable.GetUnderlyingType(type) ?? type;
         }
@@ -299,10 +312,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The zero-based column ordinal.</returns>
         public sealed override int GetOrdinal(string name)
         {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
-
-            return CommonUtils.GetColumnIndex(_currentTable.Header.Columns, name);
+            return name == null ? throw new ArgumentNullException(nameof(name)) : CommonUtils.GetColumnIndex(_currentTable.Header.Columns, name);
         }
 
         /// <summary>
@@ -316,12 +326,14 @@ namespace Octonica.ClickHouseClient
         /// <returns>The actual number of bytes copied.</returns>
         public sealed override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length)
         {
-            var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<byte>;
+            IClickHouseArrayTableColumn<byte>? arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<byte>;
             if (arrayColumn == null)
             {
                 arrayColumn = _currentTable.Columns[ordinal].TryReinterpretAsArray<byte>();
                 if (arrayColumn != null)
+                {
                     _reinterpretedColumnsCache[ordinal] = arrayColumn;
+                }
             }
 
             if (arrayColumn != null)
@@ -330,21 +342,18 @@ namespace Octonica.ClickHouseClient
                 return arrayColumn.CopyTo(_rowIndex, new Span<byte>(buffer, bufferOffset, Math.Min(buffer?.Length ?? 0, length)), checked((int)dataOffset));
             }
 
-            var value = GetFieldValue<byte[]>(ordinal, null);
+            byte[]? value = GetFieldValue<byte[]>(ordinal, null);
             if (value == null)
             {
-                if (dataOffset == 0)
-                    return 0;
-
-                throw new ArgumentOutOfRangeException(nameof(dataOffset));
+                return dataOffset == 0 ? 0 : throw new ArgumentOutOfRangeException(nameof(dataOffset));
             }
 
             ReadOnlySpan<byte> source = value;
             Span<byte> target = buffer;
 
-            int resultLength = Math.Min(value.Length - (int) dataOffset, length);
+            int resultLength = Math.Min(value.Length - (int)dataOffset, length);
 
-            source = source.Slice((int) dataOffset, resultLength);
+            source = source.Slice((int)dataOffset, resultLength);
             target = target.Slice(bufferOffset, resultLength);
 
             source.CopyTo(target);
@@ -362,12 +371,14 @@ namespace Octonica.ClickHouseClient
         /// <returns>The actual number of characters copied.</returns>
         public sealed override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
         {
-            var arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<char>;
+            IClickHouseArrayTableColumn<char>? arrayColumn = _reinterpretedColumnsCache[ordinal] as IClickHouseArrayTableColumn<char>;
             if (arrayColumn == null)
             {
                 arrayColumn = _currentTable.Columns[ordinal].TryReinterpretAsArray<char>();
                 if (arrayColumn != null)
+                {
                     _reinterpretedColumnsCache[ordinal] = arrayColumn;
+                }
             }
 
             if (arrayColumn != null)
@@ -376,21 +387,18 @@ namespace Octonica.ClickHouseClient
                 return arrayColumn.CopyTo(_rowIndex, new Span<char>(buffer, bufferOffset, Math.Min(buffer?.Length ?? 0, length)), checked((int)dataOffset));
             }
 
-            var value = GetFieldValue<string>(ordinal, null);
+            string? value = GetFieldValue<string>(ordinal, null);
             if (value == null)
             {
-                if (dataOffset == 0)
-                    return 0;
-
-                throw new ArgumentOutOfRangeException(nameof(dataOffset));
+                return dataOffset == 0 ? 0 : throw new ArgumentOutOfRangeException(nameof(dataOffset));
             }
 
             ReadOnlySpan<char> source = value;
             Span<char> target = buffer;
 
-            int resultLength = Math.Min(value.Length - (int) dataOffset, length);
+            int resultLength = Math.Min(value.Length - (int)dataOffset, length);
 
-            source = source.Slice((int) dataOffset, resultLength);
+            source = source.Slice((int)dataOffset, resultLength);
             target = target.Slice(bufferOffset, resultLength);
 
             source.CopyTo(target);
@@ -623,14 +631,18 @@ namespace Octonica.ClickHouseClient
             where T : class
         {
             CheckRowIndex();
-            var column = _currentTable.Columns[ordinal];
+            IClickHouseTableColumn column = _currentTable.Columns[ordinal];
             if (column is IClickHouseTableColumn<T> typedColumn)
+            {
                 return typedColumn.GetValue(_rowIndex) ?? nullValue;
+            }
 
             if (_reinterpretedColumnsCache[ordinal] is IClickHouseTableColumn<T> reinterpretedColumn)
+            {
                 return reinterpretedColumn.GetValue(_rowIndex) ?? nullValue;
+            }
 
-            var rc = column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? rc = column.TryReinterpret<T>();
             if (rc != null)
             {
                 _reinterpretedColumnsCache[ordinal] = rc;
@@ -638,10 +650,12 @@ namespace Octonica.ClickHouseClient
             }
 
             if (column.IsNull(_rowIndex))
+            {
                 return nullValue;
+            }
 
-            var value = column.GetValue(_rowIndex);
-            return (T) value;
+            object value = column.GetValue(_rowIndex);
+            return (T)value;
         }
 
         /// <inheritdoc cref="GetFieldValue{T}(int, T)"/>
@@ -650,24 +664,32 @@ namespace Octonica.ClickHouseClient
             where T : struct
         {
             CheckRowIndex();
-            var column = _currentTable.Columns[ordinal];
+            IClickHouseTableColumn column = _currentTable.Columns[ordinal];
             if (column is IClickHouseTableColumn<T?> nullableTypedColumn)
+            {
                 return nullableTypedColumn.GetValue(_rowIndex) ?? nullValue;
+            }
 
-            var rc = _reinterpretedColumnsCache[ordinal] as IClickHouseTableColumn<T?>;
+            IClickHouseTableColumn<T?>? rc = _reinterpretedColumnsCache[ordinal] as IClickHouseTableColumn<T?>;
             if (rc != null)
+            {
                 return rc.GetValue(_rowIndex) ?? nullValue;
+            }
 
             rc = column.TryReinterpret<T?>();
             if (rc == null)
             {
-                var structRc = column.TryReinterpret<T>();
+                IClickHouseTableColumn<T>? structRc = column.TryReinterpret<T>();
                 if (structRc != null)
+                {
                     rc = new NullableStructTableColumn<T>(null, structRc);
+                }
             }
 
             if (rc == null && column is IClickHouseTableColumn<T> typedColumn)
+            {
                 rc = new NullableStructTableColumn<T>(null, typedColumn);
+            }
 
             if (rc != null)
             {
@@ -676,10 +698,12 @@ namespace Octonica.ClickHouseClient
             }
 
             if (column.IsNull(_rowIndex))
+            {
                 return nullValue;
+            }
 
-            var value = column.GetValue(_rowIndex);
-            return (T) value;
+            object value = column.GetValue(_rowIndex);
+            return (T)value;
         }
 
         /// <summary>
@@ -691,25 +715,29 @@ namespace Octonica.ClickHouseClient
         public sealed override T GetFieldValue<T>(int ordinal)
         {
             CheckRowIndex();
-            var column = _currentTable.Columns[ordinal];
+            IClickHouseTableColumn column = _currentTable.Columns[ordinal];
             //if (column.IsNull(_rowIndex))
             //    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The value is null.");
 
             if (column is IClickHouseTableColumn<T> typedColumn)
+            {
                 return typedColumn.GetValue(_rowIndex);
+            }
 
             if (_reinterpretedColumnsCache[ordinal] is IClickHouseTableColumn<T> reinterpretedColumn)
+            {
                 return reinterpretedColumn.GetValue(_rowIndex);
+            }
 
-            var rc = column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? rc = column.TryReinterpret<T>();
             if (rc != null)
             {
                 _reinterpretedColumnsCache[ordinal] = rc;
                 return rc.GetValue(_rowIndex);
             }
 
-            var value = column.GetValue(_rowIndex);
-            return (T) value;
+            object value = column.GetValue(_rowIndex);
+            return (T)value;
         }
 
         /// <summary>
@@ -720,7 +748,7 @@ namespace Octonica.ClickHouseClient
         public sealed override object GetValue(int ordinal)
         {
             CheckRowIndex();
-            var column = _currentTable.Columns[ordinal];
+            IClickHouseTableColumn column = _currentTable.Columns[ordinal];
             return column.GetValue(_rowIndex);
         }
 
@@ -732,10 +760,10 @@ namespace Octonica.ClickHouseClient
         public sealed override int GetValues(object[] values)
         {
             CheckRowIndex();
-            var count = Math.Min(_currentTable.Columns.Count, values.Length);
+            int count = Math.Min(_currentTable.Columns.Count, values.Length);
             for (int i = 0; i < count; i++)
             {
-                var column = _currentTable.Columns[i];
+                IClickHouseTableColumn column = _currentTable.Columns[i];
                 values[i] = column.GetValue(_rowIndex);
             }
 
@@ -750,7 +778,7 @@ namespace Octonica.ClickHouseClient
         public sealed override bool IsDBNull(int ordinal)
         {
             CheckRowIndex();
-            var column = _currentTable.Columns[ordinal];
+            IClickHouseTableColumn column = _currentTable.Columns[ordinal];
             return column.IsNull(_rowIndex);
         }
 
@@ -766,11 +794,10 @@ namespace Octonica.ClickHouseClient
         {
             get
             {
-                var ordinal = GetOrdinal(name);
-                if (ordinal < 0)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Column \"{name}\" not found.");
-
-                return GetValue(ordinal);
+                int ordinal = GetOrdinal(name);
+                return ordinal < 0
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Column \"{name}\" not found.")
+                    : GetValue(ordinal);
             }
         }
 
@@ -816,20 +843,24 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<bool> Read(bool async, CancellationToken cancellationToken)
         {
-            if (State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken || State == ClickHouseDataReaderState.ClosePending)
+            if (State is ClickHouseDataReaderState.Closed or ClickHouseDataReaderState.Broken or ClickHouseDataReaderState.ClosePending)
+            {
                 return false;
+            }
 
             bool result;
             if (++_rowIndex >= _currentTable.Header.RowCount)
             {
                 _rowIndex = _currentTable.Header.RowCount;
 
-                if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes)
+                if (State is ClickHouseDataReaderState.Data or ClickHouseDataReaderState.Totals or ClickHouseDataReaderState.Extremes)
                 {
                     result = await Read(false, async, cancellationToken);
 
                     if (!result && _rowLimit == ClickHouseDataReaderRowLimit.OneResult && State == ClickHouseDataReaderState.NextResultPending)
+                    {
                         await Cancel(false, async);
+                    }
                 }
                 else
                 {
@@ -837,12 +868,14 @@ namespace Octonica.ClickHouseClient
                 }
             }
             else
-            {                
+            {
                 result = true;
             }
 
             if (_rowLimit == ClickHouseDataReaderRowLimit.OneRow && result)
+            {
                 await Cancel(false, async);
+            }
 
             return result;
         }
@@ -855,11 +888,15 @@ namespace Octonica.ClickHouseClient
 
                 try
                 {
-                    var message = _nextResultMessage;
+                    IServerMessage? message = _nextResultMessage;
                     if (message == null)
+                    {
                         message = await _session.ReadMessage(async, cancellationToken);
+                    }
                     else
+                    {
                         _nextResultMessage = null;
+                    }
 
                     switch (message.MessageCode)
                     {
@@ -871,22 +908,24 @@ namespace Octonica.ClickHouseClient
                                     goto case ClickHouseDataReaderState.Data;
 
                                 case ClickHouseDataReaderState.Data:
-                                {
-                                    var dataMessage = (ServerDataMessage) message;
-                                    nextTable = await _session.ReadTable(dataMessage, _columnSettings, async, cancellationToken);
-                                    break;
-                                }
+                                    {
+                                        ServerDataMessage dataMessage = (ServerDataMessage)message;
+                                        nextTable = await _session.ReadTable(dataMessage, _columnSettings, async, cancellationToken);
+                                        break;
+                                    }
 
                                 case ClickHouseDataReaderState.Totals:
                                 case ClickHouseDataReaderState.Extremes:
-                                {
-                                    var dataMessage = (ServerDataMessage)message;
-                                    var table = await _session.SkipTable(dataMessage, async, cancellationToken);
-                                    if (table.RowCount != 0 || table.Columns.Count != 0)
-                                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, "Unexpected data block after totals or extremes.");
+                                    {
+                                        ServerDataMessage dataMessage = (ServerDataMessage)message;
+                                        BlockHeader table = await _session.SkipTable(dataMessage, async, cancellationToken);
+                                        if (table.RowCount != 0 || table.Columns.Count != 0)
+                                        {
+                                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, "Unexpected data block after totals or extremes.");
+                                        }
 
-                                    continue;
-                                }
+                                        continue;
+                                    }
 
                                 case ClickHouseDataReaderState.ProfileEvents:
                                     _nextResultMessage = message;
@@ -902,11 +941,11 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.Error:
                             State = ClickHouseDataReaderState.Closed;
                             await _session.Dispose(async);
-                            throw ((ServerErrorMessage) message).Exception;
+                            throw ((ServerErrorMessage)message).Exception;
 
                         case ServerMessageCode.Progress:
-                            var progressMessage = (ServerProgressMessage) message;
-                            _recordsAffected = progressMessage.Rows;
+                            ServerProgressMessage progressMessage = (ServerProgressMessage)message;
+                            RecordsAffectedLong = progressMessage.Rows;
                             continue;
 
                         case ServerMessageCode.EndOfStream:
@@ -925,7 +964,7 @@ namespace Octonica.ClickHouseClient
                                     goto case ClickHouseDataReaderState.Totals;
 
                                 case ClickHouseDataReaderState.Totals:
-                                    var totalsMessage = (ServerDataMessage) message;
+                                    ServerDataMessage totalsMessage = (ServerDataMessage)message;
                                     nextTable = await _session.ReadTable(totalsMessage, _columnSettings, async, cancellationToken);
                                     break;
 
@@ -950,7 +989,7 @@ namespace Octonica.ClickHouseClient
                                     goto case ClickHouseDataReaderState.Extremes;
 
                                 case ClickHouseDataReaderState.Extremes:
-                                    var extremesMessage = (ServerDataMessage) message;
+                                    ServerDataMessage extremesMessage = (ServerDataMessage)message;
                                     nextTable = await _session.ReadTable(extremesMessage, _columnSettings, async, cancellationToken);
                                     break;
 
@@ -970,7 +1009,7 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.ProfileEvents:
                             if (_ignoreProfileEvents)
                             {
-                                await _session.SkipTable((ServerDataMessage)message, async, cancellationToken);
+                                _ = await _session.SkipTable((ServerDataMessage)message, async, cancellationToken);
                                 continue;
                             }
 
@@ -981,7 +1020,7 @@ namespace Octonica.ClickHouseClient
                                     goto case ClickHouseDataReaderState.ProfileEvents;
 
                                 case ClickHouseDataReaderState.ProfileEvents:
-                                    var profileEventsMessage = (ServerDataMessage) message;
+                                    ServerDataMessage profileEventsMessage = (ServerDataMessage)message;
                                     nextTable = await _session.ReadTable(profileEventsMessage, null, async, cancellationToken);
                                     break;
 
@@ -1001,7 +1040,7 @@ namespace Octonica.ClickHouseClient
                         case ServerMessageCode.Pong:
                         case ServerMessageCode.Hello:
                         case ServerMessageCode.Log:
-                            UNEXPECTED_RESPONSE:
+                        UNEXPECTED_RESPONSE:
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
 
                         default:
@@ -1019,19 +1058,23 @@ namespace Octonica.ClickHouseClient
                 catch (Exception ex)
                 {
                     State = ClickHouseDataReaderState.Broken;
-                    var aggrEx = await _session.SetFailed(ex, true, async);
+                    Exception? aggrEx = await _session.SetFailed(ex, true, async);
                     if (aggrEx != null)
+                    {
                         throw aggrEx;
+                    }
 
                     throw;
                 }
 
                 if (nextTable.Header.RowCount == 0)
+                {
                     continue;
+                }
 
                 _currentTable = nextTable;
                 _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
-                _recordsAffected = checked(_recordsAffected + (ulong) nextTable.Header.RowCount);
+                RecordsAffectedLong = checked(RecordsAffectedLong + (ulong)nextTable.Header.RowCount);
                 _rowIndex = nextResult ? -1 : 0;
                 return true;
             }
@@ -1059,7 +1102,7 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<bool> NextResult(bool async, CancellationToken cancellationToken)
         {
-            if (State == ClickHouseDataReaderState.Data || State == ClickHouseDataReaderState.Totals || State == ClickHouseDataReaderState.Extremes || State == ClickHouseDataReaderState.ProfileEvents)
+            if (State is ClickHouseDataReaderState.Data or ClickHouseDataReaderState.Totals or ClickHouseDataReaderState.Extremes or ClickHouseDataReaderState.ProfileEvents)
             {
                 bool canReadNext;
                 do
@@ -1070,16 +1113,15 @@ namespace Octonica.ClickHouseClient
                 } while (canReadNext);
             }
 
-            if (State != ClickHouseDataReaderState.NextResultPending)
-                return false;
-
-            return await Read(true, async, cancellationToken);
+            return State == ClickHouseDataReaderState.NextResultPending && await Read(true, async, cancellationToken);
         }
 
         private async ValueTask Cancel(bool disposing, bool async)
         {
-            if (State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken || State == ClickHouseDataReaderState.ClosePending)
+            if (State is ClickHouseDataReaderState.Closed or ClickHouseDataReaderState.Broken or ClickHouseDataReaderState.ClosePending)
+            {
                 return;
+            }
 
             try
             {
@@ -1089,10 +1131,12 @@ namespace Octonica.ClickHouseClient
             catch (Exception ex)
             {
                 State = ClickHouseDataReaderState.Broken;
-                await _session.SetFailed(ex, false, async);
+                _ = await _session.SetFailed(ex, false, async);
 
                 if (!disposing)
+                {
                     throw;
+                }
             }
         }
 
@@ -1116,9 +1160,11 @@ namespace Octonica.ClickHouseClient
         private async ValueTask Close(bool disposing, bool async)
         {
             if (_session.IsDisposed || _session.IsFailed)
+            {
                 return;
+            }
 
-            if (!(State == ClickHouseDataReaderState.Closed || State == ClickHouseDataReaderState.Broken))
+            if (State is not (ClickHouseDataReaderState.Closed or ClickHouseDataReaderState.Broken))
             {
                 await Cancel(disposing, async);
 
@@ -1127,7 +1173,7 @@ namespace Octonica.ClickHouseClient
                     while (true)
                     {
 
-                        var message = _nextResultMessage ?? await _session.ReadMessage(async, CancellationToken.None);
+                        IServerMessage message = _nextResultMessage ?? await _session.ReadMessage(async, CancellationToken.None);
                         _nextResultMessage = null;
 
                         switch (message.MessageCode)
@@ -1136,20 +1182,22 @@ namespace Octonica.ClickHouseClient
                             case ServerMessageCode.Totals:
                             case ServerMessageCode.Extremes:
                             case ServerMessageCode.ProfileEvents:
-                                var dataMessage = (ServerDataMessage) message;
-                                await _session.SkipTable(dataMessage, async, CancellationToken.None);
+                                ServerDataMessage dataMessage = (ServerDataMessage)message;
+                                _ = await _session.SkipTable(dataMessage, async, CancellationToken.None);
                                 continue;
 
                             case ServerMessageCode.Error:
                                 State = ClickHouseDataReaderState.Closed;
                                 if (disposing)
+                                {
                                     break;
+                                }
 
-                                throw ((ServerErrorMessage) message).Exception;
+                                throw ((ServerErrorMessage)message).Exception;
 
                             case ServerMessageCode.Progress:
-                                var progressMessage = (ServerProgressMessage) message;
-                                _recordsAffected = progressMessage.Rows;
+                                ServerProgressMessage progressMessage = (ServerProgressMessage)message;
+                                RecordsAffectedLong = progressMessage.Rows;
                                 continue;
 
                             case ServerMessageCode.EndOfStream:
@@ -1174,22 +1222,28 @@ namespace Octonica.ClickHouseClient
                 catch (ClickHouseHandledException ex)
                 {
                     if (!disposing)
+                    {
                         throw;
+                    }
 
                     State = ClickHouseDataReaderState.Broken;
-                    await _session.SetFailed(ex.InnerException, false, async);
+                    _ = await _session.SetFailed(ex.InnerException, false, async);
                     return;
                 }
                 catch (Exception ex)
                 {
                     State = ClickHouseDataReaderState.Broken;
-                    var aggrEx = await _session.SetFailed(ex, false, async);
+                    Exception? aggrEx = await _session.SetFailed(ex, false, async);
 
                     if (disposing)
+                    {
                         return;
+                    }
 
                     if (aggrEx != null)
+                    {
                         throw aggrEx;
+                    }
 
                     throw;
                 }
@@ -1202,7 +1256,9 @@ namespace Octonica.ClickHouseClient
         protected override void Dispose(bool disposing)
         {
             if (!disposing)
+            {
                 return;
+            }
 
             TaskHelper.WaitNonAsyncTask(Close(true, false));
         }
@@ -1217,9 +1273,14 @@ namespace Octonica.ClickHouseClient
         private void CheckRowIndex()
         {
             if (_rowIndex >= _currentTable.Header.RowCount)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The reader is reached the end of the table.");
+            }
+
             if (_rowIndex < 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"There are no rows to read. The call of the method {nameof(Read)} is required.");
+            }
         }
 
         /// <summary>

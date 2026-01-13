@@ -51,12 +51,9 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             // Inherit type cast logic from UInt8
-            var uint8Column = new UInt8TableColumn(_buffer);
-            var reinterpreted = uint8Column as IClickHouseTableColumn<T> ?? uint8Column.TryReinterpret<T>();
-            if (reinterpreted == null)
-                return null;
-
-            return new ReinterpretedTableColumn<T>(this, reinterpreted);
+            UInt8TableColumn uint8Column = new(_buffer);
+            IClickHouseTableColumn<T>? reinterpreted = uint8Column as IClickHouseTableColumn<T> ?? uint8Column.TryReinterpret<T>();
+            return reinterpreted == null ? null : (IClickHouseTableColumn<T>)new ReinterpretedTableColumn<T>(this, reinterpreted);
         }
 
         public bool TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)

@@ -43,19 +43,16 @@ namespace Octonica.ClickHouseClient.Types
 
         public TRes GetValue(int index)
         {
-            var value = _column.GetValue(index);
-            var converted = _reinterpret(value);
+            object value = _column.GetValue(index);
+            TRes? converted = _reinterpret(value);
             return converted;
         }
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            var value = _column.GetValue(index);
-            var converted = _reinterpret(value);
-            if (converted is null)
-                return DBNull.Value;
-
-            return converted;
+            object value = _column.GetValue(index);
+            TRes? converted = _reinterpret(value);
+            return converted is null ? DBNull.Value : converted;
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()

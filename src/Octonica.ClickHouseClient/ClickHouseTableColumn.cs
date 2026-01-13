@@ -15,10 +15,10 @@
  */
 #endregion
 
+using NodaTime;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NodaTime;
 
 namespace Octonica.ClickHouseClient
 {
@@ -101,7 +101,9 @@ namespace Octonica.ClickHouseClient
         public ClickHouseTableColumn(string columnName, object value, Type valueType)
         {
             if (string.IsNullOrWhiteSpace(columnName))
+            {
                 throw new ArgumentException("The name of a column must be a non-empty string", nameof(columnName));
+            }
 
             ColumnName = columnName;
             Value = value ?? throw new ArgumentNullException(nameof(value));

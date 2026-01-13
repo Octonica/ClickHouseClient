@@ -21,7 +21,7 @@ namespace Octonica.ClickHouseClient.Protocol
 {
     internal class ClickHouseEmptyTableWriter : IClickHouseTableWriter
     {
-        public static readonly ClickHouseEmptyTableWriter Instance = new ClickHouseEmptyTableWriter();
+        public static readonly ClickHouseEmptyTableWriter Instance = new();
 
         public string TableName { get; }
 

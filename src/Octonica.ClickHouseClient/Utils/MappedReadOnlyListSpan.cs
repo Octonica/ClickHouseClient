@@ -33,16 +33,22 @@ namespace Octonica.ClickHouseClient.Utils
         private MappedReadOnlyListSpan(IReadOnlyList<TIn> innerList, Func<TIn, TOut> map, int offset, int count)
         {
             if (innerList == null)
+            {
                 throw new ArgumentNullException(nameof(innerList));
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
+            }
+
             if (offset < 0 || offset > innerList.Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(offset));
+            }
+
             if (count < 0 || offset + count > innerList.Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
 
             _innerList = innerList;
-            _map = map;
+            _map = map ?? throw new ArgumentNullException(nameof(map));
             _offset = offset;
             Count = count;
         }
@@ -59,25 +65,22 @@ namespace Octonica.ClickHouseClient.Utils
 
         public IReadOnlyListExt<TOut> Slice(int start, int length)
         {
-            if (start < 0 || start > Count)
-                throw new ArgumentOutOfRangeException(nameof(start));
-            if (length < 0 || start + length > Count)
-                throw new ArgumentOutOfRangeException(nameof(length));
-
-            if (_innerList is IReadOnlyListExt<TIn> readOnlyListExt)
-                return readOnlyListExt.Slice(_offset + start, length).Map(_map);
-
-            return new MappedReadOnlyListSpan<TIn, TOut>(_innerList, _map, _offset + start, length);
+            return start < 0 || start > Count
+                ? throw new ArgumentOutOfRangeException(nameof(start))
+                : length < 0 || start + length > Count
+                ? throw new ArgumentOutOfRangeException(nameof(length))
+                : _innerList is IReadOnlyListExt<TIn> readOnlyListExt
+                ? readOnlyListExt.Slice(_offset + start, length).Map(_map)
+                : new MappedReadOnlyListSpan<TIn, TOut>(_innerList, _map, _offset + start, length);
         }
 
         public IReadOnlyListExt<T> Map<T>(Func<TOut, T> map)
         {
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
+            return map == null
+                ? throw new ArgumentNullException(nameof(map))
+                : (IReadOnlyListExt<T>)new MappedReadOnlyListSpan<TIn, T>(_innerList, Combine(_map, map), _offset, Count);
 
-            return new MappedReadOnlyListSpan<TIn, T>(_innerList, Combine(_map, map), _offset, Count);            
-
-            static Func<TIn,T> Combine(Func<TIn,TOut> f1, Func<TOut,T> f2)
+            static Func<TIn, T> Combine(Func<TIn, TOut> f1, Func<TOut, T> f2)
             {
                 return v => f2(f1(v));
             }
@@ -86,36 +89,29 @@ namespace Octonica.ClickHouseClient.Utils
         public int CopyTo(Span<TOut> span, int start)
         {
             if (start < 0 || start > Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(start));
+            }
 
-            var length = Math.Min(Count - start, span.Length);
-            var end = _offset + start + length;
+            int length = Math.Min(Count - start, span.Length);
+            int end = _offset + start + length;
             for (int i = _offset + start, j = 0; i < end; i++, j++)
+            {
                 span[j] = _map(_innerList[i]);
+            }
 
             return length;
         }
 
-        public TOut this[int index]
-        {
-            get
-            {
-                if (index < 0 || index >= Count)
-                    throw new IndexOutOfRangeException();
-
-                return _map(_innerList[index + _offset]);
-            }
-        }
+        public TOut this[int index] => index < 0 || index >= Count ? throw new IndexOutOfRangeException() : _map(_innerList[index + _offset]);
 
         public static IReadOnlyListExt<TOut> Create(IReadOnlyList<TIn> list, Func<TIn, TOut> map, int offset, int count)
         {
-            if (list is IReadOnlyListExt<TIn> readOnlyListExt)
-                return readOnlyListExt.Slice(offset, count).Map(map);
-
-            if (list is TIn[] array)
-                return new ReadOnlyMemoryList<TIn>(array).Slice(offset, count).Map(map);
-
-            return new MappedReadOnlyListSpan<TIn, TOut>(list, map, offset, count);
+            return list is IReadOnlyListExt<TIn> readOnlyListExt
+                ? readOnlyListExt.Slice(offset, count).Map(map)
+                : list is TIn[] array
+                ? new ReadOnlyMemoryList<TIn>(array).Slice(offset, count).Map(map)
+                : new MappedReadOnlyListSpan<TIn, TOut>(list, map, offset, count);
         }
     }
 }

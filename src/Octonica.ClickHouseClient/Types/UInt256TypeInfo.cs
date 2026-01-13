@@ -19,7 +19,7 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class UInt256TypeInfo : BigIntegerTypeInfoBase
     {
-        public UInt256TypeInfo() 
+        public UInt256TypeInfo()
             : base("UInt256", 256 / 8, true)
         {
         }

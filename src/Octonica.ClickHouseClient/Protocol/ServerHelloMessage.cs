@@ -15,11 +15,11 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -36,10 +36,10 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async Task<ServerHelloMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
         {
-            var serverName = await reader.ReadString(async, cancellationToken);
-            var mj = await reader.Read7BitInt32(async, cancellationToken);
-            var mr = await reader.Read7BitInt32(async, cancellationToken);
-            var rv = await reader.Read7BitInt32(async, cancellationToken);
+            string serverName = await reader.ReadString(async, cancellationToken);
+            int mj = await reader.Read7BitInt32(async, cancellationToken);
+            int mr = await reader.Read7BitInt32(async, cancellationToken);
+            int rv = await reader.Read7BitInt32(async, cancellationToken);
             if (rv < ClickHouseProtocolRevisions.MinSupportedRevision)
             {
                 throw new ClickHouseException(
@@ -47,33 +47,35 @@ namespace Octonica.ClickHouseClient.Protocol
                     $"The revision {rv} of ClickHouse server is not supported. Minimal supported revision is {ClickHouseProtocolRevisions.MinSupportedRevision}.");
             }
 
-            var tz = await reader.ReadString(async, cancellationToken);
-            var displayName = await reader.ReadString(async, cancellationToken);
-            var versionPatch = await reader.Read7BitInt32(async, cancellationToken);
-            var serverVersion = new ClickHouseVersion(mj, mr, versionPatch);
+            string tz = await reader.ReadString(async, cancellationToken);
+            string displayName = await reader.ReadString(async, cancellationToken);
+            int versionPatch = await reader.Read7BitInt32(async, cancellationToken);
+            ClickHouseVersion serverVersion = new(mj, mr, versionPatch);
 
-            var negotiatedRevision = Math.Min(rv, protocolRevision);
+            int negotiatedRevision = Math.Min(rv, protocolRevision);
             List<ClickHousePasswordComplexityRule>? complexityRules = null;
             if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithPasswordComplexityRules)
             {
-                var rulesCount = await reader.Read7BitInt32(async, cancellationToken);
+                int rulesCount = await reader.Read7BitInt32(async, cancellationToken);
                 if (rulesCount > 0)
                 {
                     complexityRules = new List<ClickHousePasswordComplexityRule>(rulesCount);
                     for (int i = 0; i < rulesCount; i++)
                     {
-                        var pattern = await reader.ReadString(async, cancellationToken);
-                        var message = await reader.ReadString(async, cancellationToken);
-                        var rule = new ClickHousePasswordComplexityRule(pattern, message);
+                        string pattern = await reader.ReadString(async, cancellationToken);
+                        string message = await reader.ReadString(async, cancellationToken);
+                        ClickHousePasswordComplexityRule rule = new(pattern, message);
                         complexityRules.Add(rule);
                     }
                 }
             }
 
             if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecretV2)
+            {
                 await reader.SkipBytes(8, async, cancellationToken); // nonce
+            }
 
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
+            ClickHouseServerInfo serverInfo = new(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
             return new ServerHelloMessage(serverInfo);
         }
     }

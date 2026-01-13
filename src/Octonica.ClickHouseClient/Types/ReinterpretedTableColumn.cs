@@ -51,19 +51,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public TTo GetValue(int index)
         {
-            var value = _sourceColumn.GetValue(index);
+            TFrom? value = _sourceColumn.GetValue(index);
             return _reinterpret(value);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            var reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
+            IClickHouseTableColumn reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
             return (reinterpretationRoot as IClickHouseTableColumn<T>) ?? reinterpretationRoot.TryReinterpret<T>();
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
-            var reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
+            IClickHouseTableColumn reinterpretationRoot = _reinterpretationRoot ?? _sourceColumn;
             return (reinterpretationRoot as IClickHouseArrayTableColumn<T>) ?? reinterpretationRoot.TryReinterpretAsArray<T>();
         }
 
@@ -76,14 +76,13 @@ namespace Octonica.ClickHouseClient.Types
         object IClickHouseTableColumn.GetValue(int index)
         {
             if (_sourceColumn.IsNull(index))
+            {
                 return DBNull.Value;
+            }
 
-            var sourceValue = _sourceColumn.GetValue(index);
-            var reinterpreted = _reinterpret(sourceValue);
-            if (reinterpreted is null)
-                return DBNull.Value;
-
-            return reinterpreted;
+            TFrom? sourceValue = _sourceColumn.GetValue(index);
+            TTo? reinterpreted = _reinterpret(sourceValue);
+            return reinterpreted is null ? DBNull.Value : reinterpreted;
         }
 
         public IClickHouseReinterpretedTableColumn<TResult> Chain<TResult>(Func<TTo, TResult> reinterpret)
@@ -119,7 +118,7 @@ namespace Octonica.ClickHouseClient.Types
 
         object IClickHouseTableColumn.GetValue(int index)
         {
-            return ((IClickHouseTableColumn) _column).GetValue(index);
+            return ((IClickHouseTableColumn)_column).GetValue(index);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
@@ -164,7 +163,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetValue(int index)
         {
-            var value = _column.GetValue(index);
+            object value = _column.GetValue(index);
             return _convertValue(value);
         }
 
@@ -207,11 +206,8 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn Dispatch<T>()
             {
-                var reinterpretedColumn = (_column as IClickHouseTableColumn<T>) ?? _column.TryReinterpret<T>();
-                if (reinterpretedColumn != null)
-                    return reinterpretedColumn;
-
-                return new ReinterpretedTableColumn(_column, _fallbackConvertValue);
+                IClickHouseTableColumn<T>? reinterpretedColumn = (_column as IClickHouseTableColumn<T>) ?? _column.TryReinterpret<T>();
+                return reinterpretedColumn != null ? reinterpretedColumn : new ReinterpretedTableColumn(_column, _fallbackConvertValue);
             }
         }
     }

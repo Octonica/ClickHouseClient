@@ -50,10 +50,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(string))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<IPAddress, string>(this, v => v.ToString());
-
-            return this as IClickHouseTableColumn<T>;
+            return typeof(T) == typeof(string)
+                ? (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<IPAddress, string>(this, v => v.ToString())
+                : this as IClickHouseTableColumn<T>;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

@@ -33,8 +33,8 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async ValueTask<ServerTableColumnsMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
         {
-            await reader.ReadString(async, cancellationToken);
-            var columns = await reader.ReadString(async, cancellationToken);
+            _ = await reader.ReadString(async, cancellationToken);
+            string columns = await reader.ReadString(async, cancellationToken);
 
             return new ServerTableColumnsMessage(columns);
         }

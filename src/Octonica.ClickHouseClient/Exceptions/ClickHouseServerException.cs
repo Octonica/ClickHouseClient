@@ -39,7 +39,7 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The server-side stack trace.
         /// </summary>
         public string ServerStackTrace { get; }
-        
+
         /// <summary>
         /// The query passed to the server or <see langword="null"/> if the error is not related to the query.
         /// </summary>
@@ -103,10 +103,9 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// <returns>The new instance of <see cref="ClickHouseServerException"/> with the provided query</returns>
         public ClickHouseServerException CopyWithQuery(string query)
         {
-            if (InnerException == null)
-                return new ClickHouseServerException(ServerErrorCode, ServerErrorType, Message, ServerStackTrace, query);
-
-            return new ClickHouseServerException(ServerErrorCode, ServerErrorType, Message, ServerStackTrace, query, InnerException);
+            return InnerException == null
+                ? new ClickHouseServerException(ServerErrorCode, ServerErrorType, Message, ServerStackTrace, query)
+                : new ClickHouseServerException(ServerErrorCode, ServerErrorType, Message, ServerStackTrace, query, InnerException);
         }
     }
 }

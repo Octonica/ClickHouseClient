@@ -31,18 +31,12 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool IsNull(int index)
         {
-            if (index < 0 || index >= RowCount)
-                throw new ArgumentOutOfRangeException(nameof(index));
-
-            return true;
+            return index < 0 || index >= RowCount ? throw new ArgumentOutOfRangeException(nameof(index)) : true;
         }
 
         public object GetValue(int index)
         {
-            if (index < 0 || index >= RowCount)
-                throw new ArgumentOutOfRangeException(nameof(index));
-
-            return DBNull.Value;
+            return index < 0 || index >= RowCount ? throw new ArgumentOutOfRangeException(nameof(index)) : (object)DBNull.Value;
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()

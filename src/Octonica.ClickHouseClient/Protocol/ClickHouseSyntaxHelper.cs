@@ -24,7 +24,7 @@ namespace Octonica.ClickHouseClient.Protocol
 {
     internal static class ClickHouseSyntaxHelper
     {
-        private static readonly Regex IdentifierRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*$");
+        private static readonly Regex IdentifierRegex = new("^[a-zA-Z_][0-9a-zA-Z_]*$");
 
         private const string EscapeChars = "''\"\"\\\\0\0a\ab\be\u001bf\fn\nr\rt\tv\v";
 
@@ -45,31 +45,39 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static int GetIdentifierLiteralLength(string str, int startIndex)
         {
-            return GetIdentifierLiteralLength(((ReadOnlySpan<char>)str).Slice(startIndex));
+            return GetIdentifierLiteralLength(((ReadOnlySpan<char>)str)[startIndex..]);
         }
 
         public static int GetIdentifierLiteralLength(ReadOnlySpan<char> str)
         {
             if (str.IsEmpty)
+            {
                 return -1;
+            }
 
             if (str[0] == '`')
             {
-                var length = GetQuotedTokenLength(str, '`');
+                int length = GetQuotedTokenLength(str, '`');
                 if (length > 2)
+                {
                     return length;
+                }
             }
-            else if ((str[0] >= 'a' && str[0] <= 'z') || (str[0] >= 'A' && str[0] <= 'Z') || str[0] == '_')
+            else if (str[0] is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '_')
             {
                 int length = 1;
                 for (; length < str.Length; length++)
                 {
-                    var ch = str[length];
+                    char ch = str[length];
                     if (char.IsWhiteSpace(ch))
+                    {
                         break;
+                    }
 
-                    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')
+                    if (ch is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '_')
+                    {
                         continue;
+                    }
 
                     return -1;
                 }
@@ -82,7 +90,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static int GetSingleQuoteStringLength(string str, int startIndex)
         {
-            return GetSingleQuoteStringLength(((ReadOnlySpan<char>)str).Slice(startIndex));
+            return GetSingleQuoteStringLength(((ReadOnlySpan<char>)str)[startIndex..]);
         }
 
         public static int GetSingleQuoteStringLength(ReadOnlySpan<char> str)
@@ -93,16 +101,20 @@ namespace Octonica.ClickHouseClient.Protocol
         public static int GetQuotedTokenLength(ReadOnlySpan<char> str, char quoteSign)
         {
             if (str.IsEmpty || str[0] != quoteSign)
+            {
                 return -1;
+            }
 
             int idx = 1;
             while (idx < str.Length)
             {
-                var slice = str.Slice(idx);
-                var nextIdx = slice.IndexOfAny(quoteSign, '\\');
+                ReadOnlySpan<char> slice = str[idx..];
+                int nextIdx = slice.IndexOfAny(quoteSign, '\\');
 
                 if (nextIdx < 0)
+                {
                     return -1;
+                }
 
                 if (slice[nextIdx] == '\\')
                 {
@@ -119,45 +131,45 @@ namespace Octonica.ClickHouseClient.Protocol
         public static string GetIdentifier(ReadOnlySpan<char> identifierLiteral)
         {
             if (identifierLiteral.Length == 0)
-                throw new ArgumentException($"The string \"{identifierLiteral.ToString()}\" is not a valid identifier.", nameof(identifierLiteral));
+            {
+                throw new ArgumentException($"The string \"{identifierLiteral}\" is not a valid identifier.", nameof(identifierLiteral));
+            }
 
-            var sb = new StringBuilder(identifierLiteral.Length);
+            StringBuilder sb = new(identifierLiteral.Length);
 
             if (identifierLiteral[0] == '`')
             {
-                if (!TryParseQuotedToken(identifierLiteral, '`', out var parsedLiteral) || parsedLiteral == string.Empty)
-                    throw new ArgumentException($"The string \"{identifierLiteral.ToString()}\" is not a valid identifier.", nameof(identifierLiteral));
-
-                return parsedLiteral;
+                return !TryParseQuotedToken(identifierLiteral, '`', out string? parsedLiteral) || parsedLiteral == string.Empty
+                    ? throw new ArgumentException($"The string \"{identifierLiteral}\" is not a valid identifier.", nameof(identifierLiteral))
+                    : parsedLiteral;
             }
 
-            if ((identifierLiteral[0] >= 'a' && identifierLiteral[0] <= 'z') || (identifierLiteral[0] >= 'A' && identifierLiteral[0] <= 'Z') || identifierLiteral[0] == '_')
+            if (identifierLiteral[0] is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '_')
             {
-                sb.Append(identifierLiteral[0]);
+                _ = sb.Append(identifierLiteral[0]);
                 for (int i = 1; i < identifierLiteral.Length; i++)
                 {
-                    var ch = identifierLiteral[i];
-                    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')
+                    char ch = identifierLiteral[i];
+                    if (ch is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '_')
                     {
-                        sb.Append(ch);
+                        _ = sb.Append(ch);
                         continue;
                     }
 
-                    throw new ArgumentException($"The string \"{identifierLiteral.ToString()}\" is not a valid identifier.", nameof(identifierLiteral));
+                    throw new ArgumentException($"The string \"{identifierLiteral}\" is not a valid identifier.", nameof(identifierLiteral));
                 }
 
                 return sb.ToString();
             }
 
-            throw new ArgumentException($"The string \"{identifierLiteral.ToString()}\" is not a valid identifier.", nameof(identifierLiteral));
+            throw new ArgumentException($"The string \"{identifierLiteral}\" is not a valid identifier.", nameof(identifierLiteral));
         }
 
         public static string GetSingleQuoteString(ReadOnlySpan<char> stringToken)
         {
-            if (!TryParseQuotedToken(stringToken, '\'', out var result))
-                throw new ArgumentException($"The value \"{stringToken.ToString()}\" is not a valid string token.");
-
-            return result;
+            return !TryParseQuotedToken(stringToken, '\'', out string? result)
+                ? throw new ArgumentException($"The value \"{stringToken}\" is not a valid string token.")
+                : result;
         }
 
         private static bool TryParseQuotedToken(ReadOnlySpan<char> token, char quoteSign, [MaybeNullWhen(false)] out string value)
@@ -167,8 +179,8 @@ namespace Octonica.ClickHouseClient.Protocol
                 value = null;
                 return false;
             }
-            
-            var sb = new StringBuilder(token.Length);
+
+            StringBuilder sb = new(token.Length);
             for (int i = 1; i < token.Length - 1; i++)
             {
                 if (token[i] == '\\')
@@ -179,24 +191,17 @@ namespace Octonica.ClickHouseClient.Protocol
                         return false;
                     }
 
-                    if (token[i + 1] == quoteSign)
-                    {
-                        sb.Append(quoteSign);
-                    }
-                    else if (TryGetUnescapedCharacter(token[i + 1], out var unescapedCh))
-                    {
-                        sb.Append(unescapedCh);
-                    }
-                    else
-                    {
-                        sb.Append(token[i]).Append(token[i + 1]);
-                    }
+                    _ = token[i + 1] == quoteSign
+                        ? sb.Append(quoteSign)
+                        : TryGetUnescapedCharacter(token[i + 1], out char unescapedCh)
+                            ? sb.Append(unescapedCh)
+                            : sb.Append(token[i]).Append(token[i + 1]);
 
                     i++;
                 }
                 else
                 {
-                    sb.Append(token[i]);
+                    _ = sb.Append(token[i]);
                 }
             }
 

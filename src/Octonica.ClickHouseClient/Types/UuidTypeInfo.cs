@@ -15,11 +15,11 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -44,22 +44,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (typeof(T) != typeof(Guid))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
-            return new UuidWriter(columnName, ComplexTypeName, (IReadOnlyList<Guid>)rows);
+            return typeof(T) != typeof(Guid)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".")
+                : (IClickHouseColumnWriter)new UuidWriter(columnName, ComplexTypeName, (IReadOnlyList<Guid>)rows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
-            if (type == typeof(DBNull))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
-
-            if (type == typeof(Guid))
-                return (IClickHouseParameterWriter<T>)(object)new StringParameterWriter<Guid>(this, uuidValue => uuidValue.ToString().AsMemory());
-
-            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            Type type = typeof(T);
+            return type == typeof(DBNull)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.")
+                : type == typeof(Guid)
+                ? (IClickHouseParameterWriter<T>)(object)new StringParameterWriter<Guid>(this, uuidValue => uuidValue.ToString().AsMemory())
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public override Type GetFieldType()
@@ -81,15 +78,15 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override Guid ReadElement(ReadOnlySpan<byte> source)
             {
-                ushort c = BitConverter.ToUInt16(source.Slice(0));
-                ushort b = BitConverter.ToUInt16(source.Slice(2));
-                uint a = BitConverter.ToUInt32(source.Slice(4));
-                
+                ushort c = BitConverter.ToUInt16(source[..]);
+                ushort b = BitConverter.ToUInt16(source[2..]);
+                uint a = BitConverter.ToUInt32(source[4..]);
+
                 return new Guid(a, b, c, source[15], source[14], source[13], source[12], source[11], source[10], source[9], source[8]);
             }
         }
 
-        private sealed class UuidWriter:StructureWriterBase<Guid>
+        private sealed class UuidWriter : StructureWriterBase<Guid>
         {
             public UuidWriter(string columnName, string columnType, IReadOnlyList<Guid> rows)
                 : base(columnName, columnType, UuidSize, rows)
@@ -98,10 +95,10 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteElement(Span<byte> writeTo, in Guid value)
             {
-                var success = value.TryWriteBytes(writeTo);
+                bool success = value.TryWriteBytes(writeTo);
                 Debug.Assert(success);
 
-                var tmp = writeTo[0];
+                byte tmp = writeTo[0];
                 writeTo[0] = writeTo[6];
                 writeTo[6] = writeTo[2];
                 writeTo[2] = writeTo[4];

@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System;
 using NodaTime;
+using System;
 
 namespace Octonica.ClickHouseClient.Types
 {

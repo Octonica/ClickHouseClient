@@ -15,12 +15,12 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -43,40 +43,50 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             IReadOnlyList<ulong> ulongRows;
 
             if (type == typeof(ulong))
+            {
                 ulongRows = (IReadOnlyList<ulong>)rows;
-            else if (type == typeof(uint))
-                ulongRows = MappedReadOnlyList<uint, ulong>.Map((IReadOnlyList<uint>)rows, v => v);
-            else if (type == typeof(ushort))
-                ulongRows = MappedReadOnlyList<ushort, ulong>.Map((IReadOnlyList<ushort>)rows, v => v);
-            else if (type == typeof(byte))
-                ulongRows = MappedReadOnlyList<byte, ulong>.Map((IReadOnlyList<byte>)rows, v => v);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                ulongRows = type == typeof(uint)
+                    ? MappedReadOnlyList<uint, ulong>.Map((IReadOnlyList<uint>)rows, v => v)
+                    : type == typeof(ushort)
+                    ? MappedReadOnlyList<ushort, ulong>.Map((IReadOnlyList<ushort>)rows, v => v)
+                    : type == typeof(byte)
+                ? (IReadOnlyList<ulong>)MappedReadOnlyList<byte, ulong>.Map((IReadOnlyList<byte>)rows, v => v)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new UInt64Writer(columnName, ComplexTypeName, ulongRows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object writer;
             if (type == typeof(ulong))
+            {
                 writer = new SimpleParameterWriter<ulong>(this, appendTypeCast: true);
-            else if (type == typeof(uint))
-                writer = new SimpleParameterWriter<uint, ulong>(this, appendTypeCast: true, v => v);
-            else if (type == typeof(ushort))
-                writer = new SimpleParameterWriter<ushort, ulong>(this, appendTypeCast: true, v => v);
-            else if (type == typeof(byte))
-                writer = new SimpleParameterWriter<byte, ulong>(this, appendTypeCast: true, v => v);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                writer = type == typeof(uint)
+                    ? new SimpleParameterWriter<uint, ulong>(this, appendTypeCast: true, v => v)
+                    : type == typeof(ushort)
+                    ? new SimpleParameterWriter<ushort, ulong>(this, appendTypeCast: true, v => v)
+                    : type == typeof(byte)
+                ? (object)new SimpleParameterWriter<byte, ulong>(this, appendTypeCast: true, v => v)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return (IClickHouseParameterWriter<T>)writer;
         }
@@ -117,7 +127,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteElement(Span<byte> writeTo, in ulong value)
             {
-                var success = BitConverter.TryWriteBytes(writeTo, value);
+                bool success = BitConverter.TryWriteBytes(writeTo, value);
                 Debug.Assert(success);
             }
         }

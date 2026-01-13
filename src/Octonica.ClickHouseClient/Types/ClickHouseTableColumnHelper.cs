@@ -23,15 +23,12 @@ namespace Octonica.ClickHouseClient.Types
     {
         public static Type? TryGetValueType(IClickHouseTableColumn column)
         {
-            if (column.TryDipatch(ClickHouseTableColumnValueTypeDispatcher.Instance, out var type))
-                return type;
-
-            return null;
+            return column.TryDipatch(ClickHouseTableColumnValueTypeDispatcher.Instance, out Type? type) ? type : null;
         }
 
         private sealed class ClickHouseTableColumnValueTypeDispatcher : IClickHouseTableColumnDispatcher<Type>
         {
-            public static readonly ClickHouseTableColumnValueTypeDispatcher Instance = new ClickHouseTableColumnValueTypeDispatcher();
+            public static readonly ClickHouseTableColumnValueTypeDispatcher Instance = new();
 
             private ClickHouseTableColumnValueTypeDispatcher()
             {

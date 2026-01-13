@@ -63,18 +63,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
-            object writer;
-            if (type == typeof(bool))
-                writer = new SimpleParameterWriter<bool, byte>(this, appendTypeCast: true, boolValue => boolValue ? (byte)1 : (byte)0);
-            else if (type == typeof(byte))
-                writer = new SimpleParameterWriter<byte>(this, appendTypeCast: true);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
+            object writer = type == typeof(bool)
+                ? new SimpleParameterWriter<bool, byte>(this, appendTypeCast: true, boolValue => boolValue ? (byte)1 : (byte)0)
+                : type == typeof(byte)
+                ? (object)new SimpleParameterWriter<byte>(this, appendTypeCast: true)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             return (IClickHouseParameterWriter<T>)writer;
         }
 

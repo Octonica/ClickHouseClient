@@ -52,10 +52,7 @@ namespace Octonica.ClickHouseClient.Utils
 
         public IReadOnlyListExt<T> Map<T>(Func<TOut, T> map)
         {
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
-
-            return new MappedReadOnlyList<TIn, T>(_innerList, Combine(_map, map));
+            return map == null ? throw new ArgumentNullException(nameof(map)) : (IReadOnlyListExt<T>)new MappedReadOnlyList<TIn, T>(_innerList, Combine(_map, map));
 
             static Func<TIn, T> Combine(Func<TIn, TOut> f1, Func<TOut, T> f2)
             {
@@ -66,12 +63,16 @@ namespace Octonica.ClickHouseClient.Utils
         public int CopyTo(Span<TOut> span, int start)
         {
             if (start < 0 || start > Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(start));
+            }
 
-            var length = Math.Min(Count - start, span.Length);
-            var end = start + length;
+            int length = Math.Min(Count - start, span.Length);
+            int end = start + length;
             for (int i = start, j = 0; i < end; i++, j++)
+            {
                 span[j] = _map(_innerList[i]);
+            }
 
             return length;
         }
@@ -80,10 +81,7 @@ namespace Octonica.ClickHouseClient.Utils
 
         public static IReadOnlyListExt<TOut> Map(IReadOnlyList<TIn> list, Func<TIn, TOut> map)
         {
-            if (list is IReadOnlyListExt<TIn> readOnlyListExt)
-                return readOnlyListExt.Map(map);
-
-            return new MappedReadOnlyList<TIn, TOut>(list, map);
+            return list is IReadOnlyListExt<TIn> readOnlyListExt ? readOnlyListExt.Map(map) : new MappedReadOnlyList<TIn, TOut>(list, map);
         }
 
         public static IReadOnlyListExt<TOut> Map(ReadOnlyMemory<TIn> memory, Func<TIn, TOut> map)

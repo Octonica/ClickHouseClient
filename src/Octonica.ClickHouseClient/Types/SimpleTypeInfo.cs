@@ -15,10 +15,10 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Types
 {

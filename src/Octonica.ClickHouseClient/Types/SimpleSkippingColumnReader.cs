@@ -38,10 +38,12 @@ namespace Octonica.ClickHouseClient.Types
         public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
         {
             if (_position >= _rowCount)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+            }
 
-            var elementCount = (int)Math.Min(_rowCount - _position, sequence.Length / _elementSize);
-            var byteCount = elementCount * _elementSize;
+            int elementCount = (int)Math.Min(_rowCount - _position, sequence.Length / _elementSize);
+            int byteCount = elementCount * _elementSize;
 
             _position += elementCount;
             return new SequenceSize(byteCount, elementCount);

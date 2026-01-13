@@ -36,7 +36,9 @@ namespace Octonica.ClickHouseClient.Utils
             catch (AggregateException aggrEx)
             {
                 if (aggrEx.InnerExceptions.Count == 1)
+                {
                     ExceptionDispatchInfo.Capture(aggrEx.InnerExceptions[0]).Throw();
+                }
 
                 throw;
             }
@@ -54,7 +56,9 @@ namespace Octonica.ClickHouseClient.Utils
             catch (AggregateException aggrEx)
             {
                 if (aggrEx.InnerExceptions.Count == 1)
+                {
                     ExceptionDispatchInfo.Capture(aggrEx.InnerExceptions[0]).Throw();
+                }
 
                 throw;
             }
@@ -63,18 +67,22 @@ namespace Octonica.ClickHouseClient.Utils
         internal static T WaitSynchronously<T>(Func<Task<T>> taskFactory)
         {
             if (taskFactory == null)
+            {
                 throw new ArgumentNullException(nameof(taskFactory));
+            }
 
-            var innerTask = WaitInternal(taskFactory);
+            Task<T> innerTask = WaitInternal(taskFactory);
             try
             {
-                var result = innerTask.Result;
+                T? result = innerTask.Result;
                 return result;
             }
             catch (AggregateException aggrEx)
             {
                 if (aggrEx.InnerExceptions.Count == 1)
+                {
                     ExceptionDispatchInfo.Capture(aggrEx.InnerExceptions[0]).Throw();
+                }
 
                 throw;
             }
@@ -83,9 +91,11 @@ namespace Octonica.ClickHouseClient.Utils
         internal static void WaitSynchronously([NotNull] Func<Task> taskFactory)
         {
             if (taskFactory == null)
+            {
                 throw new ArgumentNullException(nameof(taskFactory));
+            }
 
-            var innerTask = WaitInternal(taskFactory);
+            Task innerTask = WaitInternal(taskFactory);
             try
             {
                 innerTask.Wait();
@@ -93,7 +103,9 @@ namespace Octonica.ClickHouseClient.Utils
             catch (AggregateException aggrEx)
             {
                 if (aggrEx.InnerExceptions.Count == 1)
+                {
                     ExceptionDispatchInfo.Capture(aggrEx.InnerExceptions[0]).Throw();
+                }
 
                 throw;
             }

@@ -15,10 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient
 {
@@ -33,7 +33,9 @@ namespace Octonica.ClickHouseClient
         public ClickHouseTableWriter(string tableName, int rowCount, IEnumerable<IClickHouseColumnWriter> columns)
         {
             if (columns == null)
+            {
                 throw new ArgumentNullException(nameof(columns));
+            }
 
             TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             RowCount = rowCount;

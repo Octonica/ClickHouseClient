@@ -26,7 +26,7 @@ namespace Octonica.ClickHouseClient.Types
     {
         public override char[] DefaultValue => Array.Empty<char>();
 
-        public StringCharArrayTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments) 
+        public StringCharArrayTableColumn(Encoding encoding, List<(int segmentIndex, int offset, int length)> layouts, List<Memory<byte>> segments)
             : base(encoding, layouts, segments)
         {
         }
@@ -34,14 +34,16 @@ namespace Octonica.ClickHouseClient.Types
         protected override char[] GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
             if (span.IsEmpty)
+            {
                 return Array.Empty<char>();
+            }
 
-            var charCount = encoding.GetCharCount(span);
-            var result = new char[charCount];
+            int charCount = encoding.GetCharCount(span);
+            char[] result = new char[charCount];
 
-            var length = encoding.GetChars(span, result);
+            int length = encoding.GetChars(span, result);
             Debug.Assert(length == charCount);
-            return result;            
+            return result;
         }
     }
 }

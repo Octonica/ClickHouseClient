@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System;
 using NodaTime;
+using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -27,28 +27,22 @@ namespace Octonica.ClickHouseClient.Types
         private readonly (long min, long max) _range;
         private readonly DateTimeZone _timeZone;
         public int RowCount { get; }
-        public DateTimeOffset DefaultValue => DateTimeZone.Utc.AtStrictly(LocalDateTime.FromDateTime(DateTime.MinValue)).ToDateTimeOffset(); 
+        public DateTimeOffset DefaultValue => DateTimeZone.Utc.AtStrictly(LocalDateTime.FromDateTime(DateTime.MinValue)).ToDateTimeOffset();
 
         static DateTime64TableColumn()
         {
-            var ranges = new (long min, long max)[DateTime64TypeInfo.DateTimeTicksScales.Length];
-            var dateTimeTicksMax = (DateTime.MaxValue - DateTime.UnixEpoch).Ticks;
-            var dateTimeTicksMin = (DateTime.MinValue - DateTime.UnixEpoch).Ticks;
+            (long min, long max)[] ranges = new (long min, long max)[DateTime64TypeInfo.DateTimeTicksScales.Length];
+            long dateTimeTicksMax = (DateTime.MaxValue - DateTime.UnixEpoch).Ticks;
+            long dateTimeTicksMin = (DateTime.MinValue - DateTime.UnixEpoch).Ticks;
             for (int i = 0; i < ranges.Length; i++)
             {
                 long min, max;
-                var magnitude = DateTime64TypeInfo.DateTimeTicksScales[i];
+                int magnitude = DateTime64TypeInfo.DateTimeTicksScales[i];
                 if (magnitude < 0)
                 {
-                    if (dateTimeTicksMax > long.MaxValue / -magnitude)
-                        max = long.MaxValue;
-                    else
-                        max = checked(dateTimeTicksMax * -magnitude);
+                    max = dateTimeTicksMax > long.MaxValue / -magnitude ? long.MaxValue : dateTimeTicksMax * -magnitude;
 
-                    if (dateTimeTicksMin < long.MinValue / -magnitude)
-                        min = long.MinValue;
-                    else
-                        min = checked(dateTimeTicksMin * -magnitude);
+                    min = dateTimeTicksMin < long.MinValue / -magnitude ? long.MinValue : dateTimeTicksMin * -magnitude;
                 }
                 else
                 {
@@ -77,7 +71,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public DateTimeOffset GetValue(int index)
         {
-            var ticks = _buffer.Span[index];
+            long ticks = _buffer.Span[index];
             if (ticks < _range.min)
             {
                 throw new OverflowException(
@@ -101,20 +95,23 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             if (typeof(T) == typeof(DateTime))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime);
+            {
+                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime);
+            }
 
             if (typeof(T) == typeof(DateTime?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime));
+            {
+                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateTimeOffset, DateTime>(this, dto => dto.DateTime));
+            }
 
             if (typeof(T) == typeof(DateTimeOffset?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<DateTimeOffset>(null, this);
+            {
+                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTimeOffset>(null, this);
+            }
 
-            var rawColumn = new StructureTableColumn<long>(_buffer);
-            var rawReinterpreted = rawColumn as IClickHouseTableColumn<T> ?? rawColumn.TryReinterpret<T>();
-            if (rawReinterpreted != null)
-                return new ReinterpretedTableColumn<T>(this, rawReinterpreted);
-
-            return null;
+            StructureTableColumn<long> rawColumn = new(_buffer);
+            IClickHouseTableColumn<T>? rawReinterpreted = rawColumn as IClickHouseTableColumn<T> ?? rawColumn.TryReinterpret<T>();
+            return rawReinterpreted != null ? new ReinterpretedTableColumn<T>(this, rawReinterpreted) : (IClickHouseTableColumn<T>?)null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

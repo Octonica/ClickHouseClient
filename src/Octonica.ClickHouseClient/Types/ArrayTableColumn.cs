@@ -15,10 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -26,7 +26,7 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly IClickHouseTableColumn _column;
         private readonly List<(int offset, int length)> _ranges;
-        
+
         public int RowCount => _ranges.Count;
 
         public ArrayTableColumn(IClickHouseTableColumn column, List<(int offset, int length)> ranges)
@@ -42,17 +42,16 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetValue(int index)
         {
-            var range = _ranges[index];
-            var result = new object?[range.length];
+            (int offset, int length) = _ranges[index];
+            object?[] result = new object?[length];
             if (result.Length == 0)
+            {
                 return result;
+            }
 
             for (int i = 0; i < result.Length; i++)
             {
-                if (_column.IsNull(range.offset + i))
-                    result[i] = null;
-                else
-                    result[i] = _column.GetValue(range.offset + i);
+                result[i] = _column.IsNull(offset + i) ? null : _column.GetValue(offset + i);
             }
 
             return result;
@@ -61,11 +60,10 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             Type? elementType;
-            var type = typeof(T);
-            if (!type.IsArray || (elementType = type.GetElementType()) == null)
-                return null;
-
-            return (IClickHouseTableColumn<T>?) TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
+            Type type = typeof(T);
+            return !type.IsArray || (elementType = type.GetElementType()) == null
+                ? null
+                : (IClickHouseTableColumn<T>?)TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
@@ -98,13 +96,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public TElement[] GetValue(int index)
         {
-            var range = _ranges[index];
-            if (range.length == 0)
+            (int offset, int length) = _ranges[index];
+            if (length == 0)
+            {
                 return Array.Empty<TElement>();
+            }
 
-            var result = new TElement[range.length];
+            TElement[] result = new TElement[length];
             for (int i = 0; i < result.Length; i++)
-                result[i] = _column.GetValue(range.offset + i);
+            {
+                result[i] = _column.GetValue(offset + i);
+            }
 
             return result;
         }
@@ -112,20 +114,18 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             Type? elementType;
-            var type = typeof(T);
-            if (!type.IsArray || (elementType = type.GetElementType()) == null)
-                return null;
-
-            return (IClickHouseTableColumn<T>?) TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
+            Type type = typeof(T);
+            return !type.IsArray || (elementType = type.GetElementType()) == null
+                ? null
+                : (IClickHouseTableColumn<T>?)TypeDispatcher.Dispatch(elementType, new ArrayTableColumnTypeDispatcher(_column, _ranges));
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
         {
-            var reinterpretedColumn = _column as IClickHouseTableColumn<T> ?? _column.TryReinterpret<T>();
-            if (reinterpretedColumn == null)
-                return null;
-
-            return new ReinterpretedArrayTableColumn<T>(this, new ArrayTableColumn<T>(reinterpretedColumn, _ranges));
+            IClickHouseTableColumn<T>? reinterpretedColumn = _column as IClickHouseTableColumn<T> ?? _column.TryReinterpret<T>();
+            return reinterpretedColumn == null
+                ? null
+                : (IClickHouseArrayTableColumn<T>)new ReinterpretedArrayTableColumn<T>(this, new ArrayTableColumn<T>(reinterpretedColumn, _ranges));
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -135,13 +135,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
         {
-            var range = _ranges[index];
+            (int offset, int length) range = _ranges[index];
             if (dataOffset < 0 || dataOffset > range.length)
+            {
                 throw new ArgumentOutOfRangeException(nameof(dataOffset));
+            }
 
-            var length = Math.Min(range.length - dataOffset, buffer.Length);
+            int length = Math.Min(range.length - dataOffset, buffer.Length);
             for (int i = 0; i < length; i++)
+            {
                 buffer[dataOffset + i] = _column.GetValue(range.offset + i);
+            }
 
             return length;
         }
@@ -149,7 +153,7 @@ namespace Octonica.ClickHouseClient.Types
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
         {
             dispatchedValue = dispatcher.Dispatch(this);
-            return true;            
+            return true;
         }
     }
 
@@ -166,11 +170,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn? Dispatch<T>()
         {
-            var reinterpretedColumn = _column as IClickHouseTableColumn<T> ?? _column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? reinterpretedColumn = _column as IClickHouseTableColumn<T> ?? _column.TryReinterpret<T>();
             if (reinterpretedColumn == null)
+            {
                 return null;
+            }
 
-            var reinterpretedArray = new ArrayTableColumn<T>(reinterpretedColumn, _ranges);
+            ArrayTableColumn<T> reinterpretedArray = new(reinterpretedColumn, _ranges);
             return reinterpretedArray;
         }
     }

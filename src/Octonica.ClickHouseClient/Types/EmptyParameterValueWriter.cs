@@ -22,7 +22,7 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class EmptyParameterValueWriter : IClickHouseParameterValueWriter
     {
-        public static readonly EmptyParameterValueWriter Instance = new EmptyParameterValueWriter();
+        public static readonly EmptyParameterValueWriter Instance = new();
 
         public int Length => 0;
 

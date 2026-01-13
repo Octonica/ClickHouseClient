@@ -15,11 +15,11 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Buffers;
 using System.Net;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -42,14 +42,18 @@ namespace Octonica.ClickHouseClient.Types
         public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
         {
             if (_position >= _rowCount)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+            }
 
-            var byteSize = Math.Min(ElementSize * (_rowCount - _position), (int) (sequence.Length - sequence.Length % ElementSize));
-            var elementCount = byteSize / ElementSize;
+            int byteSize = Math.Min(ElementSize * (_rowCount - _position), (int)(sequence.Length - (sequence.Length % ElementSize)));
+            int elementCount = byteSize / ElementSize;
             if (elementCount == 0)
+            {
                 return new SequenceSize(0, 0);
+            }
 
-            sequence.Slice(0, byteSize).CopyTo(_buffer.Slice(_position * ElementSize).Span);
+            sequence.Slice(0, byteSize).CopyTo(_buffer[(_position * ElementSize)..].Span);
 
             _position += elementCount;
             return new SequenceSize(byteSize, elementCount);
@@ -57,7 +61,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
         {
-            return EndRead(_buffer.Slice(0, _position * ElementSize));
+            return EndRead(_buffer[..(_position * ElementSize)]);
         }
 
         protected abstract IClickHouseTableColumn<IPAddress> EndRead(ReadOnlyMemory<byte> buffer);

@@ -15,14 +15,12 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -45,33 +43,45 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             IReadOnlyList<long> longRows;
             if (type == typeof(long))
+            {
                 longRows = (IReadOnlyList<long>)rows;
+            }
             else if (type == typeof(int))
+            {
                 longRows = MappedReadOnlyList<int, long>.Map((IReadOnlyList<int>)rows, v => v);
+            }
             else if (type == typeof(uint))
+            {
                 longRows = MappedReadOnlyList<uint, long>.Map((IReadOnlyList<uint>)rows, v => v);
+            }
             else if (type == typeof(short))
+            {
                 longRows = MappedReadOnlyList<short, long>.Map((IReadOnlyList<short>)rows, v => v);
-            else if (type == typeof(ushort))
-                longRows = MappedReadOnlyList<ushort, long>.Map((IReadOnlyList<ushort>)rows, v => v);
-            else if (type == typeof(sbyte))
-                longRows = MappedReadOnlyList<sbyte, long>.Map((IReadOnlyList<sbyte>)rows, v => v);
-            else if (type == typeof(byte))
-                longRows = MappedReadOnlyList<byte, long>.Map((IReadOnlyList<byte>)rows, v => v);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-            
+            {
+                longRows = type == typeof(ushort)
+                    ? MappedReadOnlyList<ushort, long>.Map((IReadOnlyList<ushort>)rows, v => v)
+                    : type == typeof(sbyte)
+                    ? MappedReadOnlyList<sbyte, long>.Map((IReadOnlyList<sbyte>)rows, v => v)
+                    : type == typeof(byte)
+                ? (IReadOnlyList<long>)MappedReadOnlyList<byte, long>.Map((IReadOnlyList<byte>)rows, v => v)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
+
             return new Int64Writer(columnName, ComplexTypeName, longRows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object writer = default(T) switch
             {
@@ -123,7 +133,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteElement(Span<byte> writeTo, in long value)
             {
-                var success = BitConverter.TryWriteBytes(writeTo, value);
+                bool success = BitConverter.TryWriteBytes(writeTo, value);
                 Debug.Assert(success);
             }
         }

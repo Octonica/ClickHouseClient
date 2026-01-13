@@ -24,7 +24,7 @@ namespace Octonica.ClickHouseClient.Protocol
     internal sealed class ClientQueryMessage : IClientMessage
     {
         public ClientMessageCode MessageCode => ClientMessageCode.Query;
-        
+
         public QueryKind QueryKind { get; }
 
         public string? InitialUser { get; }
@@ -68,7 +68,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
         {
-            writer.Write7BitInt32((int) MessageCode);
+            writer.Write7BitInt32((int)MessageCode);
             writer.WriteString(string.Empty);
             switch (QueryKind)
             {
@@ -76,10 +76,10 @@ namespace Octonica.ClickHouseClient.Protocol
                     break;
 
                 case QueryKind.InitialQuery:
-                    writer.Write7BitInt32((int) QueryKind);
+                    writer.Write7BitInt32((int)QueryKind);
 
-                    writer.WriteString(InitialUser?? string.Empty); //initial user
-                    writer.WriteString(InitialQueryId?? string.Empty); //initial query id
+                    writer.WriteString(InitialUser ?? string.Empty); //initial user
+                    writer.WriteString(InitialQueryId ?? string.Empty); //initial query id
                     writer.WriteString(RemoteAddress); //initial IP address
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInitialQueryStartTime)
@@ -103,12 +103,16 @@ namespace Octonica.ClickHouseClient.Protocol
                     writer.WriteString(string.Empty); //quota key
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithDistributedDepth)
+                    {
                         writer.Write7BitInt32(0); //distributed depth
+                    }
 
                     writer.Write7BitInt32(ClientVersion.Build);
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithOpenTelemetry)
+                    {
                         writer.WriteByte(0); // TODO: add support for Open Telemetry headers
+                    }
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
                     {
@@ -132,7 +136,7 @@ namespace Octonica.ClickHouseClient.Protocol
                 // https://github.com/ClickHouse/ClickHouse/blob/97d97f6b2e50ab3cf21a25a18cbf1aa327f242e5/src/Core/BaseSettings.h#L19
 
                 const int isImportantFlag = 0x1;
-                foreach (var pair in Settings)
+                foreach (KeyValuePair<string, string> pair in Settings)
                 {
                     writer.WriteString(pair.Key);
                     writer.Write7BitInt32(isImportantFlag);
@@ -143,7 +147,9 @@ namespace Octonica.ClickHouseClient.Protocol
             writer.WriteString(string.Empty); // empty string is a marker of the end of the settings
 
             if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecret)
+            {
                 writer.WriteString(string.Empty);
+            }
 
             writer.Write7BitInt32(StateCodes.Complete);
 
@@ -156,25 +162,29 @@ namespace Octonica.ClickHouseClient.Protocol
                 if (Parameters != null)
                 {
                     const int isCustomFlag = 0x2;
-                    foreach (var pair in Parameters)
+                    foreach (KeyValuePair<string, ClickHouseParameterWriter> pair in Parameters)
                     {
                         if (pair.Value.Length < 0)
+                        {
                             continue;
+                        }
 
                         writer.WriteString(pair.Key);
                         writer.Write7BitInt32(isCustomFlag);
 
-                        var lenght = pair.Value.Length;
+                        int lenght = pair.Value.Length;
                         writer.Write7BitInt32(lenght + 2);
                         writer.WriteByte((byte)'\'');
 
                         if (lenght > 0)
                         {
-                            var size = writer.WriteRaw(lenght, buffer => new SequenceSize(pair.Value.Write(buffer), 1));
+                            SequenceSize size = writer.WriteRaw(lenght, buffer => new SequenceSize(pair.Value.Write(buffer), 1));
 
                             // The lenght must be calculated by the parameter writer correctly
                             if (size.Bytes != lenght)
+                            {
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The length of the parameter \"{pair.Key}\" in bytes is {lenght}, but the number of written bytes is {size.Bytes}.");
+                            }
                         }
 
                         writer.WriteByte((byte)'\'');
@@ -185,7 +195,7 @@ namespace Octonica.ClickHouseClient.Protocol
             }
             else if (Parameters != null)
             {
-                var errMsg =
+                string errMsg =
                     "The server doesn't support parameters in the query. " +
                     $"This error is caused by one or more parameters passed in the mode \"{nameof(ClickHouseParameterMode.Serialize)}\". " +
                     $"Only \"{nameof(ClickHouseParameterMode.Binary)}\" or \"{nameof(ClickHouseParameterMode.Interpolate)}\" modes are supported.";

@@ -47,17 +47,19 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
         {
-            var strVal = value.ToString(_format, CultureInfo.InvariantCulture);
+            string strVal = value.ToString(_format, CultureInfo.InvariantCulture);
             valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
             return true;
         }
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
-            var strVal = value.ToString(_format, CultureInfo.InvariantCulture);
-            queryBuilder.Append(strVal);
+            string strVal = value.ToString(_format, CultureInfo.InvariantCulture);
+            _ = queryBuilder.Append(strVal);
             if (_appendTypeCast)
-                queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            {
+                _ = queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            }
 
             return queryBuilder;
         }
@@ -65,13 +67,14 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
             if (_valueType == null)
+            {
                 return writeValue(queryBuilder, _type, FunctionHelper.Apply);
+            }
 
-            var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
-            if (_valueType != _type.ComplexTypeName)
-                return writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName));
-
-            return writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
+            IClickHouseColumnTypeInfo valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
+            return _valueType != _type.ComplexTypeName
+                ? writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName))
+                : writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
         }
     }
 
@@ -110,23 +113,27 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool TryCreateParameterValueWriter(TIn value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
         {
-            var strVal = _convert(value).ToString(_format, CultureInfo.InvariantCulture);
+            string strVal = _convert(value).ToString(_format, CultureInfo.InvariantCulture);
             valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
             return true;
         }
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, TIn value)
         {
-            var strVal = _convert(value).ToString(_format, CultureInfo.InvariantCulture);
+            string strVal = _convert(value).ToString(_format, CultureInfo.InvariantCulture);
 
-            queryBuilder.Append(strVal);
+            _ = queryBuilder.Append(strVal);
             if (_valueType != null)
-                queryBuilder.Append("::").Append(_valueType);
+            {
+                _ = queryBuilder.Append("::").Append(_valueType);
+            }
 
             if (_appendTypeCast)
             {
                 if (_valueType == null || _valueType != _type.ComplexTypeName)
-                    queryBuilder.Append("::").Append(_type.ComplexTypeName);
+                {
+                    _ = queryBuilder.Append("::").Append(_type.ComplexTypeName);
+                }
             }
 
             return queryBuilder;
@@ -135,13 +142,14 @@ namespace Octonica.ClickHouseClient.Types
         public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
         {
             if (_valueType == null)
+            {
                 return writeValue(queryBuilder, _type, FunctionHelper.Apply);
+            }
 
-            var valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
-            if (_valueType != _type.ComplexTypeName)
-                return writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName));
-
-            return writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
+            IClickHouseColumnTypeInfo valueTypeInfo = typeInfoProvider.GetTypeInfo(_valueType);
+            return _valueType != _type.ComplexTypeName
+                ? writeValue(queryBuilder, valueTypeInfo, (qb, realWrite) => realWrite(qb).Append("::").Append(_type.ComplexTypeName))
+                : writeValue(queryBuilder, valueTypeInfo, FunctionHelper.Apply);
         }
     }
 }

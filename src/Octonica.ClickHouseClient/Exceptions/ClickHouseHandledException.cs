@@ -31,13 +31,11 @@ namespace Octonica.ClickHouseClient.Exceptions
 
         internal static ClickHouseHandledException Wrap(Exception exception)
         {
-            if (exception is ClickHouseHandledException nfException)
-                return nfException;
-            
-            if (exception is ClickHouseException chException)
-                return new ClickHouseHandledException(chException.ErrorCode, chException.Message, chException);
-
-            return new ClickHouseHandledException(ClickHouseErrorCodes.Unspecified, exception.Message, exception);
+            return exception is ClickHouseHandledException nfException
+                ? nfException
+                : exception is ClickHouseException chException
+                ? new ClickHouseHandledException(chException.ErrorCode, chException.Message, chException)
+                : new ClickHouseHandledException(ClickHouseErrorCodes.Unspecified, exception.Message, exception);
         }
     }
 }

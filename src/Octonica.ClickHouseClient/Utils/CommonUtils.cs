@@ -15,9 +15,9 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.ObjectModel;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Utils
 {
@@ -29,22 +29,25 @@ namespace Octonica.ClickHouseClient.Utils
             for (int i = 0; i < columns.Count; i++)
             {
                 if (string.Equals(columns[i].Name, name, StringComparison.Ordinal))
+                {
                     return i;
+                }
 
                 if (string.Equals(columns[i].Name, name, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (caseInsensitiveIdx == null)
-                        caseInsensitiveIdx = i;
-                    else
-                        caseInsensitiveIdx = -1;
+                    caseInsensitiveIdx = caseInsensitiveIdx == null ? i : -1;
                 }
             }
 
             if (caseInsensitiveIdx >= 0)
+            {
                 return caseInsensitiveIdx.Value;
+            }
 
             if (caseInsensitiveIdx == null)
+            {
                 throw new IndexOutOfRangeException($"There is no column with the name \"{name}\" in the table.");
+            }
 
             throw new IndexOutOfRangeException($"There are two or more columns with the name \"{name}\" in the table. Please, provide an exact name (case-sensitive) of the column.");
         }

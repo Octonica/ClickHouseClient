@@ -34,7 +34,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static ClickHouseParameterWriter Dispatch(IClickHouseColumnTypeInfo typeInfo, object? value)
         {
-            var dispatcher = new Dispatcher(typeInfo, value);
+            Dispatcher dispatcher = new(typeInfo, value);
             return dispatcher.Dispatch();
         }
 
@@ -51,10 +51,12 @@ namespace Octonica.ClickHouseClient.Protocol
 
             public ClickHouseParameterWriter Dispatch<T>()
             {
-                var value = (T)_value;
-                var writer = _typeInfo.CreateParameterWriter<T>();
-                if (!writer.TryCreateParameterValueWriter(value, isNested: false, out var valueWriter))
+                T value = (T)_value;
+                IClickHouseParameterWriter<T> writer = _typeInfo.CreateParameterWriter<T>();
+                if (!writer.TryCreateParameterValueWriter(value, isNested: false, out IClickHouseParameterValueWriter? valueWriter))
+                {
                     valueWriter = null;
+                }
 
                 return new ClickHouseParameterWriter<T>(writer, value, valueWriter);
             }

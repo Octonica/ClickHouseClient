@@ -15,11 +15,11 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -42,31 +42,27 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            IReadOnlyList<byte> byteRows;
-            if (typeof(T) == typeof(byte))
-                byteRows = (IReadOnlyList<byte>) rows;
-            else if (typeof(T) == typeof(bool))
-                byteRows = MappedReadOnlyList<bool, byte>.Map((IReadOnlyList<bool>) rows, v => v ? (byte) 1 : (byte) 0);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
+            IReadOnlyList<byte> byteRows = typeof(T) == typeof(byte)
+                ? (IReadOnlyList<byte>)rows
+                : typeof(T) == typeof(bool)
+                ? (IReadOnlyList<byte>)MappedReadOnlyList<bool, byte>.Map((IReadOnlyList<bool>)rows, v => v ? (byte)1 : (byte)0)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             return new UInt8Writer(columnName, ComplexTypeName, byteRows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
-            object writer;
-            if (type == typeof(byte))
-                writer = new SimpleParameterWriter<byte>(this);
-            else if (type == typeof(bool))
-                writer = new SimpleParameterWriter<bool, byte>(this, b => b ? (byte)1 : (byte)0);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
-
+            object writer = type == typeof(byte)
+                ? new SimpleParameterWriter<byte>(this)
+                : type == typeof(bool)
+                ? (object)new SimpleParameterWriter<bool, byte>(this, b => b ? (byte)1 : (byte)0)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
             return (IClickHouseParameterWriter<T>)writer;
         }
 
@@ -119,10 +115,12 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var size = Math.Min(writeTo.Length, _rows.Count - _position);
+                int size = Math.Min(writeTo.Length, _rows.Count - _position);
 
                 for (int i = 0; i < size; i++, _position++)
+                {
                     writeTo[i] = _rows[_position];
+                }
 
                 return new SequenceSize(size, size);
             }

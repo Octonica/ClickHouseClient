@@ -96,32 +96,38 @@ namespace Octonica.ClickHouseClient
         public static ClickHouseVersion Parse(string value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var firstIndex = value.IndexOf('.');
-            var lastIndex = firstIndex < 0 ? -1 : value.IndexOf('.', firstIndex + 1);
-            var nextIndex = lastIndex < 0 ? -1 : value.IndexOf('.', lastIndex + 1);
+            int firstIndex = value.IndexOf('.');
+            int lastIndex = firstIndex < 0 ? -1 : value.IndexOf('.', firstIndex + 1);
+            int nextIndex = lastIndex < 0 ? -1 : value.IndexOf('.', lastIndex + 1);
 
             const NumberStyles numberStyle = NumberStyles.Integer & ~NumberStyles.AllowLeadingSign;
             if (firstIndex < 0)
             {
-                if (int.TryParse(value, numberStyle, CultureInfo.InvariantCulture, out var major))
+                if (int.TryParse(value, numberStyle, CultureInfo.InvariantCulture, out int major))
+                {
                     return new ClickHouseVersion(major, 0, 0);
+                }
             }
             else if (nextIndex < 0)
             {
-                var span = value.AsSpan();
-                if (int.TryParse(span.Slice(0, firstIndex), numberStyle, CultureInfo.InvariantCulture, out var major))
+                ReadOnlySpan<char> span = value.AsSpan();
+                if (int.TryParse(span[..firstIndex], numberStyle, CultureInfo.InvariantCulture, out int major))
                 {
                     if (lastIndex < 0)
                     {
-                        if (int.TryParse(span.Slice(firstIndex + 1), numberStyle, CultureInfo.InvariantCulture, out var minor))
+                        if (int.TryParse(span[(firstIndex + 1)..], numberStyle, CultureInfo.InvariantCulture, out int minor))
+                        {
                             return new ClickHouseVersion(major, minor, 0);
+                        }
                     }
                     else
                     {
-                        if (int.TryParse(span.Slice(firstIndex + 1, lastIndex - firstIndex - 1), numberStyle, CultureInfo.InvariantCulture, out var minor) &&
-                            int.TryParse(span.Slice(lastIndex + 1), numberStyle, CultureInfo.InvariantCulture, out var build))
+                        if (int.TryParse(span.Slice(firstIndex + 1, lastIndex - firstIndex - 1), numberStyle, CultureInfo.InvariantCulture, out int minor) &&
+                            int.TryParse(span[(lastIndex + 1)..], numberStyle, CultureInfo.InvariantCulture, out int build))
                         {
                             return new ClickHouseVersion(major, minor, build);
                         }

@@ -15,10 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Buffers;
 using System.Diagnostics;
-using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -49,11 +49,15 @@ namespace Octonica.ClickHouseClient.Protocol
         public int ReadHeader(ReadOnlySequence<byte> sequence)
         {
             if (!IsCompleted)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.CompressionDecoderError, "Can't start reading of a new block because reading of the current compressed block is not finished.");
+            }
 
-            const int cityHashSize = 16, headerSize = sizeof(byte) + 2 * sizeof(int);
+            const int cityHashSize = 16, headerSize = sizeof(byte) + (2 * sizeof(int));
             if (sequence.Length < cityHashSize + headerSize)
+            {
                 return -1;
+            }
 
             byte algorithmIdentifier = sequence.Slice(cityHashSize).FirstSpan[0];
             if (algorithmIdentifier != AlgorithmIdentifier)
@@ -63,7 +67,7 @@ namespace Octonica.ClickHouseClient.Protocol
                     $"An unexpected compression algorithm identifier was received. Expected value: 0x{AlgorithmIdentifier:X}. Actual value: 0x{algorithmIdentifier:X}.");
             }
 
-            var slice = sequence.Slice(cityHashSize + sizeof(byte));
+            ReadOnlySequence<byte> slice = sequence.Slice(cityHashSize + sizeof(byte));
             Span<byte> intBuffer = stackalloc byte[sizeof(int)];
 
             slice.Slice(0, sizeof(int)).CopyTo(intBuffer);
@@ -71,12 +75,14 @@ namespace Octonica.ClickHouseClient.Protocol
             _compressedSize -= headerSize;
 
             slice.Slice(sizeof(int), sizeof(int)).CopyTo(intBuffer);
-            var decompressedSize = BitConverter.ToInt32(intBuffer);
+            int decompressedSize = BitConverter.ToInt32(intBuffer);
 
             _compressedPosition = 0;
 
             if (_compressedBuffer == null || _compressedBuffer.Length < _compressedSize)
+            {
                 _compressedBuffer = new byte[GetBufferSize(_compressedSize)];
+            }
 
             if (_decompressedBuffer == null)
             {
@@ -85,16 +91,20 @@ namespace Octonica.ClickHouseClient.Protocol
             }
             else if (_decompressedBuffer.Length < decompressedSize + _decompressedAvailable)
             {
-                var newBuffer = new byte[GetBufferSize(decompressedSize + _decompressedAvailable)];
+                byte[] newBuffer = new byte[GetBufferSize(decompressedSize + _decompressedAvailable)];
                 if (_decompressedAvailable > 0)
+                {
                     Array.Copy(_decompressedBuffer, _decompressedSize - _decompressedAvailable, newBuffer, 0, _decompressedAvailable);
+                }
 
                 _decompressedBuffer = newBuffer;
             }
             else
             {
                 for (int i = 0, j = _decompressedSize - _decompressedAvailable; j < _decompressedSize; i++, j++)
+                {
                     _decompressedBuffer[i] = _decompressedBuffer[j];
+                }
             }
 
             _decompressedSize = decompressedSize + _decompressedAvailable;
@@ -103,29 +113,39 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public ReadOnlySequence<byte> Read()
         {
-            if (!IsCompleted || _decompressedBuffer == null || _compressedBuffer == null)
-                return ReadOnlySequence<byte>.Empty;
-
-            return new ReadOnlySequence<byte>(_decompressedBuffer, _decompressedSize - _decompressedAvailable, _decompressedAvailable);
+            return !IsCompleted || _decompressedBuffer == null || _compressedBuffer == null
+                ? ReadOnlySequence<byte>.Empty
+                : new ReadOnlySequence<byte>(_decompressedBuffer, _decompressedSize - _decompressedAvailable, _decompressedAvailable);
         }
 
         public void AdvanceReader(SequencePosition position)
         {
             if (!ReferenceEquals(position.GetObject(), _decompressedBuffer))
+            {
                 throw new ArgumentException("The position doesn't belong to the sequence.", nameof(position));
+            }
 
-            var arrayIndex = position.GetInteger();
+            int arrayIndex = position.GetInteger();
             if (arrayIndex < 0)
+            {
                 arrayIndex = unchecked(arrayIndex - int.MinValue);
+            }
 
-            var relativePosition = arrayIndex - (_decompressedSize - _decompressedAvailable);
+            int relativePosition = arrayIndex - (_decompressedSize - _decompressedAvailable);
             if (relativePosition < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(position), "The position must be a non-negative number.");
+            }
+
             if (relativePosition == 0)
+            {
                 return;
+            }
 
             if (relativePosition > _decompressedAvailable)
+            {
                 throw new ArgumentOutOfRangeException(nameof(position), "The position must not be greater then the length.");
+            }
 
             _decompressedAvailable -= relativePosition;
         }
@@ -133,25 +153,29 @@ namespace Octonica.ClickHouseClient.Protocol
         public int ConsumeNext(ReadOnlySequence<byte> sequence)
         {
             if (_compressedPosition == _compressedSize || _compressedBuffer == null)
+            {
                 return 0;
+            }
 
-            var sequencePart = sequence;
+            ReadOnlySequence<byte> sequencePart = sequence;
             if (sequence.Length > _compressedSize - _compressedPosition)
+            {
                 sequencePart = sequence.Slice(0, _compressedSize - _compressedPosition);
+            }
 
-            sequencePart.CopyTo(((Span<byte>) _compressedBuffer).Slice(_compressedPosition));
-            _compressedPosition += (int) sequencePart.Length;
+            sequencePart.CopyTo(((Span<byte>)_compressedBuffer)[_compressedPosition..]);
+            _compressedPosition += (int)sequencePart.Length;
 
             if (_compressedPosition == _compressedSize)
             {
-                var sourceSpan = new Span<byte>(_compressedBuffer, 0, _compressedSize);
-                var targetSpan = new Span<byte>(_decompressedBuffer, _decompressedAvailable, _decompressedSize - _decompressedAvailable);
+                Span<byte> sourceSpan = new(_compressedBuffer, 0, _compressedSize);
+                Span<byte> targetSpan = new(_decompressedBuffer, _decompressedAvailable, _decompressedSize - _decompressedAvailable);
                 _decompressedAvailable += Decode(sourceSpan, targetSpan);
 
                 Debug.Assert(_decompressedAvailable == _decompressedSize);
             }
 
-            return (int) sequencePart.Length;
+            return (int)sequencePart.Length;
         }
 
         public void Reset()
@@ -170,7 +194,9 @@ namespace Octonica.ClickHouseClient.Protocol
         {
             int size = _bufferSize;
             while (size < minRequiredSize)
+            {
                 size *= 2;
+            }
 
             return size;
         }

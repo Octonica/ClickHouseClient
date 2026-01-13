@@ -21,8 +21,14 @@ namespace Octonica.ClickHouseClient.Utils
 {
     internal static class FunctionHelper
     {
-        public static TOut Apply<TIn, TOut>(TIn input, Func<TIn, TOut> func) => func(input);
+        public static TOut Apply<TIn, TOut>(TIn input, Func<TIn, TOut> func)
+        {
+            return func(input);
+        }
 
-        public static Func<T1, T3> Combine<T1, T2, T3>(Func<T1, T2> func1, Func<T2, T3> func2) => v => func2(func1(v));
+        public static Func<T1, T3> Combine<T1, T2, T3>(Func<T1, T2> func1, Func<T2, T3> func2)
+        {
+            return v => func2(func1(v));
+        }
     }
 }

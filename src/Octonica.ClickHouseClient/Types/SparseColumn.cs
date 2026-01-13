@@ -54,20 +54,14 @@ namespace Octonica.ClickHouseClient.Types
 
         public T GetValue(int index)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex < 0)
-                return DefaultValue;
-
-            return _valuesColumn.GetValue(valueIndex);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex < 0 ? DefaultValue : _valuesColumn.GetValue(valueIndex);
         }
 
         public bool IsNull(int index)
         {
-            var valueIndex = GetValueIndex(index);
-            if (valueIndex < 0)
-                return DefaultValue is null;
-
-            return _valuesColumn.IsNull(valueIndex);
+            int valueIndex = GetValueIndex(index);
+            return valueIndex < 0 ? DefaultValue is null : _valuesColumn.IsNull(valueIndex);
         }
 
         public bool TryDipatch<TOut>(IClickHouseTableColumnDispatcher<TOut> dispatcher, [MaybeNullWhen(false)] out TOut dispatchedValue)
@@ -78,11 +72,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<TAs>? TryReinterpret<TAs>()
         {
-            var valuesReinterpreted = _valuesColumn.TryReinterpret<TAs>();
-            if (valuesReinterpreted == null)
-                return null;
-
-            return new SparseColumn<TAs>(valuesReinterpreted, RowCount, _offsets, _trailingDefaults, _lastHit);
+            IClickHouseTableColumn<TAs>? valuesReinterpreted = _valuesColumn.TryReinterpret<TAs>();
+            return valuesReinterpreted == null
+                ? null
+                : (IClickHouseTableColumn<TAs>)new SparseColumn<TAs>(valuesReinterpreted, RowCount, _offsets, _trailingDefaults, _lastHit);
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -93,27 +86,30 @@ namespace Octonica.ClickHouseClient.Types
         private int GetValueIndex(int index)
         {
             if (index < 0 || index >= RowCount)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index));
+            }
 
             if (_offsets.Count == 0)
+            {
                 return -1;
+            }
 
-            var lastHit = _lastHit;
-            var lastHitIdx = _offsets[lastHit];
+            int lastHit = _lastHit;
+            int lastHitIdx = _offsets[lastHit];
             if (index > lastHitIdx)
             {
-                var next = lastHit + 1;
+                int next = lastHit + 1;
                 if (next == _offsets.Count)
                 {
-                    if (_trailingDefaults)
-                        return -1;
-
-                    return _offsets.Count + (index - lastHitIdx);
+                    return _trailingDefaults ? -1 : _offsets.Count + (index - lastHitIdx);
                 }
 
-                var nextIdx = _offsets[next];
+                int nextIdx = _offsets[next];
                 if (index < nextIdx)
+                {
                     return -1; // The most expected case
+                }
 
                 if (index == nextIdx)
                 {
@@ -140,10 +136,7 @@ namespace Octonica.ClickHouseClient.Types
 
             lastHit = ~lastHit;
             _lastHit = Math.Max(lastHit - 1, 0);
-            if (lastHit < _offsets.Count || _trailingDefaults)
-                return -1;
-
-            return _offsets.Count + (index - _offsets[^1]);
+            return lastHit < _offsets.Count || _trailingDefaults ? -1 : _offsets.Count + (index - _offsets[^1]);
         }
     }
 }

@@ -50,30 +50,29 @@ namespace Octonica.ClickHouseClient.Utils
                         }
                         else
                         {
-                            var idxCopy = new int[indices.Length + 1];
+                            int[] idxCopy = new int[indices.Length + 1];
                             Array.Copy(indices, idxCopy, indices.Length);
                             idxCopy[^1] = idx;
                             result = arr.GetValue(idxCopy);
                         }
 
                         // Actually the result can be null if T is nullable
-                        return (T) result!;
+                        return (T)result!;
                     });
             }
 
             private static (Func<Array, object> createList, Type listElementType) Dispatch<T>(int depth, Func<Array, int[]?, int, T> selector)
             {
-                if (depth == 0)
-                    return (array => new Adapter<T>(array, null, selector), typeof(T));
-
-                return Dispatch(
+                return depth == 0
+                    ? ((Func<Array, object> createList, Type listElementType))(array => new Adapter<T>(array, null, selector), typeof(T))
+                    : Dispatch(
                     depth - 1,
                     (arr, indices, idx) =>
                     {
                         int[] idxCopy;
                         if (indices == null)
                         {
-                            idxCopy = new[] {idx};
+                            idxCopy = new[] { idx };
                         }
                         else
                         {
@@ -106,9 +105,11 @@ namespace Octonica.ClickHouseClient.Utils
 
             public IEnumerator<T> GetEnumerator()
             {
-                var count = _array.GetLength(_indices?.Length ?? 0);
+                int count = _array.GetLength(_indices?.Length ?? 0);
                 for (int i = 0; i < count; i++)
+                {
                     yield return _selector(_array, _indices, i);
+                }
             }
 
             IEnumerator IEnumerable.GetEnumerator()

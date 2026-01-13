@@ -15,10 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -35,16 +35,16 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public static async ValueTask<ServerErrorMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
         {
-            var errorCode = await reader.ReadInt32(async, cancellationToken);
-            var name = await reader.ReadString(async, cancellationToken);
-            var errorMessage = await reader.ReadString(async, cancellationToken);
-            var stackTrace = await reader.ReadString(async, cancellationToken);
+            int errorCode = await reader.ReadInt32(async, cancellationToken);
+            string name = await reader.ReadString(async, cancellationToken);
+            string errorMessage = await reader.ReadString(async, cancellationToken);
+            string stackTrace = await reader.ReadString(async, cancellationToken);
 
             bool hasNested = await reader.ReadBool(async, cancellationToken);
             ClickHouseServerException exception;
             if (hasNested)
             {
-                var nested = await Read(reader, async, cancellationToken);
+                ServerErrorMessage nested = await Read(reader, async, cancellationToken);
                 exception = new ClickHouseServerException(errorCode, name, errorMessage, stackTrace, nested.Exception);
             }
             else

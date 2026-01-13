@@ -39,34 +39,42 @@ namespace Octonica.ClickHouseClient.Utils
         public ReadWriteBuffer(int segmentSize)
         {
             if (segmentSize <= 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(segmentSize));
+            }
 
             _segmentSize = segmentSize;
-            _segments = new List<(byte[] buffer, int length)>();
+            _segments = [];
         }
 
         public ReadOnlySequence<byte> Read()
         {
             if (_readCache != null)
+            {
                 return _readCache.Value;
+            }
 
             if (_readLength == 0)
+            {
                 return ReadOnlySequence<byte>.Empty;
+            }
 
-            var readSegment = _segments[_readSegmentIdx];
+            (byte[] buffer, int length) readSegment = _segments[_readSegmentIdx];
             if (readSegment.length - _readSegmentPosition >= _readLength)
+            {
                 return new ReadOnlySequence<byte>(readSegment.buffer, _readSegmentPosition, _readLength);
+            }
 
-            var memory = new List<ReadOnlyMemory<byte>> {new ReadOnlyMemory<byte>(readSegment.buffer, _readSegmentPosition, readSegment.length - _readSegmentPosition)};
+            List<ReadOnlyMemory<byte>> memory = [new(readSegment.buffer, _readSegmentPosition, readSegment.length - _readSegmentPosition)];
             for (int length = _readLength - memory[0].Length, segmentIdx = (_readSegmentIdx + 1) % _segments.Count; length > 0; segmentIdx = (segmentIdx + 1) % _segments.Count)
             {
-                var segment = _segments[segmentIdx];
-                var memoryBlock = new ReadOnlyMemory<byte>(segment.buffer, 0, Math.Min(segment.length, length));
+                (byte[] buffer, int length) segment = _segments[segmentIdx];
+                ReadOnlyMemory<byte> memoryBlock = new(segment.buffer, 0, Math.Min(segment.length, length));
                 memory.Add(memoryBlock);
                 length -= memoryBlock.Length;
             }
 
-            var sequenceSegment = new SimpleReadOnlySequenceSegment<byte>(memory);
+            SimpleReadOnlySequenceSegment<byte> sequenceSegment = new(memory);
             _readCache = new ReadOnlySequence<byte>(sequenceSegment, 0, sequenceSegment.LastSegment, sequenceSegment.LastSegment.Memory.Length);
             return _readCache.Value;
         }
@@ -74,24 +82,30 @@ namespace Octonica.ClickHouseClient.Utils
         public void ConfirmRead(int length)
         {
             if (length < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(length));
+            }
 
             if (length > _readLength)
+            {
                 throw new ArgumentOutOfRangeException(nameof(length), "Internal error. The length can't be greater than the size of the buffer.");
+            }
 
             if (length == 0)
+            {
                 return;
+            }
 
-            var segment = _segments[_readSegmentIdx];
+            (byte[] buffer, int length) segment = _segments[_readSegmentIdx];
             if (length < segment.length - _readSegmentPosition)
             {
                 _readSegmentPosition += length;
             }
             else
             {
-                var currentLength = length - segment.length + _readSegmentPosition;
-                var currentIndex = _readSegmentIdx;
-                var currentSegment = _segments[currentIndex];
+                int currentLength = length - segment.length + _readSegmentPosition;
+                int currentIndex = _readSegmentIdx;
+                (byte[] buffer, int length) currentSegment = _segments[currentIndex];
 
                 while (true)
                 {
@@ -135,9 +149,11 @@ namespace Octonica.ClickHouseClient.Utils
         {
             if (_segments.Count > 0)
             {
-                var writeSegment = _segments[_writeSegmentIdx];
-                if (writeSegment.buffer.Length > _writeSegmentPosition)
-                    return new Memory<byte>(writeSegment.buffer, _writeSegmentPosition, writeSegment.buffer.Length - _writeSegmentPosition);
+                (byte[] buffer, _) = _segments[_writeSegmentIdx];
+                if (buffer.Length > _writeSegmentPosition)
+                {
+                    return new Memory<byte>(buffer, _writeSegmentPosition, buffer.Length - _writeSegmentPosition);
+                }
             }
 
             return AcquireNextSegment(_segmentSize);
@@ -146,18 +162,24 @@ namespace Octonica.ClickHouseClient.Utils
         public Memory<byte> GetMemory(int sizeHint)
         {
             if (sizeHint < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(sizeHint));
+            }
 
             if (_segments.Count > 0)
             {
-                var writeSegment = _segments[_writeSegmentIdx];
-                if (writeSegment.buffer.Length - _writeSegmentPosition >= sizeHint)
-                    return new Memory<byte>(writeSegment.buffer, _writeSegmentPosition, writeSegment.buffer.Length - _writeSegmentPosition);
+                (byte[] buffer, _) = _segments[_writeSegmentIdx];
+                if (buffer.Length - _writeSegmentPosition >= sizeHint)
+                {
+                    return new Memory<byte>(buffer, _writeSegmentPosition, buffer.Length - _writeSegmentPosition);
+                }
             }
 
-            var segmentSize = _segmentSize;
+            int segmentSize = _segmentSize;
             if (sizeHint > _segmentSize)
-                segmentSize = (sizeHint / _segmentSize + Math.Min(sizeHint % _segmentSize, 1)) * _segmentSize;
+            {
+                segmentSize = ((sizeHint / _segmentSize) + Math.Min(sizeHint % _segmentSize, 1)) * _segmentSize;
+            }
 
             return AcquireNextSegment(segmentSize);
         }
@@ -174,16 +196,18 @@ namespace Octonica.ClickHouseClient.Utils
 
             if (_segments.Count > 1)
             {
-                var firstFreeSegmentIdx = (_writeSegmentIdx + 1) % _segments.Count;
+                int firstFreeSegmentIdx = (_writeSegmentIdx + 1) % _segments.Count;
                 for (int i = firstFreeSegmentIdx; i != _readSegmentIdx; i = (i + 1) % _segments.Count)
                 {
                     if (_segments[i].buffer.Length >= size)
                     {
-                        var segment = _segments[i];
+                        (byte[] buffer, _) = _segments[i];
                         if (i != firstFreeSegmentIdx)
+                        {
                             _segments[i] = _segments[firstFreeSegmentIdx];
-                        
-                        _segments[firstFreeSegmentIdx] = (segment.buffer, segment.buffer.Length);
+                        }
+
+                        _segments[firstFreeSegmentIdx] = (buffer, buffer.Length);
                         _writeSegmentIdx = firstFreeSegmentIdx;
                         _writeSegmentPosition = 0;
 
@@ -202,7 +226,9 @@ namespace Octonica.ClickHouseClient.Utils
             }
 
             if (_writeSegmentIdx < _readSegmentIdx)
+            {
                 ++_readSegmentIdx;
+            }
 
             ++_writeSegmentIdx;
             _writeSegmentPosition = 0;
@@ -213,11 +239,15 @@ namespace Octonica.ClickHouseClient.Utils
         public void ConfirmWrite(int length)
         {
             if (length < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(length));
+            }
 
-            var segment = _segments[_writeSegmentIdx];
+            (byte[] buffer, int length) segment = _segments[_writeSegmentIdx];
             if (length > segment.buffer.Length - _writeSegmentPosition)
+            {
                 throw new ArgumentOutOfRangeException(nameof(length), "Internal error. The length can't be greater than the size of the buffer.");
+            }
 
             _writeSegmentPosition += length;
             Debug.Assert(_writeSegmentPosition <= segment.length);
@@ -226,7 +256,9 @@ namespace Octonica.ClickHouseClient.Utils
         public void Flush()
         {
             if (_segments.Count == 0)
+            {
                 return;
+            }
 
             int length;
             if (_readSegmentIdx == _writeSegmentIdx)
@@ -238,13 +270,17 @@ namespace Octonica.ClickHouseClient.Utils
             {
                 length = _segments[_readSegmentIdx].length - _readSegmentPosition;
                 for (int i = (_readSegmentIdx + 1) % _segments.Count; i != _writeSegmentIdx; i = (i + 1) % _segments.Count)
+                {
                     length += _segments[i].length;
+                }
 
                 length += _writeSegmentPosition;
             }
 
             if (length == _readLength)
+            {
                 return;
+            }
 
             Debug.Assert(length > _readLength);
 
@@ -255,13 +291,15 @@ namespace Octonica.ClickHouseClient.Utils
         public void Discard()
         {
             if (_segments.Count == 0)
+            {
                 return;
+            }
 
             int length = _readLength + _readSegmentPosition;
             int index = _readSegmentIdx;
             while (true)
             {
-                var segment = _segments[index];
+                (byte[] buffer, int length) segment = _segments[index];
                 if (length <= segment.length)
                 {
                     _writeSegmentIdx = index;
@@ -269,7 +307,7 @@ namespace Octonica.ClickHouseClient.Utils
                     _segments[index] = (segment.buffer, segment.buffer.Length);
                     break;
                 }
-                
+
                 length -= _segments[index].length;
                 index = (index + 1) % _segments.Count;
                 Debug.Assert(index != _readSegmentIdx);

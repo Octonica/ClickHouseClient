@@ -15,12 +15,12 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -69,12 +69,12 @@ namespace Octonica.ClickHouseClient.Types
         /// <inheritdoc/>
         public SequenceSize WriteNext(Span<byte> writeTo)
         {
-            var elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
+            int elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
 
-            if (BitwiseCopyAllowed) 
+            if (BitwiseCopyAllowed)
             {
-                var targetSpan = MemoryMarshal.Cast<byte, T>(writeTo.Slice(0, elementsCount * ElementSize));
-                var length = _rows.CopyTo(targetSpan, _position);
+                Span<T> targetSpan = MemoryMarshal.Cast<byte, T>(writeTo[..(elementsCount * ElementSize)]);
+                int length = _rows.CopyTo(targetSpan, _position);
                 Debug.Assert(length == elementsCount);
                 _position += length;
             }
@@ -82,7 +82,7 @@ namespace Octonica.ClickHouseClient.Types
             {
                 for (int i = 0; i < elementsCount; i++, _position++)
                 {
-                    WriteElement(writeTo.Slice(i * ElementSize), _rows[_position]);
+                    WriteElement(writeTo[(i * ElementSize)..], _rows[_position]);
                 }
             }
 
@@ -103,7 +103,7 @@ namespace Octonica.ClickHouseClient.Types
     /// <typeparam name="TIn">The type of the input data.</typeparam>
     /// <typeparam name="TOut">The type of the column that must be a value type (struct).</typeparam>
     public abstract class StructureWriterBase<TIn, TOut> : IClickHouseColumnWriter
-        where TOut: struct
+        where TOut : struct
     {
         private readonly IReadOnlyList<TIn> _rows;
 
@@ -138,9 +138,9 @@ namespace Octonica.ClickHouseClient.Types
         /// <inheritdoc/>
         public SequenceSize WriteNext(Span<byte> writeTo)
         {
-            var elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
+            int elementsCount = Math.Min(_rows.Count - _position, writeTo.Length / ElementSize);
 
-            var targetSpan = MemoryMarshal.Cast<byte, TOut>(writeTo.Slice(0, elementsCount * ElementSize));
+            Span<TOut> targetSpan = MemoryMarshal.Cast<byte, TOut>(writeTo[..(elementsCount * ElementSize)]);
             _position += _rows.Map(Convert).CopyTo(targetSpan, _position);
 
             return new SequenceSize(elementsCount * ElementSize, elementsCount);
@@ -152,6 +152,6 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         /// <param name="value">The value that should be converted.</param>
         /// <returns>The value converted to the type <typeparamref name="TOut"/>.</returns>
-        protected abstract TOut Convert(TIn value);        
+        protected abstract TOut Convert(TIn value);
     }
 }

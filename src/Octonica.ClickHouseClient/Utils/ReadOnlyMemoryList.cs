@@ -40,7 +40,9 @@ namespace Octonica.ClickHouseClient.Utils
         public IEnumerator<T> GetEnumerator()
         {
             for (int i = 0; i < _memory.Length; i++)
+            {
                 yield return _memory.Span[i];
+            }
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -50,12 +52,11 @@ namespace Octonica.ClickHouseClient.Utils
 
         public IReadOnlyListExt<T> Slice(int start, int length)
         {
-            if (start < 0 || start > Count)
-                throw new ArgumentOutOfRangeException(nameof(start));
-            if (length < 0 || start + length > Count)
-                throw new ArgumentOutOfRangeException(nameof(length));
-
-            return new ReadOnlyMemoryList<T>(_memory.Slice(start, length));
+            return start < 0 || start > Count
+                ? throw new ArgumentOutOfRangeException(nameof(start))
+                : length < 0 || start + length > Count
+                ? throw new ArgumentOutOfRangeException(nameof(length))
+                : (IReadOnlyListExt<T>)new ReadOnlyMemoryList<T>(_memory.Slice(start, length));
         }
 
         public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
@@ -66,11 +67,13 @@ namespace Octonica.ClickHouseClient.Utils
         public int CopyTo(Span<T> span, int start)
         {
             if (start < 0 || start > _memory.Length)
+            {
                 throw new ArgumentOutOfRangeException(nameof(start));
+            }
 
-            var length = Math.Min(_memory.Length - start, span.Length);
+            int length = Math.Min(_memory.Length - start, span.Length);
             _memory.Slice(start, length).Span.CopyTo(span);
-            return length;            
+            return length;
         }
 
         public T this[int index] => _memory.Span[index];

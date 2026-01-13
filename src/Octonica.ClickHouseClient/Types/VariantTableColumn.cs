@@ -41,12 +41,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetValue(int index)
         {
-            var columnIndex = _columnIndices[index];
+            byte columnIndex = _columnIndices[index];
             // 0xFF stands for NULL
-            if (columnIndex == 0xFF)
-                return DBNull.Value;
-
-            return _values[columnIndex].GetValue(_valueIndices[index]);
+            return columnIndex == 0xFF ? DBNull.Value : _values[columnIndex].GetValue(_valueIndices[index]);
         }
 
         public bool IsNull(int index)

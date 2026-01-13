@@ -43,21 +43,19 @@ namespace Octonica.ClickHouseClient.Types
             _rowCount = rowCount;
         }
 
-        public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
+        public IClickHouseTableColumn? EndRead(ClickHouseColumnSettings? settings)
         {
             if (_baseReader == null)
-                return _typeInfo.CreateColumnReader(0).EndRead(settings);
-
-            var columnInfo = _baseReader.EndRead(settings);
-            if (_mode == ClickHouseColumnSerializationMode.Sparse)
             {
-                if (columnInfo.TryDipatch(this, out var dispatchedColumn))
-                    return dispatchedColumn;
-
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Sparse column reader error. A type of the column was not dispatched.");
+                return _typeInfo.CreateColumnReader(0).EndRead(settings);
             }
 
-            return columnInfo;
+            IClickHouseTableColumn columnInfo = _baseReader.EndRead(settings)!;
+            return _mode == ClickHouseColumnSerializationMode.Sparse
+                ? columnInfo.TryDipatch(this, out IClickHouseTableColumn? dispatchedColumn)
+                    ? dispatchedColumn!
+                    : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Sparse column reader error. A type of the column was not dispatched.")
+                : columnInfo;
         }
 
         IClickHouseTableColumn IClickHouseTableColumnDispatcher<IClickHouseTableColumn>.Dispatch<T>(IClickHouseTableColumn<T> column)
@@ -72,14 +70,16 @@ namespace Octonica.ClickHouseClient.Types
             {
                 case ClickHouseColumnSerializationMode.Custom:
                     if (sequence.IsEmpty)
+                    {
                         return SequenceSize.Empty;
+                    }
 
                     // The prefix consists of a single byte encoding the serialization mode
-                    var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
-                    if (mode == ClickHouseColumnSerializationMode.Sparse || mode == ClickHouseColumnSerializationMode.Default)
+                    ClickHouseColumnSerializationMode mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
+                    if (mode is ClickHouseColumnSerializationMode.Sparse or ClickHouseColumnSerializationMode.Default)
                     {
                         _mode = mode;
-                        var result = ReadNext(sequence.Slice(1));
+                        SequenceSize result = ReadNext(sequence.Slice(1));
                         return result.AddBytes(1);
                     }
 
@@ -100,18 +100,22 @@ namespace Octonica.ClickHouseClient.Types
         private SequenceSize ReadSparse(ReadOnlySequence<byte> sequence)
         {
             if (_expectedBaseRowCount == 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+            }
 
             if (_expectedBaseRowCount > 0)
             {
                 Debug.Assert(_offsets != null);
                 Debug.Assert(_baseReader != null);
 
-                var result = _baseReader.ReadNext(sequence);
+                SequenceSize result = _baseReader.ReadNext(sequence);
                 _expectedBaseRowCount -= result.Elements;
 
                 if (_expectedBaseRowCount < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
                 if (_expectedBaseRowCount == 0)
                 {
@@ -119,7 +123,7 @@ namespace Octonica.ClickHouseClient.Types
                     int defaultRowsCount = _rowCount - _offsets.Count;
                     if (!_trailingDefaults)
                     {
-                        var lastNonDefaultIdx = _offsets.Count == 0 ? -1 : _offsets[^1];
+                        int lastNonDefaultIdx = _offsets.Count == 0 ? -1 : _offsets[^1];
                         defaultRowsCount -= _rowCount - (lastNonDefaultIdx + 1);
                     }
 
@@ -139,17 +143,19 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             const ulong endOfGranuleFlag = 1ul << 62;
-            var seq = sequence;
+            ReadOnlySequence<byte> seq = sequence;
             int totalBytes = 0;
             while (true)
             {
-                if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(seq, out var group_size, out var bytesRead))
+                if (!ClickHouseBinaryProtocolReader.TryRead7BitInteger(seq, out ulong group_size, out int bytesRead))
+                {
                     return new SequenceSize(totalBytes, 0);
+                }
 
                 totalBytes += bytesRead;
                 seq = seq.Slice(bytesRead);
 
-                var endOfGranule = (group_size & endOfGranuleFlag) == endOfGranuleFlag;
+                bool endOfGranule = (group_size & endOfGranuleFlag) == endOfGranuleFlag;
                 group_size &= ~endOfGranuleFlag;
                 _sparseRowPostion += checked((int)group_size);
 
@@ -158,7 +164,9 @@ namespace Octonica.ClickHouseClient.Types
                     _trailingDefaults = true;
                     _sparseRowPostion = _rowCount;
                     if (endOfGranule)
+                    {
                         break;
+                    }
 
                     // It may be ok, but non-final group with an overflow looks suspicious
                     Debug.Fail("Unexpected group after the end of the column");
@@ -168,7 +176,9 @@ namespace Octonica.ClickHouseClient.Types
                 _offsets.Add(_sparseRowPostion++);
 
                 if (endOfGranule)
+                {
                     break;
+                }
             }
 
             Debug.Assert(_rowCount >= _sparseRowPostion);
@@ -176,7 +186,9 @@ namespace Octonica.ClickHouseClient.Types
 
             _expectedBaseRowCount = _offsets.Count;
             if (!_trailingDefaults)
+            {
                 _expectedBaseRowCount += _rowCount - _sparseRowPostion;
+            }
 
             _baseReader = _typeInfo.CreateColumnReader(_expectedBaseRowCount);
             if (_expectedBaseRowCount == 0)
@@ -186,7 +198,7 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             Debug.Assert(_expectedBaseRowCount > 0);
-            var baseResult = ReadSparse(seq);
+            SequenceSize baseResult = ReadSparse(seq);
             return baseResult.AddBytes(totalBytes);
         }
     }

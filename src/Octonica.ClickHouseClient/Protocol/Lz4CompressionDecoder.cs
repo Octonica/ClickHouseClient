@@ -15,8 +15,8 @@
  */
 #endregion
 
-using System;
 using K4os.Compression.LZ4;
+using System;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -25,7 +25,7 @@ namespace Octonica.ClickHouseClient.Protocol
         protected override byte AlgorithmIdentifier => 0x82;
 
         public override CompressionAlgorithm Algorithm => CompressionAlgorithm.Lz4;
-        
+
         public Lz4CompressionDecoder(int bufferSize)
             : base(bufferSize)
         {

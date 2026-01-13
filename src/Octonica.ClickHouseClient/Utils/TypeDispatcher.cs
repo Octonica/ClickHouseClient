@@ -23,15 +23,15 @@ namespace Octonica.ClickHouseClient.Utils
     {
         public static TOut Dispatch<TOut>(Type type, ITypeDispatcher<TOut> dispatcher)
         {
-            var dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
-            var dsp = (ITypeDispatcher) Activator.CreateInstance(dispatcherType)!;
+            Type dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
+            ITypeDispatcher dsp = (ITypeDispatcher)Activator.CreateInstance(dispatcherType)!;
             return dsp.Dispatch(dispatcher);
         }
 
         public static ITypeDispatcher Create(Type type)
         {
-            var dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
-            var dsp = (ITypeDispatcher)Activator.CreateInstance(dispatcherType)!;
+            Type dispatcherType = typeof(Dispatcher<>).MakeGenericType(type);
+            ITypeDispatcher dsp = (ITypeDispatcher)Activator.CreateInstance(dispatcherType)!;
             return dsp;
         }
 

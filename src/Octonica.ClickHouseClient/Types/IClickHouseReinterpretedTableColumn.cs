@@ -19,7 +19,7 @@ using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    internal interface IClickHouseReinterpretedTableColumn<out T>: IClickHouseTableColumn<T>
+    internal interface IClickHouseReinterpretedTableColumn<out T> : IClickHouseTableColumn<T>
     {
         IClickHouseReinterpretedTableColumn<TResult> Chain<TResult>(Func<T, TResult> reinterpret);
     }

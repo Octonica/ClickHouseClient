@@ -15,14 +15,14 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -50,41 +50,43 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            var typeInfo = GetBaseTypeInfo();
-            return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable);
+            (IClickHouseColumnTypeInfo baseType, bool isNullable) = GetBaseTypeInfo();
+            return new LowCardinalityColumnReader(rowCount, baseType, isNullable);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            var typeInfo = GetBaseTypeInfo();
-            return new LowCardinalitySkippingColumnReader(rowCount, typeInfo.baseType);
+            (IClickHouseColumnTypeInfo baseType, _) = GetBaseTypeInfo();
+            return new LowCardinalitySkippingColumnReader(rowCount, baseType);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateSkippingColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateSkippingColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         private (IClickHouseColumnTypeInfo baseType, bool isNullable) GetBaseTypeInfo()
         {
             if (_baseType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
             if (_baseType is NullableTypeInfo nullableBaseType)
             {
                 if (nullableBaseType.UnderlyingType == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{_baseType.ComplexTypeName}\" is not fully specified.");
+                }
 
                 // LowCardinality column stores NULL as the key 0
                 return (nullableBaseType.UnderlyingType, true);
@@ -104,7 +106,9 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (_baseType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
             // Writing values as is. Let the database do de-duplication
             return _baseType.CreateColumnWriter(columnName, rows, columnSettings);
@@ -118,19 +122,21 @@ namespace Octonica.ClickHouseClient.Types
             ClickHouseColumnSettings? columnSettings)
             where T : notnull
         {
-            var (baseType, isNullable) = GetBaseTypeInfo();
+            (IClickHouseColumnTypeInfo? baseType, bool isNullable) = GetBaseTypeInfo();
 
-            var map = new Dictionary<T, int>(equalityComparer);
-            var indices = new List<int>(rows.Count);
-            var uniqueValues = new List<T>();
+            Dictionary<T, int> map = new(equalityComparer);
+            List<int> indices = new(rows.Count);
+            List<T> uniqueValues = [];
             if (isNullable)
+            {
                 uniqueValues.Add(defaultValue);
+            }
 
             // Reserve the first non-nullable position in the dictionary for the defualt value
             map.Add(defaultValue, uniqueValues.Count);
             uniqueValues.Add(defaultValue);
 
-            foreach (var row in rows)
+            foreach (T? row in rows)
             {
                 if (isNullable && row is null)
                 {
@@ -138,7 +144,7 @@ namespace Octonica.ClickHouseClient.Types
                     continue;
                 }
 
-                if (!map.TryGetValue(row, out var index))
+                if (!map.TryGetValue(row, out int index))
                 {
                     index = uniqueValues.Count;
                     map.Add(row, index);
@@ -149,66 +155,60 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (indices.Count == 0)
+            {
                 uniqueValues.Clear();
+            }
 
-            KeySizeCode keySizeCode;
-            if (uniqueValues.Count > ushort.MaxValue)
-                keySizeCode = KeySizeCode.UInt32;
-            else if (uniqueValues.Count > byte.MaxValue)
-                keySizeCode = KeySizeCode.UInt16;
-            else
-                keySizeCode = KeySizeCode.UInt8;
-
+            KeySizeCode keySizeCode = uniqueValues.Count > ushort.MaxValue
+                ? KeySizeCode.UInt32
+                : uniqueValues.Count > byte.MaxValue ? KeySizeCode.UInt16 : KeySizeCode.UInt8;
             Debug.Assert(_baseType != null);
-            var baseWriter = baseType.CreateColumnWriter(columnName, uniqueValues, columnSettings);
+            IClickHouseColumnWriter baseWriter = baseType.CreateColumnWriter(columnName, uniqueValues, columnSettings);
             return new LowCardinalityColumnWriter(baseWriter, uniqueValues.Count, ComplexTypeName, indices, keySizeCode);
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            if (_baseType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _baseType.CreateParameterWriter<T>();
+            return _baseType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _baseType.CreateParameterWriter<T>();
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_baseType != null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
+            }
 
             if (options.Count > 1)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
+            }
 
-            var baseType = typeInfoProvider.GetTypeInfo(options[0]);
+            IClickHouseColumnTypeInfo baseType = typeInfoProvider.GetTypeInfo(options[0]);
             return new LowCardinalityTypeInfo(baseType);
         }
 
         public Type GetFieldType()
         {
-            if (_baseType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _baseType.GetFieldType();
+            return _baseType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _baseType.GetFieldType();
         }
 
         public ClickHouseDbType GetDbType()
         {
-            if (_baseType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _baseType.GetDbType();
+            return _baseType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _baseType.GetDbType();
         }
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
-            if (_baseType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            if (index != 0)
-                throw new IndexOutOfRangeException();
-
-            return _baseType;
+            return _baseType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : index != 0 ? throw new IndexOutOfRangeException() : (IClickHouseTypeInfo)_baseType;
         }
 
         private sealed class LowCardinalityColumnReader : IClickHouseColumnReader
@@ -239,15 +239,19 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (_position >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
-                var result = new SequenceSize(0, 0);
-                var slice = sequence;
+                SequenceSize result = new(0, 0);
+                ReadOnlySequence<byte> slice = sequence;
                 if (_baseColumnReader == null)
                 {
-                    var header = TryReadHeader(slice);
+                    (int keySize, int keyCount, int bytesRead)? header = TryReadHeader(slice);
                     if (header == null)
+                    {
                         return result;
+                    }
 
                     _baseRowCount = header.Value.keyCount;
                     _keySize = header.Value.keySize;
@@ -259,7 +263,7 @@ namespace Octonica.ClickHouseClient.Types
 
                 if (_baseRowCount > 0)
                 {
-                    var baseResult = _baseColumnReader.ReadNext(slice);
+                    SequenceSize baseResult = _baseColumnReader.ReadNext(slice);
                     _baseRowCount -= baseResult.Elements;
 
                     slice = slice.Slice(baseResult.Bytes);
@@ -267,18 +271,24 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 if (_baseRowCount > 0)
+                {
                     return result;
+                }
 
                 if (_buffer == null)
                 {
                     if (slice.Length < sizeof(ulong))
+                    {
                         return result;
+                    }
 
                     ulong length = 0;
                     slice.Slice(0, sizeof(ulong)).CopyTo(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref length, 1)));
 
-                    if ((int) length != _rowCount)
+                    if ((int)length != _rowCount)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Row count check failed: {_rowCount} rows expected, {length} rows detected.");
+                    }
 
                     _buffer = new byte[_rowCount * _keySize];
 
@@ -286,8 +296,8 @@ namespace Octonica.ClickHouseClient.Types
                     result = result.AddBytes(sizeof(ulong));
                 }
 
-                var elementCount = Math.Min(_rowCount - _position, (int) (slice.Length / _keySize));
-                var byteCount = elementCount * _keySize;
+                int elementCount = Math.Min(_rowCount - _position, (int)(slice.Length / _keySize));
+                int byteCount = elementCount * _keySize;
                 slice.Slice(0, byteCount).CopyTo(new Span<byte>(_buffer, _position * _keySize, byteCount));
 
                 _position += elementCount;
@@ -311,17 +321,21 @@ namespace Octonica.ClickHouseClient.Types
                     keySize = _keySize;
                 }
 
-                var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
-                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize, _isNullable), out var result))
+                IClickHouseTableColumn valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings)!;
+                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize, _isNullable), out IClickHouseTableColumn? result))
+                {
                     result = new LowCardinalityTableColumn(keys, keySize, valuesColumn, _isNullable);
+                }
 
-                return result;
+                return result!;
             }
 
             public static SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence)
             {
                 if (sequence.Length < sizeof(ulong))
+                {
                     return SequenceSize.Empty;
+                }
 
                 ulong version = 0;
                 sequence.Slice(0, sizeof(ulong)).CopyTo(MemoryMarshal.Cast<ulong, byte>(MemoryMarshal.CreateSpan(ref version, 1)));
@@ -333,39 +347,31 @@ namespace Octonica.ClickHouseClient.Types
                 //
                 // SharedDictionariesWithAdditionalKeys = 1,
 
-                if (version != 1)
-                    throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Unexpected dictionary version received: {version}.");
-
-                return new SequenceSize(sizeof(ulong), 1);
+                return version != 1
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Unexpected dictionary version received: {version}.")
+                    : new SequenceSize(sizeof(ulong), 1);
             }
 
             public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
             {
                 Span<ulong> headerValues = stackalloc ulong[2];
-                var headerBytes = MemoryMarshal.AsBytes(headerValues);
+                Span<byte> headerBytes = MemoryMarshal.AsBytes(headerValues);
                 if (sequence.Length < headerBytes.Length)
+                {
                     return null;
+                }
 
                 sequence.Slice(0, headerBytes.Length).CopyTo(headerBytes);
 
-                var keySizeCode = (KeySizeCode)unchecked((byte)headerValues[0]);
-                int keySize;
-                switch (keySizeCode)
+                KeySizeCode keySizeCode = (KeySizeCode)unchecked((byte)headerValues[0]);
+                int keySize = keySizeCode switch
                 {
-                    case KeySizeCode.UInt8:
-                        keySize = 1;
-                        break;
-                    case KeySizeCode.UInt16:
-                        keySize = 2;
-                        break;
-                    case KeySizeCode.UInt32:
-                        keySize = 4;
-                        break;
-                    case KeySizeCode.UInt64:
-                        throw new NotSupportedException("64-bit keys are not supported.");
-                    default:
-                        throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Unexpected size of a key: {keySizeCode}.");
-                }
+                    KeySizeCode.UInt8 => 1,
+                    KeySizeCode.UInt16 => 2,
+                    KeySizeCode.UInt32 => 4,
+                    KeySizeCode.UInt64 => throw new NotSupportedException("64-bit keys are not supported."),
+                    _ => throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Unexpected size of a key: {keySizeCode}."),
+                };
 
                 // There are several control flags, but the client always receives 0x2|0x4
                 //
@@ -374,11 +380,13 @@ namespace Octonica.ClickHouseClient.Types
                 // 0x2 Need to read additional keys. Additional keys are stored before indexes as value N and N keys after them.
                 // 0x4 Need to update dictionary. It means that previous granule has different dictionary.
 
-                var flags = headerValues[0] >> 8;
+                ulong flags = headerValues[0] >> 8;
                 if (flags != (0x2 | 0x4))
+                {
                     throw new NotSupportedException("Received combination of flags is not supported.");
+                }
 
-                var keyCount = checked((int)headerValues[1]);
+                int keyCount = checked((int)headerValues[1]);
                 return (keySize, keyCount, headerBytes.Length);
             }
         }
@@ -409,13 +417,15 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var slice = sequence;
-                var result = new SequenceSize(0, 0);                
+                ReadOnlySequence<byte> slice = sequence;
+                SequenceSize result = new(0, 0);
                 if (_baseReader == null)
                 {
-                    var header = LowCardinalityColumnReader.TryReadHeader(slice);
+                    (int keySize, int keyCount, int bytesRead)? header = LowCardinalityColumnReader.TryReadHeader(slice);
                     if (header == null)
+                    {
                         return result;
+                    }
 
                     result = result.AddBytes(header.Value.bytesRead);
                     slice = slice.Slice(header.Value.bytesRead);
@@ -428,35 +438,43 @@ namespace Octonica.ClickHouseClient.Types
 
                 if (_basePosition < _baseRowCount)
                 {
-                    var baseResult = _baseReader.ReadNext(slice);
+                    SequenceSize baseResult = _baseReader.ReadNext(slice);
 
                     _basePosition += baseResult.Elements;
                     result = result.AddBytes(baseResult.Bytes);
 
                     if (_basePosition < _baseRowCount)
+                    {
                         return result;
+                    }
                 }
 
                 if (!_headerSkipped)
                 {
                     if (sequence.Length - result.Bytes < sizeof(ulong))
+                    {
                         return result;
+                    }
 
                     ulong length = 0;
                     sequence.Slice(result.Bytes, sizeof(ulong)).CopyTo(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref length, 1)));
 
                     if ((int)length != _rowCount)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Internal error. Row count check failed: {_rowCount} rows expected, {length} rows detected.");
+                    }
 
                     result = result.AddBytes(sizeof(ulong));
                     _headerSkipped = true;
                 }
 
-                var maxElementsCount = _rowCount - _position;
+                int maxElementsCount = _rowCount - _position;
                 if (maxElementsCount <= 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
-                var elementCount = (int)Math.Min((sequence.Length - result.Bytes) / _keySize, maxElementsCount);
+                int elementCount = (int)Math.Min((sequence.Length - result.Bytes) / _keySize, maxElementsCount);
                 _position += elementCount;
                 result += new SequenceSize(elementCount * _keySize, elementCount);
 
@@ -490,9 +508,11 @@ namespace Octonica.ClickHouseClient.Types
             SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
                 if (writeTo.Length < sizeof(ulong))
+                {
                     return SequenceSize.Empty;
+                }
 
-                var writeToVersion = MemoryMarshal.Cast<byte, ulong>(writeTo.Slice(0, sizeof(ulong)));
+                Span<ulong> writeToVersion = MemoryMarshal.Cast<byte, ulong>(writeTo[..sizeof(ulong)]);
                 writeToVersion[0] = 1; // Version
 
                 return new SequenceSize(sizeof(ulong), 1);
@@ -500,49 +520,57 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var targetSpan = writeTo;
-                var result = new SequenceSize(0, 0);
+                Span<byte> targetSpan = writeTo;
+                SequenceSize result = new(0, 0);
                 if (!_headerWritten)
                 {
                     Span<ulong> headerValues = stackalloc ulong[2];
                     headerValues[0] = ((0x2 | 0x4) << 8) | (ulong)_keySizeCode; // The size of and element and flags
                     headerValues[1] = (ulong)_baseRowCount;
 
-                    var headerBytes = MemoryMarshal.AsBytes(headerValues);
+                    Span<byte> headerBytes = MemoryMarshal.AsBytes(headerValues);
                     if (headerBytes.Length > targetSpan.Length)
+                    {
                         return result;
+                    }
 
                     headerBytes.CopyTo(targetSpan);
-                    targetSpan = targetSpan.Slice(headerBytes.Length);
+                    targetSpan = targetSpan[headerBytes.Length..];
                     result = result.AddBytes(headerBytes.Length);
                     _headerWritten = true;
                 }
 
                 if (_baseRowCount > 0)
                 {
-                    var baseResult = _baseWriter.WriteNext(targetSpan);
+                    SequenceSize baseResult = _baseWriter.WriteNext(targetSpan);
 
                     _baseRowCount -= baseResult.Elements;
                     result = result.AddBytes(baseResult.Bytes);
                     if (_baseRowCount > 0)
+                    {
                         return result;
+                    }
 
                     if (_baseRowCount != 0)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Row count check failed: written {-_baseRowCount} more rows then expected.");
+                    }
 
-                    targetSpan = targetSpan.Slice(baseResult.Bytes);
+                    targetSpan = targetSpan[baseResult.Bytes..];
                 }
 
                 if (_position < 0)
                 {
                     ulong length = (ulong)_indices.Count;
-                    var lengthSpan = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref length, 1));
+                    ReadOnlySpan<byte> lengthSpan = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref length, 1));
                     if (lengthSpan.Length > targetSpan.Length)
+                    {
                         return result;
+                    }
 
                     lengthSpan.CopyTo(targetSpan);
                     result = result.AddBytes(lengthSpan.Length);
-                    targetSpan = targetSpan.Slice(lengthSpan.Length);
+                    targetSpan = targetSpan[lengthSpan.Length..];
 
                     _position = 0;
                 }
@@ -555,27 +583,33 @@ namespace Octonica.ClickHouseClient.Types
                         size = Math.Min(targetSpan.Length, size);
                         byteSize = size;
                         for (int i = 0; i < size; _position++, i++)
+                        {
                             targetSpan[i] = (byte)_indices[_position];
+                        }
 
                         break;
 
                     case KeySizeCode.UInt16:
                         size = Math.Min(targetSpan.Length / 2, size);
                         byteSize = size * 2;
-                        var ushortSpan = MemoryMarshal.Cast<byte, ushort>(targetSpan.Slice(0, byteSize));
+                        Span<ushort> ushortSpan = MemoryMarshal.Cast<byte, ushort>(targetSpan[..byteSize]);
 
                         for (int i = 0; i < size; _position++, i++)
+                        {
                             ushortSpan[i] = (ushort)_indices[_position];
+                        }
 
                         break;
 
                     case KeySizeCode.UInt32:
                         size = Math.Min(targetSpan.Length / 4, size);
                         byteSize = size * 4;
-                        var intSpan = MemoryMarshal.Cast<byte, int>(targetSpan.Slice(0, byteSize));
+                        Span<int> intSpan = MemoryMarshal.Cast<byte, int>(targetSpan[..byteSize]);
 
                         for (int i = 0; i < size; _position++, i++)
+                        {
                             intSpan[i] = _indices[_position];
+                        }
 
                         break;
 

@@ -29,24 +29,37 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
             if (typeof(T) == typeof(int))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<ushort, int>(this, v => v);
+            {
+                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<ushort, int>(this, v => v);
+            }
+
             if (typeof(T) == typeof(uint))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<ushort, uint>(this, v => v);
+            {
+                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<ushort, uint>(this, v => v);
+            }
+
             if (typeof(T) == typeof(long))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<ushort, long>(this, v => v);
+            {
+                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<ushort, long>(this, v => v);
+            }
+
             if (typeof(T) == typeof(ulong))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<ushort, ulong>(this, v => v);
+            {
+                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<ushort, ulong>(this, v => v);
+            }
 
             if (typeof(T) == typeof(int?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<int>(null, new ReinterpretedTableColumn<ushort, int>(this, v => v));
-            if (typeof(T) == typeof(uint?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<uint>(null, new ReinterpretedTableColumn<ushort, uint>(this, v => v));
-            if (typeof(T) == typeof(long?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<long>(null, new ReinterpretedTableColumn<ushort, long>(this, v => v));
-            if (typeof(T) == typeof(ulong?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<ulong>(null, new ReinterpretedTableColumn<ushort, ulong>(this, v => v));
+            {
+                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<int>(null, new ReinterpretedTableColumn<ushort, int>(this, v => v));
+            }
 
-            return base.TryReinterpret<T>();
+            return typeof(T) == typeof(uint?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<uint>(null, new ReinterpretedTableColumn<ushort, uint>(this, v => v))
+                : typeof(T) == typeof(long?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<long>(null, new ReinterpretedTableColumn<ushort, long>(this, v => v))
+                : typeof(T) == typeof(ulong?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<ulong>(null, new ReinterpretedTableColumn<ushort, ulong>(this, v => v))
+                : base.TryReinterpret<T>();
         }
     }
 }

@@ -33,7 +33,9 @@ namespace Octonica.ClickHouseClient.Utils
         public ConstantReadOnlyList([AllowNull] T value, int count)
         {
             if (count < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
 
             Count = count;
             _value = value;
@@ -51,41 +53,30 @@ namespace Octonica.ClickHouseClient.Utils
 
         public IReadOnlyListExt<T> Slice(int start, int length)
         {
-            if (start < 0 || start > Count)
-                throw new ArgumentOutOfRangeException(nameof(start));
-            if (length < 0 || start + length > Count)
-                throw new ArgumentOutOfRangeException(nameof(length));
-
-            return new ConstantReadOnlyList<T>(_value, length);
+            return start < 0 || start > Count
+                ? throw new ArgumentOutOfRangeException(nameof(start))
+                : length < 0 || start + length > Count
+                ? throw new ArgumentOutOfRangeException(nameof(length))
+                : (IReadOnlyListExt<T>)new ConstantReadOnlyList<T>(_value, length);
         }
 
         public IReadOnlyListExt<TOut> Map<TOut>(Func<T, TOut> map)
         {
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
-
-            return new ConstantReadOnlyList<TOut>(map(_value), Count);            
+            return map == null ? throw new ArgumentNullException(nameof(map)) : (IReadOnlyListExt<TOut>)new ConstantReadOnlyList<TOut>(map(_value), Count);
         }
 
         public int CopyTo(Span<T> span, int offset)
         {
             if (offset < 0 || offset > Count)
+            {
                 throw new ArgumentOutOfRangeException(nameof(offset));
+            }
 
-            var length = Math.Min(span.Length, Count - offset);
-            span.Slice(0, length).Fill(_value);
+            int length = Math.Min(span.Length, Count - offset);
+            span[..length].Fill(_value);
             return length;
         }
 
-        public T this[int index]
-        {
-            get
-            {
-                if (index >= 0 && index < Count)
-                    return _value;
-
-                throw new IndexOutOfRangeException();
-            }
-        }
+        public T this[int index] => index >= 0 && index < Count ? _value : throw new IndexOutOfRangeException();
     }
 }

@@ -29,11 +29,11 @@ using System.Runtime.InteropServices;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
-    internal abstract class CompressionEncoderBase: IDisposable
+    internal abstract class CompressionEncoderBase : IDisposable
     {
         private readonly int _bufferSize;
-        private readonly List<(byte[] buffer, int position)> _buffers = new List<(byte[] buffer, int position)>();
-        private readonly List<(int bufferIndex, int offset, int length)> _sequences = new List<(int bufferIndex, int offset, int length)>();
+        private readonly List<(byte[] buffer, int position)> _buffers = [];
+        private readonly List<(int bufferIndex, int offset, int length)> _sequences = [];
 
         private int _acquiredBufferIndex = -1;
 
@@ -48,13 +48,13 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public Span<byte> GetSpan(int sizeHint)
         {
-            var (buffer, position) = AcquireBuffer(sizeHint);
+            (byte[]? buffer, int position) = AcquireBuffer(sizeHint);
             return new Span<byte>(buffer, position, buffer.Length - position);
         }
 
         public Memory<byte> GetMemory(int sizeHint)
         {
-            var (buffer, position) = AcquireBuffer(sizeHint);
+            (byte[]? buffer, int position) = AcquireBuffer(sizeHint);
             return new Memory<byte>(buffer, position, buffer.Length - position);
         }
 
@@ -66,11 +66,13 @@ namespace Octonica.ClickHouseClient.Protocol
         private (byte[] buffer, int position) AcquireBuffer(int sizeHint)
         {
             if (_acquiredBufferIndex >= 0)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is already in progress.");
-
-            for (var i = _buffers.Count - 1; i >= 0; i--)
             {
-                (var buffer, int position) = _buffers[i];
+                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is already in progress.");
+            }
+
+            for (int i = _buffers.Count - 1; i >= 0; i--)
+            {
+                (byte[]? buffer, int position) = _buffers[i];
                 if (buffer.Length - position >= sizeHint)
                 {
                     _acquiredBufferIndex = i;
@@ -79,7 +81,7 @@ namespace Octonica.ClickHouseClient.Protocol
             }
 
             _acquiredBufferIndex = _buffers.Count;
-            var nextBuffer = new byte[Math.Max(sizeHint, _bufferSize)];
+            byte[] nextBuffer = new byte[Math.Max(sizeHint, _bufferSize)];
             _buffers.Add((nextBuffer, 0));
             return (nextBuffer, 0);
         }
@@ -87,24 +89,34 @@ namespace Octonica.ClickHouseClient.Protocol
         public void Advance(int bytes)
         {
             if (bytes < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(bytes));
+            }
 
             if (_acquiredBufferIndex < 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is already completer.");
+            }
 
-            var (buffer, position) = _buffers[_acquiredBufferIndex];
+            (byte[]? buffer, int position) = _buffers[_acquiredBufferIndex];
 
             if (buffer.Length - position < bytes)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Attempt to write after the end of the memory buffer.");
+            }
 
             if (bytes > 0)
             {
                 _buffers[_acquiredBufferIndex] = (buffer, position + bytes);
                 (int bufferIndex, int offset, int length) lastSequence;
                 if (_sequences.Count == 0 || (lastSequence = _sequences[^1]).bufferIndex != _acquiredBufferIndex)
+                {
                     _sequences.Add((_acquiredBufferIndex, position, bytes));
+                }
                 else
+                {
                     _sequences[^1] = (_acquiredBufferIndex, lastSequence.offset, lastSequence.length + bytes);
+                }
             }
 
             _acquiredBufferIndex = -1;
@@ -113,18 +125,24 @@ namespace Octonica.ClickHouseClient.Protocol
         public void Reset()
         {
             if (_acquiredBufferIndex >= 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is in progress.");
+            }
 
             _sequences.Clear();
 
             for (int i = 0; i < _buffers.Count; i++)
+            {
                 _buffers[i] = (_buffers[i].buffer, 0);
+            }
         }
 
         public void Complete(ReadWriteBuffer pipeWriter)
         {
             if (_acquiredBufferIndex >= 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is in progress.");
+            }
 
             /* 
              * Compressed data consist of a sequence of compressed blocks.
@@ -137,19 +155,19 @@ namespace Octonica.ClickHouseClient.Protocol
              * 5. The block of compressed data.
             */
 
-            var resultSequences = new List<(int bufferIndex, int offset, int length)>(_sequences.Count + 1);
+            List<(int bufferIndex, int offset, int length)> resultSequences = new(_sequences.Count + 1);
 
             const int cityHashSize = 2 * sizeof(ulong);
-            var header = new byte[cityHashSize + 1 + 2 * sizeof(int)];
+            byte[] header = new byte[cityHashSize + 1 + (2 * sizeof(int))];
 
-            var freeSequences = new Queue<(int bufferIndex, int offset, int length)>();
+            Queue<(int bufferIndex, int offset, int length)> freeSequences = new();
             if (_buffers.Count > 0)
             {
-                var lastBuffer = _buffers[^1];
-                if (lastBuffer.buffer.Length > lastBuffer.position)
+                (byte[] buffer, int position) = _buffers[^1];
+                if (buffer.Length > position)
                 {
-                    freeSequences.Enqueue((_buffers.Count - 1, lastBuffer.position, lastBuffer.buffer.Length - lastBuffer.position));
-                    _buffers[^1] = (lastBuffer.buffer, lastBuffer.buffer.Length);
+                    freeSequences.Enqueue((_buffers.Count - 1, position, buffer.Length - position));
+                    _buffers[^1] = (buffer, buffer.Length);
                 }
             }
 
@@ -159,8 +177,10 @@ namespace Octonica.ClickHouseClient.Protocol
             {
                 if (resultSequences.Count > 0)
                 {
-                    foreach (var sequence in resultSequences)
+                    foreach ((int bufferIndex, int offset, int length) sequence in resultSequences)
+                    {
                         freeSequences.Enqueue(sequence);
+                    }
 
                     resultSequences.Clear();
                 }
@@ -169,7 +189,7 @@ namespace Octonica.ClickHouseClient.Protocol
                 int writePosition = 0, rawSize = 0, encodedSize = 0;
                 while (sequenceIndex < _sequences.Count)
                 {
-                    var readSequence = _sequences[sequenceIndex];
+                    (int bufferIndex, int offset, int length) readSequence = _sequences[sequenceIndex];
                     if (readPosition == readSequence.length)
                     {
                         sequenceIndex++;
@@ -178,7 +198,7 @@ namespace Octonica.ClickHouseClient.Protocol
                         continue;
                     }
 
-                    var count = ConsumeNext(_buffers[readSequence.bufferIndex].buffer, readSequence.offset + readPosition, readSequence.length - readPosition);
+                    int count = ConsumeNext(_buffers[readSequence.bufferIndex].buffer, readSequence.offset + readPosition, readSequence.length - readPosition);
                     readPosition += count;
                     rawSize += count;
 
@@ -190,7 +210,9 @@ namespace Octonica.ClickHouseClient.Protocol
                 }
 
                 if (rawSize == 0)
+                {
                     break;
+                }
 
                 (int bufferIndex, int offset, int length) currentSequence = (-1, 0, 0);
                 while (true)
@@ -198,7 +220,9 @@ namespace Octonica.ClickHouseClient.Protocol
                     if (writePosition == currentSequence.length)
                     {
                         if (currentSequence.length > 0)
+                        {
                             resultSequences.Add(currentSequence);
+                        }
 
                         if (freeSequences.Count > 0)
                         {
@@ -221,28 +245,32 @@ namespace Octonica.ClickHouseClient.Protocol
                     writePosition += result;
 
                     if (writePosition < currentSequence.length)
+                    {
                         break;
+                    }
                 }
 
                 if (writePosition > 0)
+                {
                     resultSequences.Add((currentSequence.bufferIndex, currentSequence.offset, writePosition));
+                }
 
                 Span<byte> headerSpan = header;
                 headerSpan[cityHashSize] = AlgorithmIdentifier;
-                var success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1), encodedSize + header.Length - cityHashSize);
+                bool success = BitConverter.TryWriteBytes(headerSpan[(cityHashSize + 1)..], encodedSize + header.Length - cityHashSize);
                 Debug.Assert(success);
-                success = BitConverter.TryWriteBytes(headerSpan.Slice(cityHashSize + 1 + sizeof(int)), rawSize);
+                success = BitConverter.TryWriteBytes(headerSpan[(cityHashSize + 1 + sizeof(int))..], rawSize);
                 Debug.Assert(success);
 
-                var segments = new List<ReadOnlyMemory<byte>>(resultSequences.Count + 1) {new ReadOnlyMemory<byte>(header)};
+                List<ReadOnlyMemory<byte>> segments = new(resultSequences.Count + 1) { new(header) };
                 segments.AddRange(resultSequences.Select(s => new ReadOnlyMemory<byte>(_buffers[s.bufferIndex].buffer, s.offset, s.length)));
-                var dataSegment = new SimpleReadOnlySequenceSegment<byte>(segments);
+                SimpleReadOnlySequenceSegment<byte> dataSegment = new(segments);
 
-                var dataSequence = new ReadOnlySequence<byte>(dataSegment, 0, dataSegment.LastSegment, dataSegment.LastSegment.Memory.Length);
-                var cityHash = CityHash.CityHash128(dataSequence.Slice(cityHashSize));
+                ReadOnlySequence<byte> dataSequence = new(dataSegment, 0, dataSegment.LastSegment, dataSegment.LastSegment.Memory.Length);
+                UInt128 cityHash = CityHash.CityHash128(dataSequence.Slice(cityHashSize));
 
 #if NET8_0_OR_GREATER
-                var cityHashBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref cityHash, 1));
+                ReadOnlySpan<byte> cityHashBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref cityHash, 1));
                 Debug.Assert(cityHashBytes.Length == 16);
                 cityHashBytes.CopyTo(headerSpan);
 #else
@@ -254,14 +282,14 @@ namespace Octonica.ClickHouseClient.Protocol
 
                 for (ReadOnlySequenceSegment<byte>? segment = dataSegment; segment != null; segment = segment.Next)
                 {
-                    var sourceMem = segment.Memory;
+                    ReadOnlyMemory<byte> sourceMem = segment.Memory;
                     while (true)
                     {
-                        var targetMem = pipeWriter.GetMemory();
+                        Memory<byte> targetMem = pipeWriter.GetMemory();
                         if (sourceMem.Length > targetMem.Length)
                         {
-                            sourceMem.Slice(0, targetMem.Length).CopyTo(targetMem);
-                            sourceMem = sourceMem.Slice(targetMem.Length);
+                            sourceMem[..targetMem.Length].CopyTo(targetMem);
+                            sourceMem = sourceMem[targetMem.Length..];
                             pipeWriter.ConfirmWrite(targetMem.Length);
                         }
                         else

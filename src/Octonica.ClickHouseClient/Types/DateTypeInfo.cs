@@ -72,9 +72,11 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(DateTime value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 if (isNested)
+                {
                     strVal = $"'{strVal}'";
+                }
 
                 valueWriter = new SimpleLiteralValueWriter(strVal.AsMemory());
                 return true;
@@ -82,7 +84,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, DateTime value)
             {
-                var strVal = ValueToString(value);
+                string strVal = ValueToString(value);
                 return queryBuilder.Append('\'').Append(strVal).Append("'::").Append(_typeInfo.ComplexTypeName);
             }
 
@@ -94,13 +96,11 @@ namespace Octonica.ClickHouseClient.Types
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static string ValueToString(DateTime value)
             {
-                if (value == default)
-                    return DefaultValueStr;
-
-                if (value < DateTime.UnixEpoch || value > MaxDateTimeValue)
-                    throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch}, {MaxDateTimeValue}].");
-
-                return value.ToString(FormatStr, CultureInfo.InvariantCulture);
+                return value == default
+                    ? DefaultValueStr
+                    : value < DateTime.UnixEpoch || value > MaxDateTimeValue
+                    ? throw new OverflowException($"The value must be in range [{DateTime.UnixEpoch}, {MaxDateTimeValue}].")
+                    : value.ToString(FormatStr, CultureInfo.InvariantCulture);
             }
         }
     }

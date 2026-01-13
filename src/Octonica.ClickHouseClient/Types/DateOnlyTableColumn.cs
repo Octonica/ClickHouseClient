@@ -30,12 +30,11 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(DateTime))
-                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue));
-            if (typeof(T) == typeof(DateTime?))
-                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue)));
-
-            return base.TryReinterpret<T>();
+            return typeof(T) == typeof(DateTime)
+                ? (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue))
+                : typeof(T) == typeof(DateTime?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue)))
+                : base.TryReinterpret<T>();
         }
     }
 }

@@ -33,10 +33,9 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override DecimalTypeInfoBase CloneWithOptions(string complexTypeName, int? precision, int scale)
         {
-            if (precision == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The precision is required for the type \"{TypeName}\".");
-
-            return new DecimalTypeInfo(TypeName, complexTypeName, precision.Value, scale);
+            return precision == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The precision is required for the type \"{TypeName}\".")
+                : (DecimalTypeInfoBase)new DecimalTypeInfo(TypeName, complexTypeName, precision.Value, scale);
         }
     }
 }

@@ -15,6 +15,10 @@
  */
 #endregion
 
+using NodaTime;
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -22,10 +26,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
-using NodaTime;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -57,42 +57,36 @@ namespace Octonica.ClickHouseClient.Types
         static DateTime64TypeInfo()
         {
             const int maxPrecision = 9;
-            var scales = new int[maxPrecision + 1];
+            int[] scales = new int[maxPrecision + 1];
 
-            for (int i = 0; i < scales.Length; i++)
-                scales[i] = i == 0 ? 1 : checked(scales[i - 1] * 10);
-
-            var ranges = new (long min, long max)[scales.Length];
-
-            var minValue = new DateTime(1900, 1, 1);
-            var exclusiveMaxValue = new DateTime(2300, 1, 1);
-            var dateTimeTicksMin = (minValue - DateTime.UnixEpoch).Ticks;
-            var dateTimeTicksMax = (exclusiveMaxValue - DateTime.UnixEpoch).Ticks - 1;
             for (int i = 0; i < scales.Length; i++)
             {
-                long scale, rem;
-                if (scales[i] <= TimeSpan.TicksPerSecond)
-                    scale = Math.DivRem(TimeSpan.TicksPerSecond, scales[i], out rem);
-                else
-                    scale = -Math.DivRem(scales[i], TimeSpan.TicksPerSecond, out rem);
+                scales[i] = i == 0 ? 1 : checked(scales[i - 1] * 10);
+            }
+
+            (long min, long max)[] ranges = new (long min, long max)[scales.Length];
+
+            DateTime minValue = new(1900, 1, 1);
+            DateTime exclusiveMaxValue = new(2300, 1, 1);
+            long dateTimeTicksMin = (minValue - DateTime.UnixEpoch).Ticks;
+            long dateTimeTicksMax = (exclusiveMaxValue - DateTime.UnixEpoch).Ticks - 1;
+            for (int i = 0; i < scales.Length; i++)
+            {
+                long scale;
+                scale = scales[i] <= TimeSpan.TicksPerSecond
+                    ? Math.DivRem(TimeSpan.TicksPerSecond, scales[i], out long rem)
+                    : -Math.DivRem(scales[i], TimeSpan.TicksPerSecond, out rem);
 
                 if (rem != 0)
+                {
                     throw new InvalidOperationException($"Internal error. Expected that the value of {typeof(TimeSpan)}.{nameof(TimeSpan.TicksPerSecond)} is a power of 10.");
+                }
 
                 scales[i] = checked((int)scale);
 
-                long max;
-                if (scale < 0)
-                    max = Math.Min(dateTimeTicksMax, long.MaxValue / -scale);
-                else
-                    max = dateTimeTicksMax;
+                long max = scale < 0 ? Math.Min(dateTimeTicksMax, long.MaxValue / -scale) : dateTimeTicksMax;
 
-                long min;
-                if (scale < 0)
-                    min = Math.Max(dateTimeTicksMin, long.MinValue / -scale);
-                else
-                    min = dateTimeTicksMin;
-
+                long min = scale < 0 ? Math.Max(dateTimeTicksMin, long.MinValue / -scale) : dateTimeTicksMin;
                 ranges[i] = (min, max);
             }
 
@@ -110,9 +104,14 @@ namespace Octonica.ClickHouseClient.Types
             if (precision != null)
             {
                 if (precision.Value < 0)
+                {
                     throw new ArgumentOutOfRangeException(nameof(precision), "The precision must be a non-negative number.");
+                }
+
                 if (precision.Value >= DateTimeTicksScales.Length)
+                {
                     throw new ArgumentOutOfRangeException(nameof(precision), $"The precision can't be greater than {DateTimeTicksScales.Length - 1}.");
+                }
             }
 
             _explicitTimeZoneCode = explicitTimeZoneCode;
@@ -122,17 +121,15 @@ namespace Octonica.ClickHouseClient.Types
             if (timeZoneCode != null && _explicitTimeZoneCode)
             {
                 if (precision == null)
+                {
                     throw new ArgumentNullException(nameof(precision));
+                }
 
                 ComplexTypeName = string.Format(CultureInfo.InvariantCulture, "{0}({1}, '{2}')", TypeName, precision.Value, timeZoneCode);
             }
-            else if (precision != null)
-            {
-                ComplexTypeName = string.Format(CultureInfo.InvariantCulture, "{0}({1})", TypeName, precision.Value);
-            }
             else
             {
-                ComplexTypeName = TypeName;
+                ComplexTypeName = precision != null ? string.Format(CultureInfo.InvariantCulture, "{0}({1})", TypeName, precision.Value) : TypeName;
             }
         }
 
@@ -166,7 +163,9 @@ namespace Octonica.ClickHouseClient.Types
 
                 case 1:
                     if (_timeZoneCode != null && _explicitTimeZoneCode)
+                    {
                         return _timeZoneCode;
+                    }
 
                     goto default;
 
@@ -177,7 +176,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            var timeZone = GetTimeZone();
+            DateTimeZone timeZone = GetTimeZone();
             return new DateTime64Reader(rowCount, _precision ?? DefaultPrecision, timeZone);
         }
 
@@ -190,27 +189,28 @@ namespace Octonica.ClickHouseClient.Types
         {
             if (typeof(T) == typeof(DateTime))
             {
-                var timeZone = GetTimeZone();
+                DateTimeZone timeZone = GetTimeZone();
                 return new DateTimeWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, timeZone, (IReadOnlyList<DateTime>)rows);
             }
 
             if (typeof(T) == typeof(DateTimeOffset))
             {
-                var timeZone = GetTimeZone();
+                DateTimeZone timeZone = GetTimeZone();
                 return new DateTimeOffsetWriter(columnName, ComplexTypeName, _precision ?? DefaultPrecision, timeZone, (IReadOnlyList<DateTimeOffset>)rows);
             }
 
-            if (typeof(T) == typeof(ulong))
-                return new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, (IReadOnlyList<ulong>)rows);
-
-            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            return typeof(T) == typeof(ulong)
+                ? (IClickHouseColumnWriter)new UInt64TypeInfo.UInt64Writer(columnName, ComplexTypeName, (IReadOnlyList<ulong>)rows)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object? converter = default(T) switch
             {
@@ -226,16 +226,22 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (options.Count > 2)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
+            }
 
-            if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var precision))
+            if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out int precision))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The first argument (precision) of the type \"{TypeName}\" must be an integer.");
+            }
             else if (precision < 0)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The precision value for the type \"{TypeName}\" must be a non-negative number.");
+            }
 
             if (options.Count == 2)
             {
-                var tzCode = options[1].Trim('\'').ToString();
+                string tzCode = options[1].Trim('\'').ToString();
                 return new DateTime64TypeInfo(precision, tzCode, true);
             }
 
@@ -250,10 +256,14 @@ namespace Octonica.ClickHouseClient.Types
         private DateTimeZone GetTimeZone()
         {
             if (_timeZone != null)
+            {
                 return _timeZone;
+            }
 
             if (_timeZoneCode == null)
+            {
                 return DateTimeZone.Utc;
+            }
 
             _timeZone = TimeZoneHelper.GetDateTimeZone(_timeZoneCode);
             return _timeZone;
@@ -298,7 +308,10 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            long IConverter<DateTime, long>.Convert(DateTime value) => Convert(value);
+            long IConverter<DateTime, long>.Convert(DateTime value)
+            {
+                return Convert(value);
+            }
 
             protected override long Convert(DateTime value)
             {
@@ -315,14 +328,20 @@ namespace Octonica.ClickHouseClient.Types
             internal static long ScaleTicks(long ticks, int scaleFactor)
             {
                 if (scaleFactor < 0)
+                {
                     return checked(ticks * -scaleFactor);
+                }
 
                 if (ticks >= 0)
+                {
                     return ticks / scaleFactor;
+                }
 
-                var result = Math.DivRem(ticks, scaleFactor, out var rem);
+                long result = Math.DivRem(ticks, scaleFactor, out long rem);
                 if (rem != 0)
+                {
                     --result;
+                }
 
                 return result;
             }
@@ -342,7 +361,10 @@ namespace Octonica.ClickHouseClient.Types
                 _timeZone = timeZone;
             }
 
-            long IConverter<DateTimeOffset, long>.Convert(DateTimeOffset value) => Convert(value);
+            long IConverter<DateTimeOffset, long>.Convert(DateTimeOffset value)
+            {
+                return Convert(value);
+            }
 
             protected override long Convert(DateTimeOffset value)
             {
@@ -371,36 +393,36 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var ticks = Convert(value);
-                var str = ticks.ToString(CultureInfo.InvariantCulture);
+                long ticks = Convert(value);
+                string str = ticks.ToString(CultureInfo.InvariantCulture);
                 valueWriter = new SimpleLiteralValueWriter(str.AsMemory());
                 return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
-                var ticks = Convert(value);
+                long ticks = Convert(value);
 
-                queryBuilder.Append("reinterpret(cast(");
-                queryBuilder.Append(ticks.ToString(CultureInfo.InvariantCulture));
-                queryBuilder.Append(",'Int64'),'");
-                queryBuilder.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
-                queryBuilder.Append("')");
+                _ = queryBuilder.Append("reinterpret(cast(");
+                _ = queryBuilder.Append(ticks.ToString(CultureInfo.InvariantCulture));
+                _ = queryBuilder.Append(",'Int64'),'");
+                _ = queryBuilder.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
+                _ = queryBuilder.Append("')");
 
                 return queryBuilder;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                var ticksType = typeInfoProvider.GetTypeInfo("Int64");
+                IClickHouseColumnTypeInfo ticksType = typeInfoProvider.GetTypeInfo("Int64");
 
                 return writeValue(queryBuilder, ticksType, (qb, realWrite) =>
                 {
-                    qb.Append("reinterpret(");
-                    realWrite(queryBuilder);
-                    qb.Append(",'");
-                    qb.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
-                    qb.Append("')");
+                    _ = qb.Append("reinterpret(");
+                    _ = realWrite(queryBuilder);
+                    _ = qb.Append(",'");
+                    _ = qb.Append(_typeInfo.ComplexTypeName.Replace("'", "''"));
+                    _ = qb.Append("')");
                     return qb;
                 });
             }

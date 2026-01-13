@@ -25,7 +25,7 @@ namespace Octonica.ClickHouseClient.Types
 {
     internal sealed class ClickHouseColumnReinterpreter : ITypeDispatcher<IClickHouseColumnReinterpreter>
     {
-        private static readonly ClickHouseColumnReinterpreter Instance = new ClickHouseColumnReinterpreter();
+        private static readonly ClickHouseColumnReinterpreter Instance = new();
 
         private ClickHouseColumnReinterpreter()
         {
@@ -43,8 +43,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public static IClickHouseColumnReinterpreter Create<T, TRes>(Func<T, TRes> convert)
         {
-            var srcType = typeof(T);
-            var resType = typeof(TRes);
+            Type srcType = typeof(T);
+            Type resType = typeof(TRes);
             Type implTypeDef;
             if (srcType.IsValueType)
             {
@@ -72,8 +72,8 @@ namespace Octonica.ClickHouseClient.Types
                 }
             }
 
-            var implType = implTypeDef.MakeGenericType(srcType, resType);
-            var impl = Activator.CreateInstance(implType, convert);
+            Type implType = implTypeDef.MakeGenericType(srcType, resType);
+            object? impl = Activator.CreateInstance(implType, convert);
             Debug.Assert(impl != null);
 
             return (IClickHouseColumnReinterpreter)impl;
@@ -102,16 +102,15 @@ namespace Octonica.ClickHouseClient.Types
 
         public static IClickHouseTableColumn<TRes> Reinterpret<T, TRes>(IClickHouseTableColumn? root, IClickHouseTableColumn<T> column, Func<T, TRes> convert)
         {
-            if (column is IClickHouseReinterpretedTableColumn<T> rc)
-                return rc.Chain(convert);
-
-            return new ReinterpretedTableColumn<T, TRes>(root, column, convert);
+            return column is IClickHouseReinterpretedTableColumn<T> rc
+                ? rc.Chain(convert)
+                : (IClickHouseTableColumn<TRes>)new ReinterpretedTableColumn<T, TRes>(root, column, convert);
         }
     }
 
     internal sealed class ClickHouseColumnReinterpreter<T> : IClickHouseColumnReinterpreter
     {
-        public static ClickHouseColumnReinterpreter<T> Instance = new ClickHouseColumnReinterpreter<T>();
+        public static ClickHouseColumnReinterpreter<T> Instance = new();
 
         public Type BuiltInConvertToType => typeof(T);
 
@@ -142,10 +141,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn? TryReinterpret(IClickHouseTableColumn column)
         {
-            if (column is IClickHouseReinterpretedTableColumn<object> rc)
-                return rc.Chain(_convert);
-
-            return new ReinterpretedObjectTableColumn<T>(column, _convert);
+            return column is IClickHouseReinterpretedTableColumn<object> rc
+                ? rc.Chain(_convert)
+                : (IClickHouseTableColumn)new ReinterpretedObjectTableColumn<T>(column, _convert);
         }
 
         private static Func<object, T> Guard(Func<object, T> convert)
@@ -177,17 +175,25 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseTableColumn? TryReinterpret(IClickHouseTableColumn column)
         {
             if (column is NullableObjTableColumn<T> nc)
+            {
                 return nc.ReinterpretAsObj(Guard(_convert));
+            }
 
             if (column is IClickHouseTableColumn<T> c)
+            {
                 return ClickHouseColumnReinterpreter.Reinterpret(null, c, GuardNullable(_convert));
+            }
 
-            var reinterpretedColumn = column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? reinterpretedColumn = column.TryReinterpret<T>();
             if (reinterpretedColumn == null)
+            {
                 return null;
+            }
 
             if (reinterpretedColumn is NullableObjTableColumn<T> nrc)
-                nrc.ReinterpretAsObj(Guard(_convert));
+            {
+                _ = nrc.ReinterpretAsObj(Guard(_convert));
+            }
 
             return ClickHouseColumnReinterpreter.Reinterpret(column, reinterpretedColumn, GuardNullable(_convert));
         }
@@ -223,19 +229,27 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseTableColumn? TryReinterpret(IClickHouseTableColumn column)
         {
             if (column is NullableObjTableColumn<T> nullableColumn)
+            {
                 return nullableColumn.ReinterpretAsStruct(GetConvert());
+            }
 
             IClickHouseTableColumn? rootColumn = null;
-            var reinterpretedColumn = column as IClickHouseTableColumn<T>;
+            IClickHouseTableColumn<T>? reinterpretedColumn = column as IClickHouseTableColumn<T>;
             if (reinterpretedColumn == null)
+            {
                 rootColumn = column;
+            }
 
             reinterpretedColumn = column.TryReinterpret<T>();
             if (reinterpretedColumn == null)
+            {
                 return null;
+            }
 
             if (reinterpretedColumn is NullableObjTableColumn<T> nullableReinterpretedColumn)
+            {
                 return nullableReinterpretedColumn.ReinterpretAsStruct(GetConvert());
+            }
 
             if (_convert0 != null)
             {
@@ -249,12 +263,9 @@ namespace Octonica.ClickHouseClient.Types
 
         private Func<T, TRes> GetConvert()
         {
-            if (_convert1 != null)
-                return _convert1;
-            if (_convert0 != null)
-                return Guard(_convert0);
-
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
+            return _convert1 ?? (_convert0 != null
+                ? Guard(_convert0)
+                : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug."));
         }
 
         private static Func<T, TRes> Guard(Func<T, TRes?> convert)
@@ -264,7 +275,7 @@ namespace Octonica.ClickHouseClient.Types
 
         private static Func<T, TRes?> GuardNullable(Func<T, TRes?> convert)
         {
-            return v => v == null ? (TRes?)null : ClickHouseColumnReinterpreter.GuardNull(convert(v));
+            return v => v == null ? null : ClickHouseColumnReinterpreter.GuardNull(convert(v));
         }
     }
 
@@ -288,12 +299,17 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseTableColumn? TryReinterpret(IClickHouseTableColumn column)
         {
             if (column is IClickHouseTableColumn<T> structColumn)
+            {
                 return ClickHouseColumnReinterpreter.Reinterpret(null, structColumn, GetConvert());
+            }
+
             if (column is IClickHouseTableColumn<T?> nullableStructColumn)
+            {
                 return ClickHouseColumnReinterpreter.Reinterpret(null, nullableStructColumn, GetConvertNullable());
+            }
 
             IClickHouseTableColumn<T?>? reinterpretedNullableColumn;
-            var reinterpretedStructColumn = column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? reinterpretedStructColumn = column.TryReinterpret<T>();
             if (reinterpretedStructColumn is NullableStructTableColumnNotNullableAdapter<T> adapter)
             {
                 reinterpretedNullableColumn = adapter.Unguard();
@@ -307,32 +323,27 @@ namespace Octonica.ClickHouseClient.Types
                 reinterpretedNullableColumn = column.TryReinterpret<T?>();
             }
 
-            if (reinterpretedNullableColumn != null)
-            {
-                return ClickHouseColumnReinterpreter.Reinterpret(column, reinterpretedNullableColumn, GetConvertNullable());
-            }
-
-            return null;
+            return reinterpretedNullableColumn != null
+                ? ClickHouseColumnReinterpreter.Reinterpret(column, reinterpretedNullableColumn, GetConvertNullable())
+                : (IClickHouseTableColumn?)null;
         }
 
         private Func<T, TRes> GetConvert()
         {
-            if (_convert1 != null)
-                return Guard(_convert1);
-            if (_convert0 != null)
-                return Guard(_convert0);
-
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
+            return _convert1 != null
+                ? Guard(_convert1)
+                : _convert0 != null
+                ? Guard(_convert0)
+                : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
         }
 
         private Func<T?, TRes> GetConvertNullable()
         {
-            if (_convert1 != null)
-                return GuardNullable(_convert1);
-            if (_convert0 != null)
-                return GuardNullable(_convert0);
-
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
+            return _convert1 != null
+                ? GuardNullable(_convert1)
+                : _convert0 != null
+                ? GuardNullable(_convert0)
+                : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
         }
 
         private static Func<T, TRes> Guard(Func<T, TRes> convert)
@@ -388,12 +399,17 @@ namespace Octonica.ClickHouseClient.Types
         public override IClickHouseTableColumn? TryReinterpret(IClickHouseTableColumn column)
         {
             if (column is IClickHouseTableColumn<T> structColumn)
+            {
                 return ClickHouseColumnReinterpreter.Reinterpret(null, structColumn, GetConvert());
+            }
+
             if (column is IClickHouseTableColumn<T?> nullableStructColumn)
+            {
                 return ClickHouseColumnReinterpreter.Reinterpret(null, nullableStructColumn, GetConvertNullable());
+            }
 
             IClickHouseTableColumn<T?>? reinterpretedNullableColumn;
-            var reinterpretedStructColumn = column.TryReinterpret<T>();
+            IClickHouseTableColumn<T>? reinterpretedStructColumn = column.TryReinterpret<T>();
             if (reinterpretedStructColumn is NullableStructTableColumnNotNullableAdapter<T> adapter)
             {
                 reinterpretedNullableColumn = adapter.Unguard();
@@ -407,40 +423,41 @@ namespace Octonica.ClickHouseClient.Types
                 reinterpretedNullableColumn = column.TryReinterpret<T?>();
             }
 
-            if (reinterpretedNullableColumn != null)
-            {
-                return ClickHouseColumnReinterpreter.Reinterpret(column, reinterpretedNullableColumn, GetConvertNullable());
-            }
-
-            return null;
+            return reinterpretedNullableColumn != null
+                ? ClickHouseColumnReinterpreter.Reinterpret(column, reinterpretedNullableColumn, GetConvertNullable())
+                : (IClickHouseTableColumn?)null;
         }
 
         private Func<T, TRes> GetConvert()
         {
             if (_convert11 != null)
+            {
                 return _convert11;
-            if (_convert00 != null)
-                return Guard(_convert00);
-            if (_convert01 != null)
-                return Guard(_convert01);
-            if (_convert10 != null)
-                return Guard(_convert10);
+            }
 
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
+            return _convert00 != null
+                ? Guard(_convert00)
+                : _convert01 != null
+                ? Guard(_convert01)
+                : _convert10 != null
+                ? Guard(_convert10)
+                : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
         }
 
         private Func<T?, TRes?> GetConvertNullable()
         {
             if (_convert11 != null)
+            {
                 return GuardNullable(_convert11);
-            if (_convert00 != null)
-                return GuardNullable(_convert00);
-            if (_convert01 != null)
-                return GuardNullable(_convert01);
-            if (_convert10 != null)
-                return GuardNullable(_convert10);
+            }
 
-            throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
+            return _convert00 != null
+                ? GuardNullable(_convert00)
+                : _convert01 != null
+                ? GuardNullable(_convert01)
+                : _convert10 != null
+                ? GuardNullable(_convert10)
+                : throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Ivalid object state. If you see this message, please, report a bug.");
         }
 
         private static Func<T, TRes> Guard(Func<T?, TRes?> convert)
@@ -460,22 +477,22 @@ namespace Octonica.ClickHouseClient.Types
 
         public static Func<T?, TRes?> GuardNullable(Func<T?, TRes?> convert)
         {
-            return v => v == null ? (TRes?)null : ClickHouseColumnReinterpreter.GuardNull(convert(v));
+            return v => v == null ? null : ClickHouseColumnReinterpreter.GuardNull(convert(v));
         }
 
         public static Func<T?, TRes?> GuardNullable(Func<T?, TRes> convert)
         {
-            return v => v == null ? (TRes?)null : convert(v);
+            return v => v == null ? null : convert(v);
         }
 
         public static Func<T?, TRes?> GuardNullable(Func<T, TRes?> convert)
         {
-            return v => v == null ? (TRes?)null : ClickHouseColumnReinterpreter.GuardNull(convert(v.Value));
+            return v => v == null ? null : ClickHouseColumnReinterpreter.GuardNull(convert(v.Value));
         }
 
         public static Func<T?, TRes?> GuardNullable(Func<T, TRes> convert)
         {
-            return v => v == null ? (TRes?)null : convert(v.Value);
+            return v => v == null ? null : convert(v.Value);
         }
     }
 }

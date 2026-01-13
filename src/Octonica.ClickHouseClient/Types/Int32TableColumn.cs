@@ -28,12 +28,11 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(long))
-                return (IClickHouseTableColumn<T>) (object) new ReinterpretedTableColumn<int, long>(this, v => v);
-            if (typeof(T) == typeof(long?))
-                return (IClickHouseTableColumn<T>) (object) new NullableStructTableColumn<long>(null, new ReinterpretedTableColumn<int, long>(this, v => v));
-
-            return base.TryReinterpret<T>();
+            return typeof(T) == typeof(long)
+                ? (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<int, long>(this, v => v)
+                : typeof(T) == typeof(long?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<long>(null, new ReinterpretedTableColumn<int, long>(this, v => v))
+                : base.TryReinterpret<T>();
         }
     }
 }

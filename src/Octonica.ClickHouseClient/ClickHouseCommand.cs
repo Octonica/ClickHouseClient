@@ -15,6 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -26,10 +30,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Types;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -80,7 +80,9 @@ namespace Octonica.ClickHouseClient
             set
             {
                 if (value != CommandType.Text)
-                    throw new NotSupportedException($"The type of the command \"{value}\" is not supported.");                
+                {
+                    throw new NotSupportedException($"The type of the command \"{value}\" is not supported.");
+                }
             }
         }
 
@@ -100,14 +102,14 @@ namespace Octonica.ClickHouseClient
         protected override DbConnection? DbConnection
         {
             get => Connection;
-            set => Connection = (ClickHouseConnection?) value;
+            set => Connection = (ClickHouseConnection?)value;
         }
 
         /// <summary>
         /// Gets the <see cref="ClickHouseParameterCollection"/>.
         /// </summary>
         /// <returns>The parameters of the SQL statement. The default is an empty collection.</returns>
-        public new ClickHouseParameterCollection Parameters { get; } = new ClickHouseParameterCollection();
+        public new ClickHouseParameterCollection Parameters { get; } = [];
 
         /// <inheritdoc cref="Parameters"/>    
         protected sealed override DbParameterCollection DbParameterCollection => Parameters;
@@ -118,7 +120,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>
         /// The tables which should be sent along with the query. The default is an empty collection.
         /// </returns>
-        public ClickHouseTableProviderCollection TableProviders { get; } = new ClickHouseTableProviderCollection();
+        public ClickHouseTableProviderCollection TableProviders { get; } = [];
 
         /// <summary>
         /// Gets or sets the transaction within which the command executes. Always returns <b>null</b>.
@@ -131,7 +133,9 @@ namespace Octonica.ClickHouseClient
             set
             {
                 if (value != null)
+                {
                     throw new NotSupportedException($"{nameof(DbTransaction)} is read only.'");
+                }
             }
         }
 
@@ -186,12 +190,9 @@ namespace Octonica.ClickHouseClient
         /// <returns>The number of rows affected. The returned value is negative when the actual number of rows is greater than <see cref="int.MaxValue"/>.</returns>
         public override int ExecuteNonQuery()
         {
-            var result = TaskHelper.WaitNonAsyncTask(ExecuteNonQuery(false, CancellationToken.None));
+            ulong result = TaskHelper.WaitNonAsyncTask(ExecuteNonQuery(false, CancellationToken.None));
 
-            if (result > int.MaxValue)
-                return int.MinValue;
-
-            return (int) result;
+            return result > int.MaxValue ? int.MinValue : (int)result;
         }
 
         /// <summary>
@@ -204,36 +205,33 @@ namespace Octonica.ClickHouseClient
         /// </returns>
         public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
         {
-            var result = await ExecuteNonQuery(true, cancellationToken);
-            
-            if (result > int.MaxValue)
-                return int.MinValue;
+            ulong result = await ExecuteNonQuery(true, cancellationToken);
 
-            return (int) result;
+            return result > int.MaxValue ? int.MinValue : (int)result;
         }
 
         private async ValueTask<ulong> ExecuteNonQuery(bool async, CancellationToken cancellationToken)
         {
             ClickHouseTcpClient.Session? session = null;
 
-            bool cancelOnFailure = false;            
+            bool cancelOnFailure = false;
             try
             {
                 session = await OpenSession(false, async, cancellationToken);
-                var query = await SendQuery(session, CommandBehavior.Default, async, cancellationToken);
+                string query = await SendQuery(session, CommandBehavior.Default, async, cancellationToken);
 
                 cancelOnFailure = true;
                 (ulong read, ulong written) result = (0, 0), progress = (0, 0);
                 while (true)
                 {
-                    var message = await session.ReadMessage(async, cancellationToken);
+                    IServerMessage message = await session.ReadMessage(async, cancellationToken);
                     switch (message.MessageCode)
                     {
                         case ServerMessageCode.Data:
                         case ServerMessageCode.Totals:
                         case ServerMessageCode.Extremes:
-                            var dataMessage = (ServerDataMessage) message;
-                            var blockHeader = await session.SkipTable(dataMessage, async, cancellationToken);
+                            ServerDataMessage dataMessage = (ServerDataMessage)message;
+                            BlockHeader blockHeader = await session.SkipTable(dataMessage, async, cancellationToken);
                             if (blockHeader.Columns.Count == 0 && blockHeader.RowCount == 0)
                             {
                                 result = (result.read + progress.read, result.written + progress.written);
@@ -242,12 +240,12 @@ namespace Octonica.ClickHouseClient
                             continue;
 
                         case ServerMessageCode.ProfileEvents:
-                            var profileEventsMessage = (ServerDataMessage)message;
-                            await session.SkipTable(profileEventsMessage, async, cancellationToken);
+                            ServerDataMessage profileEventsMessage = (ServerDataMessage)message;
+                            _ = await session.SkipTable(profileEventsMessage, async, cancellationToken);
                             continue;
 
                         case ServerMessageCode.Error:
-                            throw ((ServerErrorMessage) message).Exception.CopyWithQuery(query);
+                            throw ((ServerErrorMessage)message).Exception.CopyWithQuery(query);
 
                         case ServerMessageCode.EndOfStream:
                             result = (result.read + progress.read, result.written + progress.written);
@@ -262,7 +260,7 @@ namespace Octonica.ClickHouseClient
                             return result.read;
 
                         case ServerMessageCode.Progress:
-                            var progressMessage = (ServerProgressMessage) message;
+                            ServerProgressMessage progressMessage = (ServerProgressMessage)message;
                             progress = (progressMessage.Rows, progressMessage.WrittenRows);
                             continue;
 
@@ -284,9 +282,11 @@ namespace Octonica.ClickHouseClient
                 // Exception can't be handled at this level
                 if (session != null)
                 {
-                    var aggrEx = await session.SetFailed(ex.InnerException, cancelOnFailure, async);
+                    Exception? aggrEx = await session.SetFailed(ex.InnerException, cancelOnFailure, async);
                     if (aggrEx != null)
+                    {
                         throw aggrEx;
+                    }
                 }
 
                 throw;
@@ -295,9 +295,11 @@ namespace Octonica.ClickHouseClient
             {
                 if (session != null)
                 {
-                    var aggrEx = await session.SetFailed(ex, cancelOnFailure, async);
+                    Exception? aggrEx = await session.SetFailed(ex, cancelOnFailure, async);
                     if (aggrEx != null)
+                    {
                         throw aggrEx;
+                    }
                 }
 
                 throw;
@@ -305,7 +307,9 @@ namespace Octonica.ClickHouseClient
             finally
             {
                 if (session != null)
+                {
                     await session.Dispose(async);
+                }
             }
         }
 
@@ -466,8 +470,8 @@ namespace Octonica.ClickHouseClient
 
         private async ValueTask<T> ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
         {
-            var result = await ExecuteScalar(columnSettings, reader => reader.GetFieldValue<T>(0), async, cancellationToken);
-            return (T) result;
+            object result = await ExecuteScalar(columnSettings, reader => reader.GetFieldValue<T>(0), async, cancellationToken);
+            return (T)result;
         }
 
         private ValueTask<object> ExecuteScalar(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
@@ -483,24 +487,36 @@ namespace Octonica.ClickHouseClient
                 reader = await ExecuteDbDataReader(CommandBehavior.Default, true, async, cancellationToken);
                 bool hasAnyColumn = reader.FieldCount > 0;
                 if (!hasAnyColumn)
+                {
                     return DBNull.Value;
+                }
 
                 if (columnSettings != null)
+                {
                     reader.ConfigureColumn(0, columnSettings);
+                }
 
                 bool hasAnyRow = async ? await reader.ReadAsync(cancellationToken) : reader.Read();
                 if (!hasAnyRow)
+                {
                     return DBNull.Value;
+                }
 
                 if (reader.IsDBNull(0))
+                {
                     return DBNull.Value;
+                }
 
-                var result = valueSelector(reader);
+                object? result = valueSelector(reader);
 
                 if (async)
+                {
                     await reader.CloseAsync();
+                }
                 else
+                {
                     reader.Close();
+                }
 
                 return result ?? DBNull.Value;
             }
@@ -509,7 +525,9 @@ namespace Octonica.ClickHouseClient
                 if (async)
                 {
                     if (reader != null)
+                    {
                         await reader.DisposeAsync();
+                    }
                 }
                 else
                 {
@@ -643,9 +661,11 @@ namespace Octonica.ClickHouseClient
                 CommandBehavior.SingleResult |
                 CommandBehavior.SingleRow;
 
-            var unknownBehaviorFlags = behavior & ~knownBehaviorFlags;
+            CommandBehavior unknownBehaviorFlags = behavior & ~knownBehaviorFlags;
             if (unknownBehaviorFlags != 0)
+            {
                 throw new ArgumentException($"Command behavior has unknown flags ({unknownBehaviorFlags}).", nameof(behavior));
+            }
 
             if (behavior.HasFlag(CommandBehavior.KeyInfo))
             {
@@ -659,21 +679,19 @@ namespace Octonica.ClickHouseClient
             if (behavior.HasFlag(CommandBehavior.SchemaOnly))
             {
                 if (behavior.HasFlag(CommandBehavior.SingleRow))
+                {
                     throw new ArgumentException($"Command behavior's flags {nameof(CommandBehavior.SchemaOnly)} and {nameof(CommandBehavior.SingleRow)} are mutualy exclusive.", nameof(behavior));
+                }
 
                 rowLimit = ClickHouseDataReaderRowLimit.Zero;
             }
-            else if (behavior.HasFlag(CommandBehavior.SingleRow))
-            {
-                rowLimit = ClickHouseDataReaderRowLimit.OneRow;
-            }
-            else if (behavior.HasFlag(CommandBehavior.SingleResult))
-            {
-                rowLimit = ClickHouseDataReaderRowLimit.OneResult;
-            }
             else
             {
-                rowLimit = ClickHouseDataReaderRowLimit.Infinite;
+                rowLimit = behavior.HasFlag(CommandBehavior.SingleRow)
+                    ? ClickHouseDataReaderRowLimit.OneRow
+                    : behavior.HasFlag(CommandBehavior.SingleResult)
+                    ? ClickHouseDataReaderRowLimit.OneResult
+                    : ClickHouseDataReaderRowLimit.Infinite;
             }
 
             ClickHouseTcpClient.Session? session = null;
@@ -681,7 +699,7 @@ namespace Octonica.ClickHouseClient
             try
             {
                 session = await OpenSession(behavior.HasFlag(CommandBehavior.CloseConnection), async, cancellationToken);
-                var query = await SendQuery(session, behavior, async, cancellationToken);
+                string query = await SendQuery(session, behavior, async, cancellationToken);
 
                 cancelOnFailure = true;
                 bool isProfileEvents;
@@ -700,8 +718,8 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.ProfileEvents:
                             isProfileEvents = true;
-                            var dataMessage = (ServerDataMessage)message;
-                            await session.SkipTable(dataMessage, async, CancellationToken.None);
+                            ServerDataMessage dataMessage = (ServerDataMessage)message;
+                            _ = await session.SkipTable(dataMessage, async, CancellationToken.None);
                             break;
 
                         case ServerMessageCode.EndOfStream:
@@ -713,23 +731,29 @@ namespace Octonica.ClickHouseClient
                 }
                 while (isProfileEvents);
 
-                var firstTable = await session.ReadTable((ServerDataMessage) message, null, async, cancellationToken);
+                ClickHouseTable firstTable = await session.ReadTable((ServerDataMessage)message, null, async, cancellationToken);
                 if (rowLimit == ClickHouseDataReaderRowLimit.Zero)
+                {
                     await session.SendCancel(async);
+                }
 
                 return new ClickHouseDataReader(firstTable, session, rowLimit, ignoreProfileEvents);
             }
             catch (ClickHouseHandledException)
             {
                 if (session != null)
+                {
                     await session.Dispose(async);
+                }
 
                 throw;
             }
             catch (ClickHouseServerException)
             {
                 if (session != null)
+                {
                     await session.Dispose(async);
+                }
 
                 throw;
             }
@@ -737,10 +761,14 @@ namespace Octonica.ClickHouseClient
             {
                 Exception? aggrEx = null;
                 if (session != null)
+                {
                     aggrEx = await session.SetFailed(ex, cancelOnFailure, async);
+                }
 
                 if (aggrEx != null)
+                {
                     throw aggrEx;
+                }
 
                 throw;
             }
@@ -754,23 +782,25 @@ namespace Octonica.ClickHouseClient
 
             try
             {
-                var parametersTable = $"_{Guid.NewGuid():N}";
-                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out var binaryParameters, out parameterWriters);
+                string parametersTable = $"_{Guid.NewGuid():N}";
+                commandText = PrepareCommandText(session.TypeInfoProvider, parametersTable, out HashSet<string>? binaryParameters, out parameterWriters);
 
                 if (binaryParameters != null && binaryParameters.Count > 0)
                 {
-                    var paramTableWriter = CreateParameterTableWriter(session.TypeInfoProvider, parametersTable, binaryParameters);
+                    IClickHouseTableWriter paramTableWriter = CreateParameterTableWriter(session.TypeInfoProvider, parametersTable, binaryParameters);
                     tableWriters = new List<IClickHouseTableWriter>(TableProviders.Count + 1) { paramTableWriter };
                 }
                 if (TableProviders.Count > 0)
                 {
                     tableWriters ??= new List<IClickHouseTableWriter>(TableProviders.Count);
-                    foreach (var tableProvider in TableProviders)
+                    foreach (IClickHouseTableProvider tableProvider in TableProviders)
                     {
                         if (tableProvider.ColumnCount == 0)
+                        {
                             continue;
+                        }
 
-                        var tableWriter = await CreateTableWriter(tableProvider, session.TypeInfoProvider, async, cancellationToken);
+                        IClickHouseTableWriter tableWriter = await CreateTableWriter(tableProvider, session.TypeInfoProvider, async, cancellationToken);
                         tableWriters.Add(tableWriter);
                     }
                 }
@@ -783,7 +813,7 @@ namespace Octonica.ClickHouseClient
             List<KeyValuePair<string, string>>? setting = null;
             if (Extremes != null)
             {
-                setting = new List<KeyValuePair<string, string>>(1) {new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")};
+                setting = [new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")];
             }
 
             if (session.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings)
@@ -799,35 +829,44 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting, Parameters = parameterWriters };
-            await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
+            ClientQueryMessage.Builder messageBuilder = new()
+            { QueryKind = QueryKind.InitialQuery, Query = commandText, Settings = setting, Parameters = parameterWriters };
+            _ = await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
         }
 
         private async ValueTask<ClickHouseTcpClient.Session> OpenSession(bool closeConnection, bool async, CancellationToken cancellationToken)
         {
-            var connection = Connection;
+            ClickHouseConnection? connection = Connection;
             if (connection == null)
+            {
                 throw new InvalidOperationException("The connection is not set. The command can't be executed without a connection.");
+            }
 
             SessionResources? resources = null;
             try
             {
-                var timeout = GetCommandTimeout(connection);
+                TimeSpan timeout = GetCommandTimeout(connection);
                 CancellationTokenSource? sessionTokenSource = null;
                 if (timeout > TimeSpan.Zero)
+                {
                     sessionTokenSource = new CancellationTokenSource(timeout);
+                }
 
                 if (closeConnection || sessionTokenSource != null)
+                {
                     resources = new SessionResources(closeConnection ? connection : null, sessionTokenSource);
-                
+                }
+
                 return await connection.OpenSession(async, resources, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
             }
             catch
             {
                 if (resources != null)
+                {
                     await resources.Release(async);
+                }
 
                 throw;
             }
@@ -840,11 +879,8 @@ namespace Octonica.ClickHouseClient
 
         private ClickHouseParameterMode GetParametersMode(ClickHouseConnection? connection)
         {
-            var mode = ParametersMode;
-            if (mode != ClickHouseParameterMode.Inherit)
-                return mode;
-
-            return connection?.ParametersMode ?? ClickHouseParameterMode.Default;
+            ClickHouseParameterMode mode = ParametersMode;
+            return mode != ClickHouseParameterMode.Inherit ? mode : connection?.ParametersMode ?? ClickHouseParameterMode.Default;
         }
 
         private IClickHouseTableWriter CreateParameterTableWriter(IClickHouseTypeInfoProvider typeInfoProvider, string tableName, HashSet<string> parameters)
@@ -854,17 +890,17 @@ namespace Octonica.ClickHouseClient
 
         private static async ValueTask<IClickHouseTableWriter> CreateTableWriter(IClickHouseTableProvider tableProvider, IClickHouseTypeInfoProvider typeInfoProvider, bool async, CancellationToken cancellationToken)
         {
-            var factories = new List<IClickHouseColumnWriterFactory>(tableProvider.ColumnCount);
+            List<IClickHouseColumnWriterFactory> factories = new(tableProvider.ColumnCount);
 
-            var rowCount = tableProvider.RowCount;
+            int rowCount = tableProvider.RowCount;
             for (int i = 0; i < tableProvider.ColumnCount; i++)
             {
-                var columnDescriptor = tableProvider.GetColumnDescriptor(i);
-                var typeInfo = typeInfoProvider.GetTypeInfo(columnDescriptor);
-                var columnInfo = new ColumnInfo(columnDescriptor.ColumnName, typeInfo);
-                var column = tableProvider.GetColumn(i);
+                IClickHouseColumnDescriptor columnDescriptor = tableProvider.GetColumnDescriptor(i);
+                IClickHouseColumnTypeInfo typeInfo = typeInfoProvider.GetTypeInfo(columnDescriptor);
+                ColumnInfo columnInfo = new(columnDescriptor.ColumnName, typeInfo);
+                object column = tableProvider.GetColumn(i);
 
-                var factory = await ClickHouseColumnWriter.CreateColumnWriterFactory(columnInfo, column, i, rowCount, columnDescriptor.Settings, async, cancellationToken);
+                IClickHouseColumnWriterFactory factory = await ClickHouseColumnWriter.CreateColumnWriterFactory(columnInfo, column, i, rowCount, columnDescriptor.Settings, async, cancellationToken);
                 factories.Add(factory);
             }
 
@@ -873,76 +909,86 @@ namespace Octonica.ClickHouseClient
 
         private string PrepareCommandText(IClickHouseTypeInfoProvider typeInfoProvider, string parametersTable, out HashSet<string>? binaryParameters, out Dictionary<string, ClickHouseParameterWriter>? parameterWriters)
         {
-            var query = CommandText;
+            string query = CommandText;
             if (string.IsNullOrEmpty(query))
+            {
                 throw new InvalidOperationException("Command text is not defined.");
+            }
 
-            var parameterPositions = GetParameterPositions(query);
+            List<(int offset, int length, int typeSeparatorIdx)> parameterPositions = GetParameterPositions(query);
             binaryParameters = null;
             parameterWriters = null;
             if (parameterPositions.Count == 0)
+            {
                 return query;
+            }
 
-            var inheritParameterMode = GetParametersMode(Connection);
-            var queryStringBuilder = new StringBuilder(query.Length);
+            ClickHouseParameterMode inheritParameterMode = GetParametersMode(Connection);
+            StringBuilder queryStringBuilder = new(query.Length);
             for (int i = 0; i < parameterPositions.Count; i++)
             {
-                var (offset, length, typeSeparatorIdx) = parameterPositions[i];
+                (int offset, int length, int typeSeparatorIdx) = parameterPositions[i];
 
-                var start = i > 0 ? parameterPositions[i - 1].offset + parameterPositions[i - 1].length : 0;
-                queryStringBuilder.Append(query, start, parameterPositions[i].offset - start);
+                int start = i > 0 ? parameterPositions[i - 1].offset + parameterPositions[i - 1].length : 0;
+                _ = queryStringBuilder.Append(query, start, parameterPositions[i].offset - start);
 
-                var parameterName = typeSeparatorIdx < 0 ? query.Substring(offset, length) : query.Substring(offset + 1, typeSeparatorIdx - 1);
-                if (!Parameters.TryGetValue(parameterName, out var parameter))
+                string parameterName = typeSeparatorIdx < 0 ? query.Substring(offset, length) : query.Substring(offset + 1, typeSeparatorIdx - 1);
+                if (!Parameters.TryGetValue(parameterName, out ClickHouseParameter? parameter))
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
+                }
 
                 if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append("(CAST(");
+                {
+                    _ = queryStringBuilder.Append("(CAST(");
+                }
 
-                var parameterMode = parameter.GetParameterMode(inheritParameterMode);
+                ClickHouseParameterMode parameterMode = parameter.GetParameterMode(inheritParameterMode);
                 switch (parameterMode)
                 {
                     case ClickHouseParameterMode.Interpolate:
-                    {
-                        var parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
-                        parameterWriter.Interpolate(queryStringBuilder.Append(' ')).Append(' ');
-                        break;
-                    }
+                        {
+                            ClickHouseParameterWriter parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
+                            _ = parameterWriter.Interpolate(queryStringBuilder.Append(' ')).Append(' ');
+                            break;
+                        }
 
                     case ClickHouseParameterMode.Default:
                     case ClickHouseParameterMode.Binary:
                         binaryParameters ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        binaryParameters.Add(parameter.Id);
-                        queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
+                        _ = binaryParameters.Add(parameter.Id);
+                        _ = queryStringBuilder.Append("(SELECT ").Append(parametersTable).Append('.').Append(parameter.Id).Append(" FROM ").Append(parametersTable).Append(')');
                         break;
 
                     case ClickHouseParameterMode.Serialize:
-                    {
-                        parameterWriters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
-                        if (!parameterWriters.TryGetValue(parameter.Id, out var parameterWriter))
                         {
-                            parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
-                            parameterWriters.Add(parameter.Id, parameterWriter);
+                            parameterWriters ??= new Dictionary<string, ClickHouseParameterWriter>(StringComparer.OrdinalIgnoreCase);
+                            if (!parameterWriters.TryGetValue(parameter.Id, out ClickHouseParameterWriter? parameterWriter))
+                            {
+                                parameterWriter = parameter.CreateParameterWriter(typeInfoProvider);
+                                parameterWriters.Add(parameter.Id, parameterWriter);
+                            }
+
+                            _ = parameterWriter.Interpolate(
+                                queryStringBuilder,
+                                typeInfoProvider,
+                                (qb, tp) => qb.Append('{').Append(parameter.Id).Append(':').Append(tp.ComplexTypeName).Append('}'));
+
+                            break;
                         }
-
-                        parameterWriter.Interpolate(
-                            queryStringBuilder,
-                            typeInfoProvider,
-                            (qb, tp) => qb.Append('{').Append(parameter.Id).Append(':').Append(tp.ComplexTypeName).Append('}'));
-
-                        break;
-                    }
 
                     default:
                         throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Unexpected parameter mode: {parameterMode}.");
                 }
 
                 if (typeSeparatorIdx >= 0)
-                    queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
+                {
+                    _ = queryStringBuilder.Append(" AS ").Append(query, offset + typeSeparatorIdx + 1, length - typeSeparatorIdx - 2).Append("))");
+                }
             }
 
-            var lastPartStart = parameterPositions[^1].offset + parameterPositions[^1].length;
-            queryStringBuilder.Append(query, lastPartStart, query.Length - lastPartStart);
+            int lastPartStart = parameterPositions[^1].offset + parameterPositions[^1].length;
+            _ = queryStringBuilder.Append(query, lastPartStart, query.Length - lastPartStart);
 
             return queryStringBuilder.ToString();
         }
@@ -952,34 +998,40 @@ namespace Octonica.ClickHouseClient
             // Searching parameters outside of comments, string literals and escaped identifiers
             // https://github.com/ClickHouse/ClickHouse/blob/master/docs/en/query_language/syntax.md
 
-            var identifierRegex = new Regex(@"^[a-zA-Z_][0-9a-zA-Z_]*(\:.+)?$");
-            var simpleIdentifierRegex = new Regex("^[a-zA-Z_][0-9a-zA-Z_]*");
-            ReadOnlySpan<char> significantChars = stackalloc char[7] { '-', '\'', '"', '`', '/', '{' , '@' };
+            Regex identifierRegex = new(@"^[a-zA-Z_][0-9a-zA-Z_]*(\:.+)?$");
+            Regex simpleIdentifierRegex = new("^[a-zA-Z_][0-9a-zA-Z_]*");
+            ReadOnlySpan<char> significantChars = stackalloc char[7] { '-', '\'', '"', '`', '/', '{', '@' };
             ReadOnlySpan<char> querySlice = query;
 
-            var parameterPositions = new List<(int offset, int length, int typeSeparatorIdx)>();
+            List<(int offset, int length, int typeSeparatorIdx)> parameterPositions = new();
 
             int position = 0;
             while (!querySlice.IsEmpty)
             {
-                var idx = querySlice.IndexOfAny(significantChars);
+                int idx = querySlice.IndexOfAny(significantChars);
                 if (idx < 0)
+                {
                     break;
+                }
 
-                var ch = querySlice[idx];
+                char ch = querySlice[idx];
 
                 position += idx + 1;
-                querySlice = querySlice.Slice(idx + 1);
+                querySlice = querySlice[(idx + 1)..];
                 if (querySlice.IsEmpty)
+                {
                     break;
+                }
 
                 switch (ch)
                 {
                     case '-':
                         if (querySlice[0] != '-')
+                        {
                             break;
+                        }
 
-                        var endOfCommentIdx = querySlice.IndexOfAny('\r', '\n');
+                        int endOfCommentIdx = querySlice.IndexOfAny('\r', '\n');
                         if (endOfCommentIdx < 0)
                         {
                             position += querySlice.Length;
@@ -988,7 +1040,7 @@ namespace Octonica.ClickHouseClient
                         else
                         {
                             position += endOfCommentIdx + 1;
-                            querySlice = querySlice.Slice(endOfCommentIdx + 1);
+                            querySlice = querySlice[(endOfCommentIdx + 1)..];
                         }
 
                         break;
@@ -996,7 +1048,7 @@ namespace Octonica.ClickHouseClient
                     case '\'':
                     case '"':
                     case '`':
-                        var tokenLen = ClickHouseSyntaxHelper.GetQuotedTokenLength(((ReadOnlySpan<char>) query).Slice(position - 1), ch);
+                        int tokenLen = ClickHouseSyntaxHelper.GetQuotedTokenLength(((ReadOnlySpan<char>)query)[(position - 1)..], ch);
                         if (tokenLen < 0)
                         {
                             position += querySlice.Length;
@@ -1005,20 +1057,22 @@ namespace Octonica.ClickHouseClient
                         else
                         {
                             position += tokenLen - 1;
-                            querySlice = querySlice.Slice(tokenLen - 1);
+                            querySlice = querySlice[(tokenLen - 1)..];
                         }
 
                         break;
 
                     case '/':
                         if (querySlice[0] != '*')
+                        {
                             break;
+                        }
 
                         ++position;
-                        querySlice = querySlice.Slice(1);
+                        querySlice = querySlice[1..];
                         while (!querySlice.IsEmpty)
                         {
-                            var endOfMultilineCommentIdx = querySlice.IndexOf('*');
+                            int endOfMultilineCommentIdx = querySlice.IndexOf('*');
                             if (endOfMultilineCommentIdx < 0)
                             {
                                 position += querySlice.Length;
@@ -1027,11 +1081,11 @@ namespace Octonica.ClickHouseClient
                             else
                             {
                                 position += endOfMultilineCommentIdx + 1;
-                                querySlice = querySlice.Slice(endOfMultilineCommentIdx + 1);
+                                querySlice = querySlice[(endOfMultilineCommentIdx + 1)..];
                                 if (querySlice.Length > 0 && querySlice[0] == '/')
                                 {
                                     ++position;
-                                    querySlice = querySlice.Slice(1);
+                                    querySlice = querySlice[1..];
                                     break;
                                 }
                             }
@@ -1040,7 +1094,7 @@ namespace Octonica.ClickHouseClient
                         break;
 
                     case '{':
-                        var closeIdx = querySlice.IndexOf('}');
+                        int closeIdx = querySlice.IndexOf('}');
                         if (closeIdx < 0)
                         {
                             position += querySlice.Length;
@@ -1048,31 +1102,35 @@ namespace Octonica.ClickHouseClient
                             break;
                         }
 
-                        var match = identifierRegex.Match(query, position, closeIdx);
+                        Match match = identifierRegex.Match(query, position, closeIdx);
                         if (match.Success)
                         {
                             if (match.Groups[1].Success)
+                            {
                                 parameterPositions.Add((position - 1, closeIdx + 2, match.Groups[1].Index - position + 1));
+                            }
                             else
+                            {
                                 parameterPositions.Add((position - 1, closeIdx + 2, -1));
+                            }
                         }
 
                         position += closeIdx + 1;
-                        querySlice = querySlice.Slice(closeIdx + 1);
+                        querySlice = querySlice[(closeIdx + 1)..];
                         break;
 
                     case '@':
-                        var simpleMatch = simpleIdentifierRegex.Match(query, position, querySlice.Length);
+                        Match simpleMatch = simpleIdentifierRegex.Match(query, position, querySlice.Length);
                         if (simpleMatch.Success)
                         {
-                            var len = simpleMatch.Groups[0].Length;
+                            int len = simpleMatch.Groups[0].Length;
                             parameterPositions.Add((position - 1, len + 1, -1));
-                            
+
                             position += len;
-                            querySlice = querySlice.Slice(len);
+                            querySlice = querySlice[len..];
                         }
 
-                        break;                        
+                        break;
 
                     default:
                         throw new NotSupportedException($"Internal error. Unexpected character \"{ch}\".");

@@ -15,13 +15,13 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -40,10 +40,9 @@ namespace Octonica.ClickHouseClient.Types
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -53,10 +52,9 @@ namespace Octonica.ClickHouseClient.Types
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateSkippingColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateSkippingColumnReader(rowCount)
+                : throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
@@ -66,11 +64,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
-            if (type == typeof(DBNull))
-                return (IClickHouseParameterWriter<T>)(object)NothingParameterWriter.Instance;
-
-            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            Type type = typeof(T);
+            return type == typeof(DBNull)
+                ? (IClickHouseParameterWriter<T>)(object)NothingParameterWriter.Instance
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         IClickHouseColumnTypeInfo IClickHouseColumnTypeInfo.GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
@@ -107,9 +104,11 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (_position >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
-                var size = (int)Math.Min(sequence.Length, _rowCount - _position);
+                int size = (int)Math.Min(sequence.Length, _rowCount - _position);
                 _position += size;
                 return new SequenceSize(size, size);
             }
@@ -139,9 +138,11 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var size = Math.Min(_count - _position, writeTo.Length);
+                int size = Math.Min(_count - _position, writeTo.Length);
                 for (int i = 0; i < size; i++)
+                {
                     writeTo[i] = 48; // 48 == NOTHING
+                }
 
                 _position += size;
                 return new SequenceSize(size, size);
@@ -150,7 +151,7 @@ namespace Octonica.ClickHouseClient.Types
 
         internal sealed class NothingParameterWriter : IClickHouseParameterWriter<DBNull>
         {
-            public static readonly NothingParameterWriter Instance = new NothingParameterWriter();
+            public static readonly NothingParameterWriter Instance = new();
 
             private NothingParameterWriter()
             {
@@ -169,7 +170,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                var nothingType = typeInfoProvider.GetTypeInfo("Nothing");
+                IClickHouseColumnTypeInfo nothingType = typeInfoProvider.GetTypeInfo("Nothing");
                 return writeValue(queryBuilder, nothingType, (qb, _) => qb.Append("null"));
             }
         }

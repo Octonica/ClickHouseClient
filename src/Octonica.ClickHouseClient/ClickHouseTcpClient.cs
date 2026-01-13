@@ -15,6 +15,10 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,16 +27,12 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Types;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
     internal sealed class ClickHouseTcpClient : IDisposable
     {
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _semaphore = new(1, 1);
 
         private readonly TcpClient _client;
         private readonly ClickHouseConnectionSettings _settings;
@@ -68,17 +68,21 @@ namespace Octonica.ClickHouseClient
 
         public async ValueTask<Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
-            var state = (ClickHouseTcpClientState)_state;
+            ClickHouseTcpClientState state = (ClickHouseTcpClientState)_state;
             if (state != ClickHouseTcpClientState.Failed)
             {
                 try
                 {
                     if (async)
+                    {
                         await _semaphore.WaitAsync(cancellationToken);
+                    }
                     else
+                    {
                         _semaphore.Wait(cancellationToken);
+                    }
 
-                    var previousState = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)ClickHouseTcpClientState.Active, (int)ClickHouseTcpClientState.Ready);
+                    ClickHouseTcpClientState previousState = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)ClickHouseTcpClientState.Active, (int)ClickHouseTcpClientState.Ready);
                     Debug.Assert(previousState != ClickHouseTcpClientState.Active);
                     state = previousState == ClickHouseTcpClientState.Ready ? ClickHouseTcpClientState.Active : previousState;
                 }
@@ -87,14 +91,18 @@ namespace Octonica.ClickHouseClient
                     // Reading an actual state without modification of field _state
                     state = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)state, (int)state);
                     if (state != ClickHouseTcpClientState.Failed)
+                    {
                         throw;
+                    }
                 }
             }
 
             if (state == ClickHouseTcpClientState.Failed)
             {
                 if (_unhandledException != null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.", _unhandledException);
+                }
 
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.");
             }
@@ -105,7 +113,7 @@ namespace Octonica.ClickHouseClient
             }
             catch
             {
-                _semaphore.Release();
+                _ = _semaphore.Release();
                 throw;
             }
         }
@@ -115,11 +123,13 @@ namespace Octonica.ClickHouseClient
             switch (message.MessageCode)
             {
                 case ServerMessageCode.TimezoneUpdate:
-                    var timezone = ((ServerTimeZoneUpdateMessage)message).Timezone;
+                    string timezone = ((ServerTimeZoneUpdateMessage)message).Timezone;
                     if (string.Equals(timezone, ServerInfo.Timezone, StringComparison.Ordinal))
+                    {
                         return true;
+                    }
 
-                    var updServerInfo = ServerInfo.WithTimezone(timezone);
+                    ClickHouseServerInfo updServerInfo = ServerInfo.WithTimezone(timezone);
                     _typeInfoProvider = _typeInfoProvider.Configure(updServerInfo);
                     ServerInfo = updServerInfo;
                     return true;
@@ -183,16 +193,16 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var writer = _client._writer;
+                ClickHouseBinaryProtocolWriter writer = _client._writer;
                 ClientQueryMessage queryMessage;
                 try
                 {
-                    var settings = _client._settings;
+                    ClickHouseConnectionSettings settings = _client._settings;
 
                     messageBuilder.ClientName = settings.ClientName;
                     messageBuilder.ClientVersion = settings.ClientVersion;
                     messageBuilder.Host = settings.Host;
-                    messageBuilder.RemoteAddress = ((IPEndPoint?) _client._client.Client.RemoteEndPoint)?.ToString();
+                    messageBuilder.RemoteAddress = ((IPEndPoint?)_client._client.Client.RemoteEndPoint)?.ToString();
                     messageBuilder.ProtocolRevision = _client.ServerInfo.Revision;
                     messageBuilder.CompressionEnabled = _client._settings.Compress;
 
@@ -211,8 +221,10 @@ namespace Octonica.ClickHouseClient
 
                     if (tables != null)
                     {
-                        foreach (var table in tables)
+                        foreach (IClickHouseTableWriter table in tables)
+                        {
                             WriteTable(table);
+                        }
                     }
 
                     WriteTable(ClickHouseEmptyTableWriter.Instance);
@@ -232,7 +244,7 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var writer = _client._writer;
+                ClickHouseBinaryProtocolWriter writer = _client._writer;
                 try
                 {
                     queryMessage.Write(writer);
@@ -251,8 +263,8 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var writer = _client._writer;
-                writer.Write7BitInt32((int) ClientMessageCode.Cancel);
+                ClickHouseBinaryProtocolWriter writer = _client._writer;
+                writer.Write7BitInt32((int)ClientMessageCode.Cancel);
 
                 await writer.Flush(async, CancellationToken.None);
             }
@@ -261,8 +273,8 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var writer = _client._writer;
-                writer.Write7BitInt32((int) ClientMessageCode.Ping);
+                ClickHouseBinaryProtocolWriter writer = _client._writer;
+                writer.Write7BitInt32((int)ClientMessageCode.Ping);
 
                 await WithCancellationToken(cancellationToken, ct => writer.Flush(async, ct));
             }
@@ -286,12 +298,12 @@ namespace Octonica.ClickHouseClient
 
             private void WriteTable(IClickHouseTableWriter table)
             {
-                var writer = _client._writer;
+                ClickHouseBinaryProtocolWriter writer = _client._writer;
 
-                writer.Write7BitInt32((int) ClientMessageCode.Data);
+                writer.Write7BitInt32((int)ClientMessageCode.Data);
                 writer.WriteString(table.TableName);
 
-                var compression = _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
+                CompressionAlgorithm compression = _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
                 writer.BeginCompress(compression, _client._settings.CompressionBlockSize);
 
                 writer.WriteByte(BlockFieldCodes.IsOverflows);
@@ -303,31 +315,39 @@ namespace Octonica.ClickHouseClient
                 writer.Write7BitInt32(table.Columns.Count);
                 writer.Write7BitInt32(table.RowCount);
 
-                foreach (var column in table.Columns)
+                foreach (IClickHouseColumnWriter column in table.Columns)
                 {
                     writer.WriteString(column.ColumnName);
                     writer.WriteString(column.ColumnType);
 
                     if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
+                    {
                         writer.WriteBool(false); // has_custom
+                    }
 
                     if (table.RowCount == 0)
+                    {
                         continue;
+                    }
 
                     while (true)
                     {
-                        var size = writer.WriteRaw(mem => column.WritePrefix(mem.Span));
+                        SequenceSize size = writer.WriteRaw(mem => column.WritePrefix(mem.Span));
                         if (size.Elements == 1)
+                        {
                             break;
+                        }
 
                         if (size.Elements != 0)
+                        {
                             throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. A column writer returned an unexpected number of prefixes: {size.Elements}.");
+                        }
                     }
 
                     int rowCount = table.RowCount;
                     while (rowCount > 0)
                     {
-                        var size = writer.WriteRaw(mem => column.WriteNext(mem.Span));
+                        SequenceSize size = writer.WriteRaw(mem => column.WriteNext(mem.Span));
                         rowCount -= size.Elements;
                     }
                 }
@@ -353,9 +373,9 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseReaderColumnSettings>? columnSettings, bool async, CancellationToken cancellationToken)
             {
-                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+                bool withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
 
-                var result = await WithCancellationToken(
+                (List<ColumnInfo> columnInfos, List<IClickHouseTableColumn> columns, int rowCount) result = await WithCancellationToken(
                     cancellationToken,
                     ct =>
                         ReadTable(
@@ -367,14 +387,14 @@ namespace Octonica.ClickHouseClient
                 );
 
                 Debug.Assert(result.columns != null);
-                var blockHeader = new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
+                BlockHeader blockHeader = new(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
                 return new ClickHouseTable(blockHeader, result.columns.AsReadOnly());
             }
 
             public async ValueTask<BlockHeader> SkipTable(ServerDataMessage dataMessage, bool async, CancellationToken cancellationToken)
             {
-                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
-                var result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount, mode) => typeInfo.CreateSkippingColumnReader(rowCount, mode), null, async, ct));
+                bool withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+                (List<ColumnInfo> columnInfos, List<IClickHouseTableColumn> columns, int rowCount) result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount, mode) => typeInfo.CreateSkippingColumnReader(rowCount, mode), null, async, ct));
                 return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
             }
 
@@ -388,8 +408,8 @@ namespace Octonica.ClickHouseClient
             {
                 CheckDisposed();
 
-                var compression = withDecompression && _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
-                var reader = _client._reader;
+                CompressionAlgorithm compression = withDecompression && _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
+                ClickHouseBinaryProtocolReader reader = _client._reader;
                 reader.BeginDecompress(compression);
 
                 int blockFieldCode;
@@ -414,56 +434,72 @@ namespace Octonica.ClickHouseClient
                     }
                 } while (blockFieldCode != BlockFieldCodes.End);
 
-                var columnCount = await reader.Read7BitInt32(async, cancellationToken);
-                var rowCount = await reader.Read7BitInt32(async, cancellationToken);
+                int columnCount = await reader.Read7BitInt32(async, cancellationToken);
+                int rowCount = await reader.Read7BitInt32(async, cancellationToken);
 
                 if (isOverflows)
+                {
                     throw new NotImplementedException("TODO: implement support for is_overflows.");
+                }
 
-                var columnInfos = new List<ColumnInfo>(columnCount);
-                var columns = readTableColumn == null ? null : new List<IClickHouseTableColumn>(columnCount);
+                List<ColumnInfo> columnInfos = new(columnCount);
+                List<IClickHouseTableColumn>? columns = readTableColumn == null ? null : new List<IClickHouseTableColumn>(columnCount);
                 for (int i = 0; i < columnCount; i++)
                 {
-                    var columnName = await reader.ReadString(async, cancellationToken);
-                    var columnTypeName = await reader.ReadString(async, cancellationToken);
+                    string columnName = await reader.ReadString(async, cancellationToken);
+                    string columnTypeName = await reader.ReadString(async, cancellationToken);
 
-                    var serializationMode = ClickHouseColumnSerializationMode.Default;
+                    ClickHouseColumnSerializationMode serializationMode = ClickHouseColumnSerializationMode.Default;
                     if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCustomSerialization)
                     {
-                        var hasCustom = await reader.ReadBool(async, cancellationToken);
+                        bool hasCustom = await reader.ReadBool(async, cancellationToken);
                         if (hasCustom)
+                        {
                             serializationMode = ClickHouseColumnSerializationMode.Custom;
+                        }
                     }
 
-                    var columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
-                    var columnInfo = new ColumnInfo(columnName, columnType);
+                    IClickHouseColumnTypeInfo columnType = _client._typeInfoProvider.GetTypeInfo(columnTypeName);
+                    ColumnInfo columnInfo = new(columnName, columnType);
                     columnInfos.Add(columnInfo);
 
-                    var columnReader = createColumnReader(columnType, rowCount, serializationMode);
+                    TReader columnReader = createColumnReader(columnType, rowCount, serializationMode);
                     if (rowCount > 0)
                     {
                         while (true)
                         {
-                            var sequenceSize = await reader.ReadRaw(columnReader.ReadPrefix, async, cancellationToken);
+                            SequenceSize sequenceSize = await reader.ReadRaw(columnReader.ReadPrefix, async, cancellationToken);
                             if (sequenceSize.Elements == 1)
+                            {
                                 break;
+                            }
 
                             if (sequenceSize.Elements != 0)
+                            {
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {sequenceSize.Elements}.");
+                            }
                         }
                     }
 
-                    var columnRowCount = rowCount;
+                    int columnRowCount = rowCount;
                     while (columnRowCount > 0)
                     {
-                        var sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);
+                        SequenceSize sequenceSize = await reader.ReadRaw(columnReader.ReadNext, async, cancellationToken);
 
                         if (sequenceSize.Elements < 0)
+                        {
                             throw new InvalidOperationException("The number of elements must be greater than zero.");
+                        }
+
                         if (sequenceSize.Elements > columnRowCount)
+                        {
                             throw new InvalidOperationException($"The number of rows in the column \"{columnName}\" is greater than the number of rows in the table.");
+                        }
+
                         if (sequenceSize.Elements < columnRowCount)
+                        {
                             await reader.Advance(async, cancellationToken);
+                        }
 
                         columnRowCount -= sequenceSize.Elements;
                     }
@@ -471,27 +507,25 @@ namespace Octonica.ClickHouseClient
                     if (columns != null)
                     {
                         Debug.Assert(readTableColumn != null);
-                        var column = readTableColumn(columnInfo, columnReader, i);
+                        IClickHouseTableColumn column = readTableColumn(columnInfo, columnReader, i);
                         columns.Add(column);
                     }
                 }
 
                 reader.EndDecompress();
-                return (columnInfos, columns, rowCount);                
+                return (columnInfos, columns, rowCount);
             }
 
             private static IClickHouseTableColumn ReadTableColumn(ColumnInfo columnInfo, IClickHouseColumnReader columnReader, ClickHouseReaderColumnSettings settings)
             {
-                var column = columnReader.EndRead(settings.Column);
+                IClickHouseTableColumn? column = columnReader.EndRead(settings.Column) ??
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Column reader returned null for column \"{columnInfo.Name}\".");
 
-                var reinterpreter = settings.Reinterpreter;
+                IClickHouseColumnReinterpreter? reinterpreter = settings.Reinterpreter;
                 if (reinterpreter != null)
                 {
-                    var reinterpretedColumn = reinterpreter.TryReinterpret(column);
-                    if (reinterpretedColumn != null)
-                        return reinterpretedColumn;
-
-                    return new ReinterpretedTableColumn(column, CreateCastFunc(columnInfo, reinterpreter.BuiltInConvertToType, reinterpreter.ExternalConvertToType));
+                    IClickHouseTableColumn? reinterpretedColumn = reinterpreter.TryReinterpret(column);
+                    return reinterpretedColumn ?? new ReinterpretedTableColumn(column, CreateCastFunc(columnInfo, reinterpreter.BuiltInConvertToType, reinterpreter.ExternalConvertToType));
                 }
 
                 return column;
@@ -500,14 +534,18 @@ namespace Octonica.ClickHouseClient
             private static Func<object, object> CreateCastFunc(ColumnInfo columnInfo, Type? builtInConvertToType, Type? externalConvertToType)
             {
                 if ((externalConvertToType ?? builtInConvertToType) == typeof(object))
+                {
                     return value => value; // This is fine, everything is an object
+                }
 
                 return CastFailed;
 
                 object CastFailed(object value)
                 {
                     if (value == DBNull.Value)
+                    {
                         return value;
+                    }
 
                     if (builtInConvertToType != null)
                     {
@@ -535,12 +573,16 @@ namespace Octonica.ClickHouseClient
             private async ValueTask<T> WithCancellationToken<T>(CancellationToken token, Func<CancellationToken, ValueTask<T>> execute)
             {
                 if (_sessionCancellationToken == CancellationToken.None)
+                {
                     return await execute(token);
+                }
 
                 if (token == CancellationToken.None)
+                {
                     return await execute(_sessionCancellationToken);
+                }
 
-                using var linkedTs = CancellationTokenSource.CreateLinkedTokenSource(token, _sessionCancellationToken);
+                using CancellationTokenSource linkedTs = CancellationTokenSource.CreateLinkedTokenSource(token, _sessionCancellationToken);
                 try
                 {
                     return await execute(linkedTs.Token);
@@ -548,14 +590,18 @@ namespace Octonica.ClickHouseClient
                 catch (TaskCanceledException taskCanceledEx)
                 {
                     if (token.IsCancellationRequested)
+                    {
                         throw new TaskCanceledException(taskCanceledEx.Message, taskCanceledEx, token);
+                    }
 
                     throw;
                 }
                 catch (OperationCanceledException operationCanceledEx)
                 {
                     if (token.IsCancellationRequested)
+                    {
                         throw new OperationCanceledException(operationCanceledEx.Message, operationCanceledEx, token);
+                    }
 
                     throw;
                 }
@@ -575,7 +621,7 @@ namespace Octonica.ClickHouseClient
                     return;
                 }
 
-                using var linkedTs = CancellationTokenSource.CreateLinkedTokenSource(token, _sessionCancellationToken);
+                using CancellationTokenSource linkedTs = CancellationTokenSource.CreateLinkedTokenSource(token, _sessionCancellationToken);
                 try
                 {
                     await execute(linkedTs.Token);
@@ -583,14 +629,18 @@ namespace Octonica.ClickHouseClient
                 catch (TaskCanceledException taskCanceledEx)
                 {
                     if (token.IsCancellationRequested)
+                    {
                         throw new TaskCanceledException(taskCanceledEx.Message, taskCanceledEx, token);
+                    }
 
                     throw;
                 }
                 catch (OperationCanceledException operationCanceledEx)
                 {
                     if (token.IsCancellationRequested)
+                    {
                         throw new OperationCanceledException(operationCanceledEx.Message, operationCanceledEx, token);
+                    }
 
                     throw;
                 }
@@ -599,21 +649,27 @@ namespace Octonica.ClickHouseClient
             private void CheckDisposed()
             {
                 if (IsDisposed)
+                {
                     throw new ObjectDisposedException("Internal error. This object was disposed and no more has an exclusive access to the network stream.");
+                }
 
                 if (_client.State == ClickHouseTcpClientState.Failed)
                 {
                     if (_client._unhandledException != null)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.", _client._unhandledException);
+                    }
 
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "Connection is broken.");
-                }                
+                }
             }
 
             public async ValueTask<Exception?> SetFailed(Exception? unhandledException, bool sendCancel, bool async)
             {
                 if (IsDisposed)
+                {
                     return null;
+                }
 
                 Exception? networkException = null;
                 if (sendCancel)
@@ -624,7 +680,7 @@ namespace Octonica.ClickHouseClient
                     }
                     catch (Exception ex)
                     {
-                        networkException = new ClickHouseException(ClickHouseErrorCodes.NetworkError, "Network error. Operation was not canceled properly.", ex);                        
+                        networkException = new ClickHouseException(ClickHouseErrorCodes.NetworkError, "Network error. Operation was not canceled properly.", ex);
                     }
                 }
 
@@ -636,28 +692,33 @@ namespace Octonica.ClickHouseClient
                     externalException = await _externalResources.ReleaseOnFailure(unhandledException, async);
 
                     if (ReferenceEquals(unhandledException, externalException))
+                    {
                         externalException = null;
+                    }
                 }
 
-                var exceptions = new List<Exception>(3);
+                List<Exception> exceptions = new(3);
                 if (unhandledException != null)
+                {
                     exceptions.Add(unhandledException);
+                }
 
                 if (networkException != null)
+                {
                     exceptions.Add(networkException);
+                }
 
                 if (externalException != null)
-                    exceptions.Add(externalException);
-
-                switch (exceptions.Count)
                 {
-                    case 0:
-                        return null;
-                    case 1:
-                        return exceptions[0];
-                    default:
-                        return new AggregateException(exceptions);
+                    exceptions.Add(externalException);
                 }
+
+                return exceptions.Count switch
+                {
+                    0 => null,
+                    1 => exceptions[0],
+                    _ => new AggregateException(exceptions),
+                };
             }
 
             public void Dispose()
@@ -673,10 +734,12 @@ namespace Octonica.ClickHouseClient
             public ValueTask Dispose(bool async)
             {
                 if (IsDisposed || IsFailed)
+                {
                     return default;
+                }
 
-                Interlocked.CompareExchange(ref _client._state, (int)ClickHouseTcpClientState.Ready, (int)ClickHouseTcpClientState.Active);
-                _client._semaphore.Release();
+                _ = Interlocked.CompareExchange(ref _client._state, (int)ClickHouseTcpClientState.Ready, (int)ClickHouseTcpClientState.Active);
+                _ = _client._semaphore.Release();
                 IsDisposed = true;
 
                 return _externalResources?.Release(async) ?? default;

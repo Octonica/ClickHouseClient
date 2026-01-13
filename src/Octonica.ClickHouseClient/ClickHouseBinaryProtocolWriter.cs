@@ -15,15 +15,16 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient
 {
@@ -48,37 +49,51 @@ namespace Octonica.ClickHouseClient
         public async ValueTask Flush(bool async, CancellationToken cancellationToken)
         {
             if (_currentCompression != CompressionAlgorithm.None)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. The stream can't be flushed because it's compression is not completed.");
+            }
 
             _buffer.Flush();
 
-            var readResult = _buffer.Read();
+            ReadOnlySequence<byte> readResult = _buffer.Read();
             if (readResult.IsEmpty)
-                return;
-
-            foreach (var buffer in readResult)
             {
-                if (async)
-                    await WriteWithTimeoutAsync((networkStream, ct) => networkStream.WriteAsync(buffer, ct).AsTask(), cancellationToken);
-                else
-                    _stream.Write(buffer.Span);
+                return;
             }
 
-            _buffer.ConfirmRead((int) readResult.Length);
+            foreach (ReadOnlyMemory<byte> buffer in readResult)
+            {
+                if (async)
+                {
+                    await WriteWithTimeoutAsync((networkStream, ct) => networkStream.WriteAsync(buffer, ct).AsTask(), cancellationToken);
+                }
+                else
+                {
+                    _stream.Write(buffer.Span);
+                }
+            }
+
+            _buffer.ConfirmRead((int)readResult.Length);
 
             if (async)
+            {
                 await WriteWithTimeoutAsync((networkStream, ct) => networkStream.FlushAsync(ct), cancellationToken);
+            }
             else
+            {
                 _stream.Flush();
+            }
         }
 
         public void Discard()
         {
             _buffer.Discard();
 
-            var readResult = _buffer.Read();
+            ReadOnlySequence<byte> readResult = _buffer.Read();
             if (!readResult.IsEmpty)
-                _buffer.ConfirmRead((int) readResult.Length);
+            {
+                _buffer.ConfirmRead((int)readResult.Length);
+            }
 
             _currentCompression = CompressionAlgorithm.None;
         }
@@ -124,17 +139,21 @@ namespace Octonica.ClickHouseClient
         public void WriteString(string value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var encoding = Encoding.UTF8;
-            var length = encoding.GetByteCount(value);
-            Write7BitInteger((uint) length);
+            Encoding encoding = Encoding.UTF8;
+            int length = encoding.GetByteCount(value);
+            Write7BitInteger((uint)length);
             if (length == 0)
+            {
                 return;
+            }
 
-            var charSpan = value.AsSpan();
-            var byteSpan = GetSpan(length);
-            var count = Encoding.UTF8.GetBytes(charSpan, byteSpan);
+            ReadOnlySpan<char> charSpan = value.AsSpan();
+            Span<byte> byteSpan = GetSpan(length);
+            int count = Encoding.UTF8.GetBytes(charSpan, byteSpan);
             Debug.Assert(count == length);
 
             Advance(length);
@@ -148,10 +167,12 @@ namespace Octonica.ClickHouseClient
         public SequenceSize WriteRaw(int sizeHint, Func<Memory<byte>, SequenceSize> writeBytes)
         {
             if (writeBytes == null)
+            {
                 throw new ArgumentNullException(nameof(writeBytes));
+            }
 
             SequenceSize size;
-            var memory = sizeHint > 0 ? GetMemory(sizeHint) : GetMemory();
+            Memory<byte> memory = sizeHint > 0 ? GetMemory(sizeHint) : GetMemory();
             if (!memory.IsEmpty)
             {
                 try
@@ -171,7 +192,7 @@ namespace Octonica.ClickHouseClient
                 }
             }
 
-            var bufferSize = _bufferSize;
+            int bufferSize = _bufferSize;
             do
             {
                 Advance(0);
@@ -197,8 +218,8 @@ namespace Octonica.ClickHouseClient
 
         public void WriteInt32(int value)
         {
-            var span = GetSpan(sizeof(int));
-            var success = BitConverter.TryWriteBytes(span, value);
+            Span<byte> span = GetSpan(sizeof(int));
+            bool success = BitConverter.TryWriteBytes(span, value);
             Debug.Assert(success);
 
             Advance(sizeof(int));
@@ -206,19 +227,19 @@ namespace Octonica.ClickHouseClient
 
         public void WriteBool(bool value)
         {
-            WriteByte(value ? (byte) 1 : (byte) 0);
+            WriteByte(value ? (byte)1 : (byte)0);
         }
 
         public void WriteByte(byte value)
         {
-            var buffer = GetSpan(1);
+            Span<byte> buffer = GetSpan(1);
             buffer[0] = value;
             Advance(1);
         }
 
         public void WriteBytes(ReadOnlySpan<byte> bytes)
         {
-            var span = GetSpan(bytes.Length);
+            Span<byte> span = GetSpan(bytes.Length);
             bytes.CopyTo(span);
             Advance(bytes.Length);
         }
@@ -227,8 +248,8 @@ namespace Octonica.ClickHouseClient
         {
             if (cancellationToken == CancellationToken.None && _stream.WriteTimeout >= 0)
             {
-                var timeout = TimeSpan.FromMilliseconds(_stream.WriteTimeout);
-                using var tokenSource = new CancellationTokenSource(timeout);
+                TimeSpan timeout = TimeSpan.FromMilliseconds(_stream.WriteTimeout);
+                using CancellationTokenSource tokenSource = new(timeout);
                 try
                 {
                     await writeAsync(_stream, tokenSource.Token);
@@ -246,7 +267,7 @@ namespace Octonica.ClickHouseClient
 
         public void Write7BitInt32(int value)
         {
-            var ulongValue = (ulong) unchecked((uint) value);
+            ulong ulongValue = unchecked((uint)value);
             Write7BitInteger(ulongValue);
         }
 
@@ -255,19 +276,19 @@ namespace Octonica.ClickHouseClient
             ulong v = value;
             int totalLength = 0;
 
-            var buffer = GetSpan(10);
+            Span<byte> buffer = GetSpan(10);
             for (int i = 0; i < buffer.Length; i++)
             {
                 ++totalLength;
 
                 if (v >= 0x80)
                 {
-                    buffer[i] = (byte) (v | 0x80);
+                    buffer[i] = (byte)(v | 0x80);
                     v >>= 7;
                 }
                 else
                 {
-                    buffer[i] = (byte) v;
+                    buffer[i] = (byte)v;
                     Advance(totalLength);
                     return;
                 }
@@ -278,38 +299,29 @@ namespace Octonica.ClickHouseClient
 
         private Span<byte> GetSpan(int sizeHint)
         {
-            if (_currentCompression != CompressionAlgorithm.None)
-            {
-                if (_compressionEncoder == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
-
-                return _compressionEncoder.GetSpan(sizeHint);
-            }
-
-            return _buffer.GetMemory(sizeHint).Span;
+            return _currentCompression != CompressionAlgorithm.None
+                ? _compressionEncoder == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.")
+                    : _compressionEncoder.GetSpan(sizeHint)
+                : _buffer.GetMemory(sizeHint).Span;
         }
 
         private Memory<byte> GetMemory(int sizeHint)
         {
-            if (_currentCompression == CompressionAlgorithm.None)
-                return _buffer.GetMemory(sizeHint);
-
-            if (_compressionEncoder == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
-
-            return _compressionEncoder.GetMemory(sizeHint);
-
+            return _currentCompression == CompressionAlgorithm.None
+                ? _buffer.GetMemory(sizeHint)
+                : _compressionEncoder == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.")
+                : _compressionEncoder.GetMemory(sizeHint);
         }
 
         private Memory<byte> GetMemory()
         {
-            if (_currentCompression == CompressionAlgorithm.None)
-                return _buffer.GetMemory();
-
-            if (_compressionEncoder == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
-
-            return _compressionEncoder.GetMemory();
+            return _currentCompression == CompressionAlgorithm.None
+                ? _buffer.GetMemory()
+                : _compressionEncoder == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.")
+                : _compressionEncoder.GetMemory();
         }
 
         private void Advance(int bytes)
@@ -317,7 +329,9 @@ namespace Octonica.ClickHouseClient
             if (_currentCompression != CompressionAlgorithm.None)
             {
                 if (_compressionEncoder == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. An encoder is not initialized.");
+                }
 
                 _compressionEncoder.Advance(bytes);
             }
@@ -335,16 +349,18 @@ namespace Octonica.ClickHouseClient
             while (true)
             {
                 if (buffer.Length == count)
+                {
                     return 0;
+                }
 
                 if (v >= 0x80)
                 {
-                    buffer[count++] = (byte) (v | 0x80);
+                    buffer[count++] = (byte)(v | 0x80);
                     v >>= 7;
                 }
                 else
                 {
-                    buffer[count++] = (byte) v;
+                    buffer[count++] = (byte)v;
                     break;
                 }
             }

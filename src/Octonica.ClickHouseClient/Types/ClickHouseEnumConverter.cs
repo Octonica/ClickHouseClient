@@ -35,12 +35,12 @@ namespace Octonica.ClickHouseClient.Types
         /// </summary>
         public ClickHouseEnumConverter()
         {
-            var enumValues = Enum.GetValues(typeof(TEnum));
+            Array enumValues = Enum.GetValues(typeof(TEnum));
             _values = new Dictionary<int, TEnum>(enumValues.Length);
-            foreach (var enumValue in enumValues)
+            foreach (object? enumValue in enumValues)
             {
-                var intValue = Convert.ToInt32(enumValue);
-                _values[intValue] = (TEnum) enumValue!;
+                int intValue = Convert.ToInt32(enumValue);
+                _values[intValue] = (TEnum)enumValue!;
             }
         }
 

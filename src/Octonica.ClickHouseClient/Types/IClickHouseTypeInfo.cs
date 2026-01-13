@@ -71,10 +71,9 @@ namespace Octonica.ClickHouseClient.Types
         /// <returns>The argument of the type.</returns>
         object GetTypeArgument(int index)
         {
-            if (TypeArgumentsCount == 0)
-                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
-
-            return GetGenericArgument(index);
+            return TypeArgumentsCount == 0
+                ? throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.")
+                : (object)GetGenericArgument(index);
         }
     }
 }

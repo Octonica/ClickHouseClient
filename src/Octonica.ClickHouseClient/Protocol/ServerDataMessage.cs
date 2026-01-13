@@ -36,7 +36,9 @@ namespace Octonica.ClickHouseClient.Protocol
         {
             string? tempTableName = await reader.ReadString(async, cancellationToken);
             if (tempTableName == string.Empty)
+            {
                 tempTableName = null;
+            }
 
             return new ServerDataMessage(messageCode, tempTableName);
         }

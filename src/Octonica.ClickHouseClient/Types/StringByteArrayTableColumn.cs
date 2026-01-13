@@ -33,9 +33,11 @@ namespace Octonica.ClickHouseClient.Types
         protected override byte[] GetValue(Encoding encoding, ReadOnlySpan<byte> span)
         {
             if (span.IsEmpty)
+            {
                 return Array.Empty<byte>();
+            }
 
-            var result = new byte[span.Length];
+            byte[] result = new byte[span.Length];
             span.CopyTo(result);
             return result;
         }

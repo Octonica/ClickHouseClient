@@ -15,12 +15,12 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -58,7 +58,9 @@ namespace Octonica.ClickHouseClient.Types
             _rowCount = rowCount;
 
             if (rowCount > 0)
+            {
                 _buffer = new TIn[rowCount];
+            }
         }
 
         /// <summary>
@@ -69,24 +71,28 @@ namespace Octonica.ClickHouseClient.Types
         public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
         {
             if (_position >= _rowCount)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+            }
 
-            var byteSize = Math.Min(ElementSize * (_rowCount - _position), (int) (sequence.Length - sequence.Length % ElementSize));
-            var elementCount = byteSize / ElementSize;
+            int byteSize = Math.Min(ElementSize * (_rowCount - _position), (int)(sequence.Length - (sequence.Length % ElementSize)));
+            int elementCount = byteSize / ElementSize;
             if (elementCount == 0)
+            {
                 return new SequenceSize(0, 0);
+            }
 
             int count;
             if (BitwiseCopyAllowed)
             {
-                var targetBytes = MemoryMarshal.AsBytes(new Span<TIn>(_buffer, _position, elementCount));
+                Span<byte> targetBytes = MemoryMarshal.AsBytes(new Span<TIn>(_buffer, _position, elementCount));
                 Debug.Assert(byteSize == targetBytes.Length);
                 sequence.Slice(0, byteSize).CopyTo(targetBytes);
                 count = elementCount;
             }
             else
             {
-                count = CopyTo(sequence.Slice(0, byteSize), ((Span<TIn>) _buffer).Slice(_position, elementCount));
+                count = CopyTo(sequence.Slice(0, byteSize), ((Span<TIn>)_buffer).Slice(_position, elementCount));
                 Debug.Assert(count >= 0 && count <= elementCount);
             }
 
@@ -98,10 +104,12 @@ namespace Octonica.ClickHouseClient.Types
         {
             Span<byte> tmpSpan = stackalloc byte[ElementSize];
             int count = 0;
-            for (var slice = source; !slice.IsEmpty; slice = slice.Slice(ElementSize), count++)
+            for (ReadOnlySequence<byte> slice = source; !slice.IsEmpty; slice = slice.Slice(ElementSize), count++)
             {
                 if (slice.FirstSpan.Length >= ElementSize)
+                {
                     target[count] = ReadElement(slice.FirstSpan);
+                }
                 else
                 {
                     slice.Slice(0, ElementSize).CopyTo(tmpSpan);
@@ -130,7 +138,7 @@ namespace Octonica.ClickHouseClient.Types
         /// <inheritdoc/>
         public IClickHouseTableColumn<TOut> EndRead(ClickHouseColumnSettings? settings)
         {
-            return EndRead(settings, ((ReadOnlyMemory<TIn>)_buffer).Slice(0, _position));
+            return EndRead(settings, ((ReadOnlyMemory<TIn>)_buffer)[.._position]);
         }
 
         IClickHouseTableColumn IClickHouseColumnReader.EndRead(ClickHouseColumnSettings? settings)

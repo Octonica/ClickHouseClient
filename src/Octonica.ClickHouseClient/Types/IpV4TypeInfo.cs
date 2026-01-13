@@ -15,15 +15,15 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -46,41 +46,51 @@ namespace Octonica.ClickHouseClient.Types
 
         public override IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             IReadOnlyList<uint> preparedRows;
 
             if (typeof(IPAddress).IsAssignableFrom(type))
+            {
                 preparedRows = MappedReadOnlyList<IPAddress, uint>.Map((IReadOnlyList<IPAddress>)rows, IpAddressToUInt32);
-            else if (type == typeof(string))
-                preparedRows = MappedReadOnlyList<string, uint>.Map((IReadOnlyList<string>)rows, IpAddressStringToUInt32);
-            else if (type == typeof(uint))
-                preparedRows = (IReadOnlyList<uint>)rows;
-            else if (type == typeof(int))
-                preparedRows = MappedReadOnlyList<int, uint>.Map((IReadOnlyList<int>)rows, v => unchecked((uint)v));
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                preparedRows = type == typeof(string)
+                    ? MappedReadOnlyList<string, uint>.Map((IReadOnlyList<string>)rows, IpAddressStringToUInt32)
+                    : type == typeof(uint)
+                    ? (IReadOnlyList<uint>)rows
+                    : type == typeof(int)
+                ? (IReadOnlyList<uint>)MappedReadOnlyList<int, uint>.Map((IReadOnlyList<int>)rows, v => unchecked((uint)v))
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new IpV4Writer(columnName, TypeName, preparedRows);
         }
 
         public override IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             const string valueType = "UInt32";
             object writer;
             if (type == typeof(IPAddress))
+            {
                 writer = new SimpleParameterWriter<IPAddress, uint>(valueType, this, null, true, IpAddressToUInt32);
-            else if (type == typeof(string))
-                writer = new SimpleParameterWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32);
-            else if (type == typeof(uint))
-                writer = new SimpleParameterWriter<uint>(valueType, this, appendTypeCast: true);
-            else if (type == typeof(int))
-                writer = new SimpleParameterWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v));
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                writer = type == typeof(string)
+                    ? new SimpleParameterWriter<string, uint>(valueType, this, null, true, IpAddressStringToUInt32)
+                    : type == typeof(uint)
+                    ? new SimpleParameterWriter<uint>(valueType, this, appendTypeCast: true)
+                    : type == typeof(int)
+                ? (object)new SimpleParameterWriter<int, uint>(valueType, this, null, true, v => unchecked((uint)v))
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return (IClickHouseParameterWriter<T>)writer;
         }
@@ -97,31 +107,34 @@ namespace Octonica.ClickHouseClient.Types
 
         private static uint IpAddressStringToUInt32(string? address)
         {
-            if (address == null)
-                return 0;
-
-            if (!IPAddress.TryParse(address, out var ipAddress))
-                throw new InvalidCastException($"The string \"{address}\" is not a valid IPv4 address.");
-
-            return IpAddressToUInt32(ipAddress);
+            return address == null
+                ? 0
+                : !IPAddress.TryParse(address, out IPAddress? ipAddress)
+                ? throw new InvalidCastException($"The string \"{address}\" is not a valid IPv4 address.")
+                : IpAddressToUInt32(ipAddress);
         }
 
         private static uint IpAddressToUInt32(IPAddress? address)
         {
             if (address == null)
+            {
                 return 0;
+            }
 
             if (address.AddressFamily == AddressFamily.InterNetworkV6 && address.IsIPv4MappedToIPv6)
+            {
                 address = address.MapToIPv4();
+            }
 
             if (address.AddressFamily != AddressFamily.InterNetwork)
+            {
                 throw new InvalidCastException($"The network address \"{address}\" is not a IPv4 address.");
+            }
 
             Span<uint> result = stackalloc uint[1];
-            if (!address.TryWriteBytes(MemoryMarshal.AsBytes(result), out var written) || written != sizeof(uint))
-                throw new InvalidCastException($"The network address \"{address}\" is not a IPv4 address.");
-
-            return unchecked((uint) IPAddress.HostToNetworkOrder((int) result[0]));
+            return !address.TryWriteBytes(MemoryMarshal.AsBytes(result), out int written) || written != sizeof(uint)
+                ? throw new InvalidCastException($"The network address \"{address}\" is not a IPv4 address.")
+                : unchecked((uint)IPAddress.HostToNetworkOrder((int)result[0]));
         }
 
         private sealed class IpV4Reader : IpColumnReaderBase
@@ -148,7 +161,7 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteElement(Span<byte> writeTo, in uint value)
             {
-                var success = BitConverter.TryWriteBytes(writeTo, value);
+                bool success = BitConverter.TryWriteBytes(writeTo, value);
                 Debug.Assert(success);
             }
         }

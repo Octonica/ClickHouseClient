@@ -25,21 +25,23 @@ namespace Octonica.ClickHouseClient.Utils
 {
     internal sealed class SimpleReadOnlySequenceSegment<T> : ReadOnlySequenceSegment<T>
     {
-        private readonly SimpleReadOnlySequenceSegment<T>? _lastSegment;
-
-        public SimpleReadOnlySequenceSegment<T> LastSegment => _lastSegment ?? this;
+        public SimpleReadOnlySequenceSegment<T> LastSegment => field ?? this;
 
         public SimpleReadOnlySequenceSegment(ReadOnlyMemory<T> firstSegment, ReadOnlySequence<T> sequence)
         {
-            var segments = new Stack<ReadOnlyMemory<T>>(2);
+            Stack<ReadOnlyMemory<T>> segments = new(2);
             long runningIndex = firstSegment.Length;
             if (firstSegment.Length > 0)
+            {
                 segments.Push(firstSegment);
-            
-            foreach (var segment in sequence)
+            }
+
+            foreach (ReadOnlyMemory<T> segment in sequence)
             {
                 if (segment.Length == 0)
+                {
                     continue;
+                }
 
                 runningIndex += segment.Length;
                 segments.Push(segment);
@@ -55,7 +57,7 @@ namespace Octonica.ClickHouseClient.Utils
             {
                 while (segments.Count > 1)
                 {
-                    var segment = segments.Pop();
+                    ReadOnlyMemory<T> segment = segments.Pop();
                     runningIndex -= segment.Length;
                     nextSegment = new SimpleReadOnlySequenceSegment<T>(segment, runningIndex, nextSegment);
                 }
@@ -66,33 +68,33 @@ namespace Octonica.ClickHouseClient.Utils
 
             RunningIndex = 0;
             Next = nextSegment;
-            _lastSegment = nextSegment?.LastSegment;
+            LastSegment = nextSegment?.LastSegment;
         }
 
         public SimpleReadOnlySequenceSegment(IReadOnlyList<ReadOnlyMemory<T>> segments)
         {
-            var runningIndex = segments.Aggregate((long)0, (v, s) => v + s.Length);
+            long runningIndex = segments.Aggregate((long)0, (v, s) => v + s.Length);
 
             SimpleReadOnlySequenceSegment<T>? nextSegment = null;
             for (int i = segments.Count - 1; i > 0; i--)
             {
-                var segment = segments[i];
+                ReadOnlyMemory<T> segment = segments[i];
                 runningIndex -= segment.Length;
                 nextSegment = new SimpleReadOnlySequenceSegment<T>(segment, runningIndex, nextSegment);
             }
 
             if (segments.Count > 0)
             {
-                var firstSegment = segments[0];
+                ReadOnlyMemory<T> firstSegment = segments[0];
                 runningIndex -= firstSegment.Length;
-                
+
                 Memory = firstSegment;
             }
 
             Debug.Assert(runningIndex == 0);
             RunningIndex = runningIndex;
             Next = nextSegment;
-            _lastSegment = nextSegment?.LastSegment;
+            LastSegment = nextSegment?.LastSegment;
         }
 
         private SimpleReadOnlySequenceSegment(ReadOnlyMemory<T> memory, long runningIndex, SimpleReadOnlySequenceSegment<T>? nextSegment)
@@ -100,7 +102,7 @@ namespace Octonica.ClickHouseClient.Utils
             Memory = memory;
             RunningIndex = runningIndex;
             Next = nextSegment;
-            _lastSegment = nextSegment?.LastSegment;
+            LastSegment = nextSegment?.LastSegment;
         }
     }
 }

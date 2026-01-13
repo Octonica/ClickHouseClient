@@ -15,9 +15,9 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Protocol;
 using System;
 using System.Collections.Generic;
-using Octonica.ClickHouseClient.Protocol;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -48,18 +48,12 @@ namespace Octonica.ClickHouseClient.Types
         /// <returns>The <see cref="IClickHouseColumnReader"/> that should read the specified number of rows.</returns>
         IClickHouseColumnReader CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            switch (serializationMode)
+            return serializationMode switch
             {
-                case ClickHouseColumnSerializationMode.Default:
-                    return CreateColumnReader(rowCount);
-
-                case ClickHouseColumnSerializationMode.Sparse:
-                case ClickHouseColumnSerializationMode.Custom:
-                    return new CustomSerializationColumnReader(this, rowCount, serializationMode);
-
-                default:
-                    throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));
-            }
+                ClickHouseColumnSerializationMode.Default => CreateColumnReader(rowCount),
+                ClickHouseColumnSerializationMode.Sparse or ClickHouseColumnSerializationMode.Custom => new CustomSerializationColumnReader(this, rowCount, serializationMode),
+                _ => throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode)),
+            };
         }
 
         /// <summary>
@@ -81,18 +75,12 @@ namespace Octonica.ClickHouseClient.Types
         /// <returns>The <see cref="IClickHouseColumnReaderBase"/> that should skip the specified number of rows.</returns>
         IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            switch (serializationMode)
+            return serializationMode switch
             {
-                case ClickHouseColumnSerializationMode.Default:
-                    return CreateSkippingColumnReader(rowCount);
-
-                case ClickHouseColumnSerializationMode.Sparse:
-                case ClickHouseColumnSerializationMode.Custom:
-                    return new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode);
-
-                default:
-                    throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));
-            }
+                ClickHouseColumnSerializationMode.Default => CreateSkippingColumnReader(rowCount),
+                ClickHouseColumnSerializationMode.Sparse or ClickHouseColumnSerializationMode.Custom => new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode),
+                _ => throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode)),
+            };
         }
 
         /// <summary>

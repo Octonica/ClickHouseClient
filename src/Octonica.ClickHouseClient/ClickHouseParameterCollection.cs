@@ -31,23 +31,25 @@ namespace Octonica.ClickHouseClient
     /// </summary>
     public sealed class ClickHouseParameterCollection : DbParameterCollection, IList<ClickHouseParameter>, IReadOnlyList<ClickHouseParameter>
     {
-        private readonly List<string> _parameterNames = new List<string>();
+        private readonly List<string> _parameterNames = [];
 
-        private readonly Dictionary<string, ClickHouseParameter> _parameters = new Dictionary<string, ClickHouseParameter>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ClickHouseParameter> _parameters = new(StringComparer.OrdinalIgnoreCase);
 
         /// <inheritdoc/>
         public override int Count => _parameters.Count;
 
         /// <inheritdoc/>
-        public override object SyncRoot => ((ICollection) _parameters).SyncRoot;
+        public override object SyncRoot => ((ICollection)_parameters).SyncRoot;
 
         /// <inheritdoc/>
         public override int Add(object value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var parameter = (ClickHouseParameter) value;
+            ClickHouseParameter parameter = (ClickHouseParameter)value;
             return Add(parameter);
         }
 
@@ -59,8 +61,8 @@ namespace Octonica.ClickHouseClient
         /// <returns>A new <see cref="ClickHouseParameter"/> added to the collection.</returns>
         public ClickHouseParameter AddWithValue(string parameterName, object? value)
         {
-            var parameter = new ClickHouseParameter(parameterName) {Value = value};
-            Add(parameter);
+            ClickHouseParameter parameter = new(parameterName) { Value = value };
+            _ = Add(parameter);
             return parameter;
         }
 
@@ -85,14 +87,14 @@ namespace Octonica.ClickHouseClient
         /// <returns>A new <see cref="ClickHouseParameter"/> added to the collection.</returns>
         public ClickHouseParameter AddWithValue(string parameterName, object? value, ClickHouseDbType dbType)
         {
-            var parameter = new ClickHouseParameter(parameterName) { Value = value, ClickHouseDbType = dbType };
-            Add(parameter);
+            ClickHouseParameter parameter = new(parameterName) { Value = value, ClickHouseDbType = dbType };
+            _ = Add(parameter);
             return parameter;
         }
 
         void ICollection<ClickHouseParameter>.Add(ClickHouseParameter item)
         {
-            Add(item);
+            _ = Add(item);
         }
 
         /// <summary>
@@ -103,11 +105,13 @@ namespace Octonica.ClickHouseClient
         public int Add(ClickHouseParameter item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
             if (item.Collection != null)
             {
-                var errorText = ReferenceEquals(item.Collection, this)
+                string errorText = ReferenceEquals(item.Collection, this)
                     ? $"The parameter \"{item.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
                     : $"The parameter \"{item.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
@@ -115,10 +119,12 @@ namespace Octonica.ClickHouseClient
             }
 
             if (_parameters.ContainsKey(item.Id))
+            {
                 throw new ArgumentException($"A parameter with the name \"{item.ParameterName}\" already exists in the collection.", nameof(item));
+            }
 
             _parameters.Add(item.Id, item);
-            var result = _parameterNames.Count;
+            int result = _parameterNames.Count;
             _parameterNames.Add(item.Id);
             item.Collection = this;
 
@@ -128,8 +134,10 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public override void Clear()
         {
-            foreach (var parameter in _parameters.Values)
+            foreach (ClickHouseParameter parameter in _parameters.Values)
+            {
                 parameter.Collection = null;
+            }
 
             _parameters.Clear();
             _parameterNames.Clear();
@@ -138,42 +146,40 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public bool Contains(ClickHouseParameter item)
         {
-            return item != null && _parameters.TryGetValue(item.Id, out var parameter) && ReferenceEquals(item, parameter);
+            return item != null && _parameters.TryGetValue(item.Id, out ClickHouseParameter? parameter) && ReferenceEquals(item, parameter);
         }
 
         /// <inheritdoc/>
         public void CopyTo(ClickHouseParameter[] array, int arrayIndex)
         {
             int i = arrayIndex;
-            foreach (var key in _parameterNames)
+            foreach (string key in _parameterNames)
+            {
                 array[i++] = _parameters[key];
+            }
         }
 
         /// <inheritdoc/>
         public override bool Contains(object value)
         {
-            if (!(value is ClickHouseParameter parameter))
-                return false;
-
-            return Contains(parameter);
+            return value is ClickHouseParameter parameter && Contains(parameter);
         }
 
         /// <inheritdoc/>
         public override int IndexOf(object value)
         {
-            if (!(value is ClickHouseParameter parameter))
-                return -1;
-
-            return IndexOf(parameter);
+            return value is not ClickHouseParameter parameter ? -1 : IndexOf(parameter);
         }
 
         /// <inheritdoc/>
         public override void Insert(int index, object value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var parameter = (ClickHouseParameter) value;
+            ClickHouseParameter parameter = (ClickHouseParameter)value;
             Insert(index, parameter);
         }
 
@@ -181,17 +187,21 @@ namespace Octonica.ClickHouseClient
         public bool Remove(ClickHouseParameter item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
-            if (!_parameters.TryGetValue(item.Id, out var existingParameter) || !ReferenceEquals(item, existingParameter))
+            if (!_parameters.TryGetValue(item.Id, out ClickHouseParameter? existingParameter) || !ReferenceEquals(item, existingParameter))
+            {
                 return false;
+            }
 
-            var comparer = _parameters.Comparer;
-            var name = item.Id;
-            var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
+            IEqualityComparer<string> comparer = _parameters.Comparer;
+            string name = item.Id;
+            int index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
 
             _parameterNames.RemoveAt(index);
-            var result = _parameters.Remove(name);
+            bool result = _parameters.Remove(name);
             item.Collection = null;
 
             Debug.Assert(result);
@@ -217,15 +227,19 @@ namespace Octonica.ClickHouseClient
         public bool Remove(string parameterName, [MaybeNullWhen(false)] out ClickHouseParameter parameter)
         {
             if (parameterName == null)
+            {
                 throw new ArgumentNullException(nameof(parameterName));
+            }
 
-            var name = ClickHouseParameter.TrimParameterName(parameterName);
+            string name = ClickHouseParameter.TrimParameterName(parameterName);
             if (!_parameters.Remove(name, out parameter))
+            {
                 return false;
+            }
 
             parameter.Collection = null;
-            var comparer = _parameters.Comparer;
-            var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
+            IEqualityComparer<string> comparer = _parameters.Comparer;
+            int index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
             _parameterNames.RemoveAt(index);
             return true;
         }
@@ -233,24 +247,30 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public override void Remove(object value)
         {
-            if (!(value is ClickHouseParameter parameter))
+            if (value is not ClickHouseParameter parameter)
+            {
                 return;
+            }
 
-            Remove(parameter);
+            _ = Remove(parameter);
         }
 
         /// <inheritdoc/>
         public int IndexOf(ClickHouseParameter item)
         {
             if (item == null)
+            {
                 return -1;
+            }
 
-            if (!_parameters.TryGetValue(item.Id, out var existingParameter) || !ReferenceEquals(item, existingParameter))
+            if (!_parameters.TryGetValue(item.Id, out ClickHouseParameter? existingParameter) || !ReferenceEquals(item, existingParameter))
+            {
                 return -1;
+            }
 
-            var comparer = _parameters.Comparer;
-            var name = item.Id;
-            var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
+            IEqualityComparer<string> comparer = _parameters.Comparer;
+            string name = item.Id;
+            int index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
 
             return index;
         }
@@ -259,11 +279,13 @@ namespace Octonica.ClickHouseClient
         public void Insert(int index, ClickHouseParameter item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
             if (item.Collection != null)
             {
-                var errorText = ReferenceEquals(item.Collection, this)
+                string errorText = ReferenceEquals(item.Collection, this)
                     ? $"The parameter \"{item.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
                     : $"The parameter \"{item.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
@@ -271,7 +293,9 @@ namespace Octonica.ClickHouseClient
             }
 
             if (_parameters.ContainsKey(item.Id))
+            {
                 throw new ArgumentException($"A parameter with the name \"{item.ParameterName}\" already exists in the collection.", nameof(item));
+            }
 
             _parameterNames.Insert(index, item.Id);
             _parameters.Add(item.Id, item);
@@ -281,9 +305,11 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public override void RemoveAt(int index)
         {
-            var name = _parameterNames[index];
-            if (_parameters.Remove(name, out var parameter))
+            string name = _parameterNames[index];
+            if (_parameters.Remove(name, out ClickHouseParameter? parameter))
+            {
                 parameter.Collection = null;
+            }
 
             _parameterNames.RemoveAt(index);
         }
@@ -291,27 +317,29 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public override void RemoveAt(string parameterName)
         {
-            Remove(parameterName, out _);
+            _ = Remove(parameterName, out _);
         }
 
         /// <inheritdoc/>
         protected override void SetParameter(int index, DbParameter value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var name = _parameterNames[index];
-            var parameter = (ClickHouseParameter) value;
+            string name = _parameterNames[index];
+            ClickHouseParameter parameter = (ClickHouseParameter)value;
 
-            var comparer = _parameters.Comparer;
+            IEqualityComparer<string> comparer = _parameters.Comparer;
             if (comparer.Equals(name, parameter.Id))
             {
-                var existingParameter = _parameters[name];
+                ClickHouseParameter existingParameter = _parameters[name];
                 if (!ReferenceEquals(parameter, existingParameter))
                 {
                     if (parameter.Collection != null)
                     {
-                        var errorText = ReferenceEquals(parameter.Collection, this)
+                        string errorText = ReferenceEquals(parameter.Collection, this)
                             ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
                             : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
@@ -327,7 +355,7 @@ namespace Octonica.ClickHouseClient
             {
                 if (parameter.Collection != null)
                 {
-                    var errorText = ReferenceEquals(parameter.Collection, this)
+                    string errorText = ReferenceEquals(parameter.Collection, this)
                         ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
                         : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
@@ -335,10 +363,14 @@ namespace Octonica.ClickHouseClient
                 }
 
                 if (_parameters.ContainsKey(parameter.Id))
+                {
                     throw new ArgumentException($"A parameter with the name \"{parameter.ParameterName}\" already exists in the collection.", nameof(value));
+                }
 
-                if(_parameters.Remove(name, out var existingParameter))
+                if (_parameters.Remove(name, out ClickHouseParameter? existingParameter))
+                {
                     existingParameter.Collection = null;
+                }
 
                 _parameters.Add(parameter.Id, parameter);
                 _parameterNames[index] = parameter.Id;
@@ -350,21 +382,26 @@ namespace Octonica.ClickHouseClient
         protected override void SetParameter(string parameterName, DbParameter value)
         {
             if (parameterName == null)
+            {
                 throw new ArgumentNullException(nameof(parameterName));
+            }
+
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var name = ClickHouseParameter.TrimParameterName(parameterName);
-            var parameter = (ClickHouseParameter) value;
+            string name = ClickHouseParameter.TrimParameterName(parameterName);
+            ClickHouseParameter parameter = (ClickHouseParameter)value;
 
-            var comparer = _parameters.Comparer;
-            if (_parameters.TryGetValue(name, out var existingParameter))
+            IEqualityComparer<string> comparer = _parameters.Comparer;
+            if (_parameters.TryGetValue(name, out ClickHouseParameter? existingParameter))
             {
                 if (!ReferenceEquals(parameter, existingParameter))
                 {
                     if (parameter.Collection != null)
                     {
-                        var errorText = ReferenceEquals(parameter.Collection, this)
+                        string errorText = ReferenceEquals(parameter.Collection, this)
                             ? $"The parameter \"{parameter.ParameterName}\" already belongs to the collection. It can't be added to the same connection twice."
                             : $"The parameter \"{parameter.ParameterName}\" already belongs to a collection. It can't be added to different collections.";
 
@@ -379,12 +416,14 @@ namespace Octonica.ClickHouseClient
                 else
                 {
                     if (_parameters.ContainsKey(parameter.Id))
+                    {
                         throw new ArgumentException($"A parameter with the name \"{parameter.ParameterName}\" already exists in the collection.", nameof(value));
+                    }
 
-                    var index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
+                    int index = _parameterNames.FindIndex(n => comparer.Equals(n, name));
                     _parameterNames[index] = parameter.Id;
 
-                    _parameters.Remove(name);
+                    _ = _parameters.Remove(name);
                     _parameters.Add(parameter.Id, parameter);
                 }
 
@@ -394,13 +433,11 @@ namespace Octonica.ClickHouseClient
                     parameter.Collection = this;
                 }
             }
-            else if (comparer.Equals(name, parameter.Id))
-            {
-                Add(parameter);
-            }
             else
             {
-                throw new ArgumentException(
+                _ = comparer.Equals(name, parameter.Id)
+                    ? Add(parameter)
+                    : throw new ArgumentException(
                     $"A parameter with the name \"{parameterName}\" is not present in the collection. It can't be replaced with the parameter \"{parameter.ParameterName}\".",
                     nameof(parameterName));
             }
@@ -410,10 +447,12 @@ namespace Octonica.ClickHouseClient
         public override int IndexOf(string parameterName)
         {
             if (parameterName == null)
+            {
                 throw new ArgumentNullException(nameof(parameterName));
+            }
 
-            var name = ClickHouseParameter.TrimParameterName(parameterName);
-            var comparer = _parameters.Comparer;
+            string name = ClickHouseParameter.TrimParameterName(parameterName);
+            IEqualityComparer<string> comparer = _parameters.Comparer;
 
             return _parameterNames.FindIndex(n => comparer.Equals(n, name));
         }
@@ -422,9 +461,11 @@ namespace Octonica.ClickHouseClient
         public override bool Contains(string value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
-            var parameterName = ClickHouseParameter.TrimParameterName(value);
+            string parameterName = ClickHouseParameter.TrimParameterName(value);
             return _parameters.ContainsKey(parameterName);
         }
 
@@ -432,11 +473,15 @@ namespace Octonica.ClickHouseClient
         public override void CopyTo(Array array, int index)
         {
             if (array == null)
+            {
                 throw new ArgumentNullException(nameof(array));
+            }
 
-            var i = index;
-            foreach (var name in _parameterNames)
+            int i = index;
+            foreach (string name in _parameterNames)
+            {
                 array.SetValue(_parameters[name], i++);
+            }
         }
 
         IEnumerator<ClickHouseParameter> IEnumerable<ClickHouseParameter>.GetEnumerator()
@@ -459,20 +504,23 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         protected override DbParameter GetParameter(string parameterName)
         {
-            if (!TryGetValue(parameterName, out var parameter))
-                throw new ArgumentException($"Parameter \"{parameterName}\" not found.", nameof(parameterName));
-
-            return parameter;
+            return !TryGetValue(parameterName, out ClickHouseParameter? parameter)
+                ? throw new ArgumentException($"Parameter \"{parameterName}\" not found.", nameof(parameterName))
+                : (DbParameter)parameter;
         }
 
         /// <inheritdoc/>
         public override void AddRange(Array values)
         {
             if (values == null)
+            {
                 throw new ArgumentNullException(nameof(values));
+            }
 
-            foreach (var parameter in values.Cast<ClickHouseParameter>())
-                Add(parameter);
+            foreach (ClickHouseParameter parameter in values.Cast<ClickHouseParameter>())
+            {
+                _ = Add(parameter);
+            }
         }
 
         /// <summary>
@@ -483,10 +531,14 @@ namespace Octonica.ClickHouseClient
         public void AddRange(IEnumerable<ClickHouseParameter> parameters)
         {
             if (parameters == null)
+            {
                 throw new ArgumentNullException(nameof(parameters));
+            }
 
-            foreach (var parameter in parameters)
-                Add(parameter);
+            foreach (ClickHouseParameter parameter in parameters)
+            {
+                _ = Add(parameter);
+            }
         }
 
         /// <summary>
@@ -501,9 +553,11 @@ namespace Octonica.ClickHouseClient
         public bool TryGetValue(string parameterName, [NotNullWhen(true)] out ClickHouseParameter? parameter)
         {
             if (parameterName == null)
+            {
                 throw new ArgumentNullException(nameof(parameterName));
+            }
 
-            var name = ClickHouseParameter.TrimParameterName(parameterName);
+            string name = ClickHouseParameter.TrimParameterName(parameterName);
             return _parameters.TryGetValue(name, out parameter);
         }
 
@@ -511,7 +565,9 @@ namespace Octonica.ClickHouseClient
         {
             Debug.Assert(ReferenceEquals(parameter.Collection, this));
             if (_parameters.Comparer.Equals(originalId, parameter.Id))
+            {
                 return;
+            }
 
             SetParameter(originalId, parameter);
         }
@@ -519,7 +575,7 @@ namespace Octonica.ClickHouseClient
         /// <inheritdoc/>
         public new ClickHouseParameter this[int index]
         {
-            get => (ClickHouseParameter) base[index];
+            get => (ClickHouseParameter)base[index];
             set => base[index] = value;
         }
 
@@ -528,7 +584,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>The <see cref="ClickHouseParameter"/> with the specified name.</returns>
         public new ClickHouseParameter this[string parameterName]
         {
-            get => (ClickHouseParameter) base[parameterName];
+            get => (ClickHouseParameter)base[parameterName];
             set => base[parameterName] = value;
         }
     }

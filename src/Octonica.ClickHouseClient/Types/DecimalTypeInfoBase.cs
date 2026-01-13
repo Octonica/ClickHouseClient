@@ -15,18 +15,17 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -46,19 +45,27 @@ namespace Octonica.ClickHouseClient.Types
         public virtual int TypeArgumentsCount => (_precision == null ? 0 : 1) + (_scale == null ? 0 : 1);
 
         protected DecimalTypeInfoBase(string typeName)
-        {   
+        {
             TypeName = typeName;
             ComplexTypeName = typeName;
         }
 
         protected DecimalTypeInfoBase(string typeName, string complexTypeName, int precision, int scale)
         {
-            if (precision < 1 || precision > 38)
+            if (precision is < 1 or > 38)
+            {
                 throw new ArgumentOutOfRangeException(nameof(precision), "The precision must be in the range [1:38].");
+            }
+
             if (scale < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(scale), "The scale must be a non-negative number.");
+            }
+
             if (scale > precision)
+            {
                 throw new ArgumentOutOfRangeException(nameof(scale), "The scale must not be greater than the precision.");
+            }
 
             TypeName = typeName;
             ComplexTypeName = complexTypeName;
@@ -71,10 +78,14 @@ namespace Octonica.ClickHouseClient.Types
             if (_precision == null || _scale == null)
             {
                 if (_precision == null && _scale == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
+                }
 
                 if (_scale == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+                }
 
                 // Currently there is no implementation which requires only the precision value
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
@@ -88,10 +99,14 @@ namespace Octonica.ClickHouseClient.Types
             if (_precision == null || _scale == null)
             {
                 if (_precision == null && _scale == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
+                }
 
                 if (_scale == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+                }
 
                 // Currently there is no implementation which requires only the precision value
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
@@ -104,38 +119,56 @@ namespace Octonica.ClickHouseClient.Types
         {
             if (_precision == null && _scale == null)
             {
-                var specifiedType = CloneWithOptions(string.Format(CultureInfo.InvariantCulture, "Decimal128({0})", DefaultScale), DefaultPrecision, DefaultScale);
+                DecimalTypeInfoBase specifiedType = CloneWithOptions(string.Format(CultureInfo.InvariantCulture, "Decimal128({0})", DefaultScale), DefaultPrecision, DefaultScale);
                 return specifiedType.CreateColumnWriter(columnName, rows, columnSettings);
             }
 
             if (_scale == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+            }
 
             if (_precision == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             IReadOnlyList<decimal> decimalRows;
             if (type == typeof(decimal))
+            {
                 decimalRows = (IReadOnlyList<decimal>)rows;
+            }
             else if (type == typeof(long))
+            {
                 decimalRows = MappedReadOnlyList<long, decimal>.Map((IReadOnlyList<long>)rows, v => v);
+            }
             else if (type == typeof(ulong))
+            {
                 decimalRows = MappedReadOnlyList<ulong, decimal>.Map((IReadOnlyList<ulong>)rows, v => v);
+            }
             else if (type == typeof(int))
+            {
                 decimalRows = MappedReadOnlyList<int, decimal>.Map((IReadOnlyList<int>)rows, v => v);
+            }
             else if (type == typeof(uint))
+            {
                 decimalRows = MappedReadOnlyList<uint, decimal>.Map((IReadOnlyList<uint>)rows, v => v);
+            }
             else if (type == typeof(short))
+            {
                 decimalRows = MappedReadOnlyList<short, decimal>.Map((IReadOnlyList<short>)rows, v => v);
-            else if (type == typeof(ushort))
-                decimalRows = MappedReadOnlyList<ushort, decimal>.Map((IReadOnlyList<ushort>)rows, v => v);
-            else if (type == typeof(sbyte))
-                decimalRows = MappedReadOnlyList<sbyte, decimal>.Map((IReadOnlyList<sbyte>)rows, v => v);
-            else if (type == typeof(byte))
-                decimalRows = MappedReadOnlyList<byte, decimal>.Map((IReadOnlyList<byte>)rows, v => v);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                decimalRows = type == typeof(ushort)
+                    ? MappedReadOnlyList<ushort, decimal>.Map((IReadOnlyList<ushort>)rows, v => v)
+                    : type == typeof(sbyte)
+                    ? MappedReadOnlyList<sbyte, decimal>.Map((IReadOnlyList<sbyte>)rows, v => v)
+                    : type == typeof(byte)
+                ? (IReadOnlyList<decimal>)MappedReadOnlyList<byte, decimal>.Map((IReadOnlyList<byte>)rows, v => v)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return new DecimalWriter(columnName, ComplexTypeName, _precision.Value, _scale.Value, decimalRows);
         }
@@ -143,19 +176,27 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_precision == null && _scale == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Both scale and precision are required for the type \"{TypeName}\".");
+            }
 
             if (_scale == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Scale is required for the type \"{TypeName}\".");
+            }
 
             if (_precision == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"Precision is required for the type \"{TypeName}\".");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
-            var binaryWriter = new DecimalWriter("Value", ComplexTypeName, _precision.Value, _scale.Value, Array.Empty<decimal>());
+            DecimalWriter binaryWriter = new("Value", ComplexTypeName, _precision.Value, _scale.Value, Array.Empty<decimal>());
             object writer = default(T) switch
             {
                 decimal _ => new DecimalParameterWriter<decimal>(this, binaryWriter, v => v),
@@ -180,17 +221,23 @@ namespace Octonica.ClickHouseClient.Types
             if (options.Count == 1)
             {
                 if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out scale) || scale < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The scale value for the type \"{TypeName}\" must be a non-negative number.");
+                }
             }
             else if (options.Count == 2)
             {
-                if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var firstValue) || firstValue <= 0)
+                if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out int firstValue) || firstValue <= 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The first parameter in options (precision) for the type \"{TypeName}\" must be a positive number.");
+                }
 
                 precision = firstValue;
 
                 if (!int.TryParse(options[1].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out scale) || scale < 0)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The second parameter in options (scale) for the type \"{TypeName}\" must be a non-negative number.");
+                }
             }
             else
             {
@@ -198,9 +245,11 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (_precision != null && precision != null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value of the precision can not be redefined for the type \"{TypeName}\".");
+            }
 
-            var complexTypeName = TypeName + "(" + string.Join(", ", options) + ")";
+            string complexTypeName = TypeName + "(" + string.Join(", ", options) + ")";
             return CloneWithOptions(complexTypeName, precision, scale);
         }
 
@@ -222,7 +271,9 @@ namespace Octonica.ClickHouseClient.Types
         public virtual object GetTypeArgument(int index)
         {
             if (_precision == null && _scale == null)
+            {
                 throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
+            }
 
             switch (index)
             {
@@ -239,7 +290,9 @@ namespace Octonica.ClickHouseClient.Types
 
                 case 1:
                     if (_scale == null || _precision == null)
+                    {
                         goto default;
+                    }
 
                     return _scale;
 
@@ -253,9 +306,14 @@ namespace Octonica.ClickHouseClient.Types
         private static int GetElementSize(int precision)
         {
             if (precision <= 9)
+            {
                 return 4;
+            }
+
             if (precision <= 18)
+            {
                 return 8;
+            }
 
             Debug.Assert(precision <= 38);
             return 16;
@@ -276,19 +334,21 @@ namespace Octonica.ClickHouseClient.Types
                 _rowCount = rowCount;
                 _elementSize = GetElementSize(precision);
                 _values = new uint[_elementSize / 4 * rowCount];
-                _scale = (byte) scale;
+                _scale = (byte)scale;
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var elementPosition = _position * sizeof(uint) / _elementSize;
+                int elementPosition = _position * sizeof(uint) / _elementSize;
                 if (elementPosition >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
-                var byteLength = (int) Math.Min((_rowCount - elementPosition) * _elementSize, sequence.Length - sequence.Length % _elementSize);
-                var uintLength = byteLength / sizeof(uint);
+                int byteLength = (int)Math.Min((_rowCount - elementPosition) * _elementSize, sequence.Length - (sequence.Length % _elementSize));
+                int uintLength = byteLength / sizeof(uint);
 
-                var targetSpan = MemoryMarshal.AsBytes(new Span<uint>(_values, _position, uintLength));
+                Span<byte> targetSpan = MemoryMarshal.AsBytes(new Span<uint>(_values, _position, uintLength));
                 Debug.Assert(targetSpan.Length == byteLength);
 
                 sequence.Slice(0, byteLength).CopyTo(targetSpan);
@@ -304,7 +364,7 @@ namespace Octonica.ClickHouseClient.Types
 
             private DecimalTableColumn EndReadInternal()
             {
-                var memory = new ReadOnlyMemory<uint>(_values, 0, _position);
+                ReadOnlyMemory<uint> memory = new(_values, 0, _position);
                 return new DecimalTableColumn(memory, _elementSize / 4, _scale);
             }
         }
@@ -316,12 +376,12 @@ namespace Octonica.ClickHouseClient.Types
 
             private readonly byte _scale;
 
-            public new int ElementSize { get => base.ElementSize; }
+            public new int ElementSize => base.ElementSize;
 
             public DecimalWriter(string columnName, string columnType, int precision, int scale, IReadOnlyList<decimal> rows)
                 : base(columnName, columnType, GetElementSize(precision), rows)
             {
-                _scale = (byte) scale;
+                _scale = (byte)scale;
             }
 
             public void WriteDecimal(Span<byte> writeTo, decimal value)
@@ -331,60 +391,62 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override void WriteElement(Span<byte> writeTo, in decimal value)
             {
-                var rescaledValue = Math.Round(value, Math.Min(_scale, MaxDecimalScale), MidpointRounding.AwayFromZero);
-                
+                decimal rescaledValue = Math.Round(value, Math.Min(_scale, MaxDecimalScale), MidpointRounding.AwayFromZero);
+
 #if NET5_0_OR_GREATER
                 Span<int> bits = stackalloc int[4];
                 decimal.GetBits(rescaledValue, bits);
 #else
                 var bits = decimal.GetBits(rescaledValue);
 #endif
-                uint lowLow = unchecked((uint) bits[0]);
-                uint lowHigh = unchecked((uint) bits[1]);
-                uint highLow = unchecked((uint) bits[2]);
+                uint lowLow = unchecked((uint)bits[0]);
+                uint lowHigh = unchecked((uint)bits[1]);
+                uint highLow = unchecked((uint)bits[2]);
                 uint highHigh = 0;
 
                 bool isNegative = (bits[3] & int.MinValue) != 0;
                 int scale = (bits[3] & ~int.MinValue) >> 16;
 
-                var deltaScale = _scale - scale;
+                int deltaScale = _scale - scale;
                 if (deltaScale < 0)
+                {
                     throw new InvalidOperationException("Internal error: unexpected scale difference.");
+                }
 
                 bool overflow = false;
                 while (deltaScale > 0)
                 {
-                    var iterationScale = Math.Min(deltaScale, Scales.Length);
+                    int iterationScale = Math.Min(deltaScale, Scales.Length);
                     deltaScale -= iterationScale;
-                    var multiplier = (ulong) Scales[iterationScale - 1];
+                    ulong multiplier = Scales[iterationScale - 1];
 
                     ulong lowLowMul = lowLow * multiplier;
                     ulong lowHighMul = lowHigh * multiplier;
                     ulong highLowMul = highLow * multiplier;
                     ulong highHighMul = highHigh * multiplier;
 
-                    lowLow = unchecked((uint) lowLowMul);
-                    lowHigh = unchecked((uint) lowHighMul);
-                    highLow = unchecked((uint) highLowMul);
-                    highHigh = unchecked((uint) highHighMul);
+                    lowLow = unchecked((uint)lowLowMul);
+                    lowHigh = unchecked((uint)lowHighMul);
+                    highLow = unchecked((uint)highLowMul);
+                    highHigh = unchecked((uint)highHighMul);
 
-                    var val = lowLowMul >> 32;
+                    ulong val = lowLowMul >> 32;
                     if (val != 0)
                     {
                         val += lowHigh;
-                        lowHigh = unchecked((uint) val);
+                        lowHigh = unchecked((uint)val);
 
                         val >>= 32;
                         if (val != 0)
                         {
                             val += highLow;
-                            highLow = unchecked((uint) val);
+                            highLow = unchecked((uint)val);
 
                             val >>= 32;
                             if (val != 0)
                             {
                                 val += highHigh;
-                                highHigh = unchecked((uint) val);
+                                highHigh = unchecked((uint)val);
 
                                 val >>= 32;
                                 if (val != 0)
@@ -448,52 +510,62 @@ namespace Octonica.ClickHouseClient.Types
 
                         lowHigh = unchecked(max - lowHigh);
                         if (lowHigh != 0 && max == 0)
+                        {
                             max = uint.MaxValue;
+                        }
 
                         highLow = unchecked(max - highLow);
                         if (highLow != 0 && max == 0)
+                        {
                             max = uint.MaxValue;
+                        }
 
                         highHigh = unchecked(max - highHigh);
 
-                        if (ElementSize == 4)
-                            overflow = highHigh != uint.MaxValue || highLow != uint.MaxValue || lowHigh != uint.MaxValue || (lowLow & unchecked((uint) int.MinValue)) == 0;
-                        else if (ElementSize == 8)
-                            overflow = highHigh != uint.MaxValue || highLow != uint.MaxValue || (lowHigh & unchecked((uint) int.MinValue)) == 0;
-                        else
-                            overflow = (highHigh & unchecked((uint) int.MinValue)) == 0;
+                        overflow = ElementSize == 4
+                            ? highHigh != uint.MaxValue || highLow != uint.MaxValue || lowHigh != uint.MaxValue || (lowLow & unchecked((uint)int.MinValue)) == 0
+                            : ElementSize == 8
+                            ? highHigh != uint.MaxValue || highLow != uint.MaxValue || (lowHigh & unchecked((uint)int.MinValue)) == 0
+                            : (highHigh & unchecked((uint)int.MinValue)) == 0;
 
                         if (overflow && rescaledValue == 0)
+                        {
                             overflow = false;
+                        }
                     }
                     else
                     {
-                        if (ElementSize == 4)
-                            overflow = highHigh != 0 || highLow != 0 || lowHigh != 0 || (lowLow & unchecked((uint) int.MinValue)) != 0;
-                        else if (ElementSize == 8)
-                            overflow = highHigh != 0 || highLow != 0 || (lowHigh & unchecked((uint) int.MinValue)) != 0;
-                        else
-                            overflow = (highHigh & unchecked((uint) int.MinValue)) != 0;
+                        overflow = ElementSize == 4
+                            ? highHigh != 0 || highLow != 0 || lowHigh != 0 || (lowLow & unchecked((uint)int.MinValue)) != 0
+                            : ElementSize == 8
+                            ? highHigh != 0 || highLow != 0 || (lowHigh & unchecked((uint)int.MinValue)) != 0
+                            : (highHigh & unchecked((uint)int.MinValue)) != 0;
                     }
                 }
 
                 if (overflow)
+                {
                     throw new OverflowException($"The decimal value is too big and can't be written to the column of type \"{ColumnType}\".");
+                }
 
-                var success = BitConverter.TryWriteBytes(writeTo, lowLow);
+                bool success = BitConverter.TryWriteBytes(writeTo, lowLow);
                 Debug.Assert(success);
                 if (ElementSize == 4)
+                {
                     return;
+                }
 
-                success = BitConverter.TryWriteBytes(writeTo.Slice(4), lowHigh);
+                success = BitConverter.TryWriteBytes(writeTo[4..], lowHigh);
                 Debug.Assert(success);
                 if (ElementSize == 8)
+                {
                     return;
+                }
 
                 Debug.Assert(ElementSize == 16);
-                success = BitConverter.TryWriteBytes(writeTo.Slice(8), highLow);
+                success = BitConverter.TryWriteBytes(writeTo[8..], highLow);
                 Debug.Assert(success);
-                success = BitConverter.TryWriteBytes(writeTo.Slice(12), highHigh);
+                success = BitConverter.TryWriteBytes(writeTo[12..], highHigh);
                 Debug.Assert(success);
             }
         }
@@ -520,12 +592,14 @@ namespace Octonica.ClickHouseClient.Types
                 for (int i = 0; i < binaryValue.Length; i++)
                 {
                     if (binaryValue.Span[i] == 0)
+                    {
                         continue;
+                    }
 
                     lastNonZeroIdx = i;
                 }
 
-                binaryValue = binaryValue.Slice(0, lastNonZeroIdx + 1);
+                binaryValue = binaryValue[..(lastNonZeroIdx + 1)];
                 valueWriter = new HexStringLiteralValueWriter(binaryValue, isNested);
                 return true;
             }
@@ -538,32 +612,32 @@ namespace Octonica.ClickHouseClient.Types
                 // Not all decimal values can be parsed:
                 // > Real value ranges that can be stored in memory are a bit larger than specified above, which are checked only on conversion from a string.
                 // But reinterpret_cast lets obtain any Decimal value
-                queryBuilder.Append("reinterpret(");
-                HexStringParameterWriter.Interpolate(queryBuilder, buffer);
+                _ = queryBuilder.Append("reinterpret(");
+                _ = HexStringParameterWriter.Interpolate(queryBuilder, buffer);
 
-                queryBuilder.Append(", '");
-                queryBuilder.Append(_binaryWriter.ColumnType);
+                _ = queryBuilder.Append(", '");
+                _ = queryBuilder.Append(_binaryWriter.ColumnType);
                 return queryBuilder.Append("')");
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                var typeName = $"FixedString({_binaryWriter.ElementSize.ToString(CultureInfo.InvariantCulture)})";
-                var type = typeInfoProvider.GetTypeInfo(typeName);
+                string typeName = $"FixedString({_binaryWriter.ElementSize.ToString(CultureInfo.InvariantCulture)})";
+                IClickHouseColumnTypeInfo type = typeInfoProvider.GetTypeInfo(typeName);
 
                 return writeValue(queryBuilder, type, (sb, realWrite) =>
                 {
-                    sb.Append("reinterpret(");
-                    realWrite(sb);
-                    sb.Append(", '");
-                    sb.Append(_binaryWriter.ColumnType);
+                    _ = sb.Append("reinterpret(");
+                    _ = realWrite(sb);
+                    _ = sb.Append(", '");
+                    _ = sb.Append(_binaryWriter.ColumnType);
                     return queryBuilder.Append("')");
                 });
             }
 
             private void GetBytes(T value, Span<byte> buffer)
             {
-                var decValue = _convert(value);
+                decimal decValue = _convert(value);
                 _binaryWriter.WriteDecimal(buffer, decValue);
             }
         }

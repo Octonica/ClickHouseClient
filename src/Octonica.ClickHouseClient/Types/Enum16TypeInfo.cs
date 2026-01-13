@@ -15,11 +15,11 @@
  */
 #endregion
 
-using System;
-using System.Collections.Generic;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
+using System;
+using System.Collections.Generic;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -57,17 +57,14 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override IClickHouseColumnWriter CreateInternalColumnWriter<T>(string columnName, IReadOnlyList<T> rows)
         {
-            var type = typeof(T);
-            IReadOnlyList<short> shortRows;
-            if (type == typeof(short))
-                shortRows = (IReadOnlyList<short>)rows;
-            else if (type == typeof(byte))
-                shortRows = MappedReadOnlyList<byte, short>.Map((IReadOnlyList<byte>)rows, v => v);
-            else if (type == typeof(sbyte))
-                shortRows = MappedReadOnlyList<sbyte, short>.Map((IReadOnlyList<sbyte>)rows, v => v);
-            else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{TypeName}\".");
-
+            Type type = typeof(T);
+            IReadOnlyList<short> shortRows = type == typeof(short)
+                ? (IReadOnlyList<short>)rows
+                : type == typeof(byte)
+                    ? MappedReadOnlyList<byte, short>.Map((IReadOnlyList<byte>)rows, v => v)
+                    : type == typeof(sbyte)
+                ? (IReadOnlyList<short>)MappedReadOnlyList<sbyte, short>.Map((IReadOnlyList<sbyte>)rows, v => v)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{TypeName}\".");
             return new Int16TypeInfo.Int16Writer(columnName, ComplexTypeName, shortRows);
         }
 
@@ -75,28 +72,25 @@ namespace Octonica.ClickHouseClient.Types
         {
             // TODO: ClickHouseDbType.Enum is not supported in DefaultTypeInfoProvider.GetTypeInfo
             if (_enumMap == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The list of items is not specified.");
-
-            var type = typeof(T);
-            if (type == typeof(DBNull))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
-
-            object writer;
-            if (type == typeof(string))
-            {
-                writer = new EnumParameterWriter(this);
             }
-            else
+
+            Type type = typeof(T);
+            if (type == typeof(DBNull))
             {
-                writer = default(T) switch
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
+
+            object writer = type == typeof(string)
+                ? new EnumParameterWriter(this)
+                : default(T) switch
                 {
                     short _ => new SimpleParameterWriter<short>(this),
                     byte _ => new SimpleParameterWriter<byte>(this),
                     sbyte _ => new SimpleParameterWriter<sbyte>(this),
                     _ => throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\"."),
                 };
-            }
-
             return (IClickHouseParameterWriter<T>)writer;
         }
 

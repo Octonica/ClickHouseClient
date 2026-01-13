@@ -21,7 +21,7 @@ namespace Octonica.ClickHouseClient.Protocol
 {
     internal class BlockHeader
     {
-        private static readonly ReadOnlyCollection<ColumnInfo> EmptyColumns = new ReadOnlyCollection<ColumnInfo>(new ColumnInfo[0]);
+        private static readonly ReadOnlyCollection<ColumnInfo> EmptyColumns = new(new ColumnInfo[0]);
 
         public string? TableName { get; }
 

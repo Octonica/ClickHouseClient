@@ -41,9 +41,11 @@ namespace Octonica.ClickHouseClient.Types
         public BigInteger GetValue(int index)
         {
             if (index < 0 || index >= RowCount)
+            {
                 throw new IndexOutOfRangeException();
+            }
 
-            var slice = ((ReadOnlySpan<byte>)_rawData).Slice(index * _elementByteSize, _elementByteSize);
+            ReadOnlySpan<byte> slice = ((ReadOnlySpan<byte>)_rawData).Slice(index * _elementByteSize, _elementByteSize);
             return new BigInteger(slice, _isUnsigned);
         }
 
@@ -59,10 +61,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(BigInteger?))
-                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<BigInteger>(null, this);
-
-            return null;
+            return typeof(T) == typeof(BigInteger?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<BigInteger>(null, this)
+                : null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

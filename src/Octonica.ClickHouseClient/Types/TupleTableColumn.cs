@@ -15,13 +15,13 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -52,15 +52,17 @@ namespace Octonica.ClickHouseClient.Types
         protected void CheckIndex(int index)
         {
             if (index < 0 || index > RowCount)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index));
+            }
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            var columns = GetColumns();
-            var columnList = columns as IReadOnlyList<IClickHouseTableColumn> ?? columns.ToList();
+            IEnumerable<IClickHouseTableColumn> columns = GetColumns();
+            IReadOnlyList<IClickHouseTableColumn> columnList = columns as IReadOnlyList<IClickHouseTableColumn> ?? columns.ToList();
 
-            return (IClickHouseTableColumn<T>?) TryMakeTupleColumn(typeof(T), RowCount, columnList);
+            return (IClickHouseTableColumn<T>?)TryMakeTupleColumn(typeof(T), RowCount, columnList);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -73,103 +75,156 @@ namespace Octonica.ClickHouseClient.Types
 
         public static TupleTableColumnBase MakeTupleColumn(int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
         {
-            var columnElementTypes = new Type[columns.Count];
+            Type[] columnElementTypes = new Type[columns.Count];
 
-            for (var i = 0; i < columns.Count; i++)
+            for (int i = 0; i < columns.Count; i++)
+            {
                 columnElementTypes[i] = ClickHouseTableColumnHelper.TryGetValueType(columns[i]) ?? typeof(object);
+            }
 
-            var tupleType = TupleTypeInfo.MakeTupleType(columnElementTypes);
-            var tupleColumn = TryMakeTupleColumn(tupleType, rowCount, columns);
+            Type tupleType = TupleTypeInfo.MakeTupleType(columnElementTypes);
+            TupleTableColumnBase? tupleColumn = TryMakeTupleColumn(tupleType, rowCount, columns);
 
-            if (tupleColumn == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. The column of the required type can't be created.");
-
-            return tupleColumn;
+            return tupleColumn ?? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. The column of the required type can't be created.");
         }
 
         private static TupleTableColumnBase? TryMakeTupleColumn(Type type, int rowCount, IReadOnlyList<IClickHouseTableColumn> columns)
         {
             if (columns == null)
+            {
                 throw new ArgumentNullException(nameof(columns));
-            if (!type.IsGenericType)
-                return null;
+            }
 
-            var typeDef = type.GetGenericTypeDefinition();
+            if (!type.IsGenericType)
+            {
+                return null;
+            }
+
+            Type typeDef = type.GetGenericTypeDefinition();
             Type? reinterpreterTypeDef = null;
             switch (columns.Count)
             {
                 case 1:
                     if (typeDef == typeof(Tuple<>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<>.Reinterpreter);
+                    }
+
                     break;
                 case 2:
                     if (typeDef == typeof(Tuple<,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(KeyValuePair<,>))
+                    {
                         reinterpreterTypeDef = typeof(KeyValuePairTableColumn<,>.Reinterpreter);
+                    }
+
                     break;
                 case 3:
                     if (typeDef == typeof(Tuple<,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,>.Reinterpreter);
+                    }
+
                     break;
                 case 4:
                     if (typeDef == typeof(Tuple<,,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,,>.Reinterpreter);
+                    }
+
                     break;
                 case 5:
                     if (typeDef == typeof(Tuple<,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,,,>.Reinterpreter);
+                    }
+
                     break;
                 case 6:
                     if (typeDef == typeof(Tuple<,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,,,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,,,,>.Reinterpreter);
+                    }
+
                     break;
                 case 7:
                     if (typeDef == typeof(Tuple<,,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,,,,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,,,,,>.Reinterpreter);
+                    }
+
                     break;
                 default:
                     if (columns.Count < 8)
+                    {
                         break;
+                    }
 
                     if (typeDef == typeof(Tuple<,,,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(TupleTableColumn<,,,,,,,,>.Reinterpreter);
+                    }
                     else if (typeDef == typeof(ValueTuple<,,,,,,,>))
+                    {
                         reinterpreterTypeDef = typeof(ValueTupleTableColumn<,,,,,,,,>.Reinterpreter);
+                    }
                     else
+                    {
                         break;
+                    }
 
-                    var tuple8Args = type.GetGenericArguments();
-                    var extraTupleType = tuple8Args[^1];
-                    var extraColumn = TryMakeTupleColumn(extraTupleType, rowCount, columns.Slice(7));
+                    Type[] tuple8Args = type.GetGenericArguments();
+                    Type extraTupleType = tuple8Args[^1];
+                    TupleTableColumnBase? extraColumn = TryMakeTupleColumn(extraTupleType, rowCount, columns.Slice(7));
                     if (extraColumn == null)
+                    {
                         return null;
+                    }
 
-                    var extraColumnType = extraColumn.GetType();
+                    Type extraColumnType = extraColumn.GetType();
                     if (!typeof(IClickHouseTableColumn<>).MakeGenericType(extraTupleType).IsAssignableFrom(extraColumnType))
+                    {
                         return null;
+                    }
 
-                    var tuple8ColumnTypeArgs = new Type[9];
+                    Type[] tuple8ColumnTypeArgs = new Type[9];
                     tuple8Args.CopyTo(tuple8ColumnTypeArgs, 0);
                     tuple8ColumnTypeArgs[^1] = extraColumnType;
 
-                    var tuple8ColumnInterpreter = (ReinterpreterBase) Activator.CreateInstance(reinterpreterTypeDef.MakeGenericType(tuple8ColumnTypeArgs))!;
+                    ReinterpreterBase tuple8ColumnInterpreter = (ReinterpreterBase)Activator.CreateInstance(reinterpreterTypeDef.MakeGenericType(tuple8ColumnTypeArgs))!;
 
-                    var tuple8Columns = new List<IClickHouseTableColumn>(8);
+                    List<IClickHouseTableColumn> tuple8Columns = new(8);
                     tuple8Columns.AddRange(columns.Take(7));
                     tuple8Columns.Add(extraColumn);
 
@@ -177,11 +232,13 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (reinterpreterTypeDef == null)
+            {
                 return null;
+            }
 
-            var tupleArgs = type.GetGenericArguments();
-            var reinterpreterType = reinterpreterTypeDef.MakeGenericType(tupleArgs);
-            var reinterpreter = (ReinterpreterBase) Activator.CreateInstance(reinterpreterType)!;
+            Type[] tupleArgs = type.GetGenericArguments();
+            Type reinterpreterType = reinterpreterTypeDef.MakeGenericType(tupleArgs);
+            ReinterpreterBase reinterpreter = (ReinterpreterBase)Activator.CreateInstance(reinterpreterType)!;
 
             return reinterpreter.TryReinterpret(rowCount, columns);
         }
@@ -192,11 +249,8 @@ namespace Octonica.ClickHouseClient.Types
 
             protected static IClickHouseTableColumn<T>? TryReinterpret<T>(IClickHouseTableColumn column)
             {
-                var result = column as IClickHouseTableColumn<T> ?? column.TryReinterpret<T>();
-                if (result == null && typeof(T) == typeof(object))
-                    return (IClickHouseTableColumn<T>) (object) new ObjectColumnAdapter(column);
-
-                return result;
+                IClickHouseTableColumn<T>? result = column as IClickHouseTableColumn<T> ?? column.TryReinterpret<T>();
+                return result == null && typeof(T) == typeof(object) ? (IClickHouseTableColumn<T>)(object)new ObjectColumnAdapter(column) : result;
             }
         }
     }
@@ -241,11 +295,8 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 1);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
-                if (column1 == null)
-                    return null;
-
-                return new TupleTableColumn<T1>(rowCount, column1);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
+                return column1 == null ? null : (TupleTableColumnBase)new TupleTableColumn<T1>(rowCount, column1);
             }
         }
     }
@@ -293,15 +344,14 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 2);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
-                if (column2 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2>(rowCount, column1, column2);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
+                return column2 == null ? null : (TupleTableColumnBase)new TupleTableColumn<T1, T2>(rowCount, column1, column2);
             }
         }
     }
@@ -352,19 +402,20 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 3);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
-                if (column3 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3>(rowCount, column1, column2, column3);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
+                return column3 == null ? null : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3>(rowCount, column1, column2, column3);
             }
         }
     }
@@ -418,23 +469,26 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 4);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
-                if (column4 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3, T4>(rowCount, column1, column2, column3, column4);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
+                return column4 == null ? null : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3, T4>(rowCount, column1, column2, column3, column4);
             }
         }
     }
@@ -503,27 +557,32 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 5);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
-                if (column5 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3, T4, T5>(rowCount, column1, column2, column3, column4, column5);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
+                return column5 == null ? null : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3, T4, T5>(rowCount, column1, column2, column3, column4, column5);
             }
         }
     }
@@ -602,31 +661,40 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 6);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
-                if (column6 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3, T4, T5, T6>(rowCount, column1, column2, column3, column4, column5, column6);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
+                return column6 == null
+                    ? null
+                    : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3, T4, T5, T6>(rowCount, column1, column2, column3, column4, column5, column6);
             }
         }
     }
@@ -712,35 +780,46 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 7);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
                 if (column6 == null)
+                {
                     return null;
+                }
 
-                var column7 = TryReinterpret<T7>(columns[6]);
-                if (column7 == null)
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3, T4, T5, T6, T7>(rowCount, column1, column2, column3, column4, column5, column6, column7);
+                IClickHouseTableColumn<T7>? column7 = TryReinterpret<T7>(columns[6]);
+                return column7 == null
+                    ? null
+                    : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3, T4, T5, T6, T7>(rowCount, column1, column2, column3, column4, column5, column6, column7);
             }
         }
     }
@@ -759,7 +838,7 @@ namespace Octonica.ClickHouseClient.Types
         private readonly TColumnRest _columnRest;
 
         public Tuple<T1, T2, T3, T4, T5, T6, T7, TRest> DefaultValue =>
-            new Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>(
+            new(
                 _column1.DefaultValue,
                 _column2.DefaultValue,
                 _column3.DefaultValue,
@@ -803,7 +882,7 @@ namespace Octonica.ClickHouseClient.Types
                 _column5.GetValue(index),
                 _column6.GetValue(index),
                 _column7.GetValue(index),
-                ((IClickHouseTableColumn<TRest>) _columnRest).GetValue(index));
+                ((IClickHouseTableColumn<TRest>)_columnRest).GetValue(index));
         }
 
         protected override object GetTupleValue(int index)
@@ -821,8 +900,10 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column6;
             yield return _column7;
 
-            foreach (var extraColumn in _columnRest.GetColumns())
+            foreach (IClickHouseTableColumn extraColumn in _columnRest.GetColumns())
+            {
                 yield return extraColumn;
+            }
         }
 
         protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
@@ -836,39 +917,52 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 8);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
                 if (column6 == null)
+                {
                     return null;
+                }
 
-                var column7 = TryReinterpret<T7>(columns[6]);
+                IClickHouseTableColumn<T7>? column7 = TryReinterpret<T7>(columns[6]);
                 if (column7 == null)
+                {
                     return null;
+                }
 
-                var column8 = TryReinterpret<TRest>(columns[7]);
-                if (!(column8 is TColumnRest columnRest))
-                    return null;
-
-                return new TupleTableColumn<T1, T2, T3, T4, T5, T6, T7, TRest, TColumnRest>(rowCount, column1, column2, column3, column4, column5, column6, column7, columnRest);
+                IClickHouseTableColumn<TRest>? column8 = TryReinterpret<TRest>(columns[7]);
+                return column8 is not TColumnRest columnRest
+                    ? null
+                    : (TupleTableColumnBase)new TupleTableColumn<T1, T2, T3, T4, T5, T6, T7, TRest, TColumnRest>(rowCount, column1, column2, column3, column4, column5, column6, column7, columnRest);
             }
         }
     }
@@ -914,11 +1008,8 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 1);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
-                if (column1 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1>(rowCount, column1);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
+                return column1 == null ? null : (TupleTableColumnBase)new ValueTupleTableColumn<T1>(rowCount, column1);
             }
         }
     }
@@ -966,15 +1057,14 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 2);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
-                if (column2 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2>(rowCount, column1, column2);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
+                return column2 == null ? null : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2>(rowCount, column1, column2);
             }
         }
     }
@@ -1025,19 +1115,20 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 3);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
-                if (column3 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3>(rowCount, column1, column2, column3);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
+                return column3 == null ? null : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3>(rowCount, column1, column2, column3);
             }
         }
     }
@@ -1091,23 +1182,26 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 4);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
-                if (column4 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3, T4>(rowCount, column1, column2, column3, column4);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
+                return column4 == null ? null : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3, T4>(rowCount, column1, column2, column3, column4);
             }
         }
     }
@@ -1176,27 +1270,32 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 5);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
-                if (column5 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3, T4, T5>(rowCount, column1, column2, column3, column4, column5);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
+                return column5 == null ? null : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3, T4, T5>(rowCount, column1, column2, column3, column4, column5);
             }
         }
     }
@@ -1276,31 +1375,40 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 6);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
-                if (column6 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6>(rowCount, column1, column2, column3, column4, column5, column6);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
+                return column6 == null
+                    ? null
+                    : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6>(rowCount, column1, column2, column3, column4, column5, column6);
             }
         }
     }
@@ -1386,35 +1494,46 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 7);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
                 if (column6 == null)
+                {
                     return null;
+                }
 
-                var column7 = TryReinterpret<T7>(columns[6]);
-                if (column7 == null)
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6, T7>(rowCount, column1, column2, column3, column4, column5, column6, column7);
+                IClickHouseTableColumn<T7>? column7 = TryReinterpret<T7>(columns[6]);
+                return column7 == null
+                    ? null
+                    : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6, T7>(rowCount, column1, column2, column3, column4, column5, column6, column7);
             }
         }
     }
@@ -1433,7 +1552,7 @@ namespace Octonica.ClickHouseClient.Types
         private readonly TColumnRest _columnRest;
 
         public ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest> DefaultValue =>
-            new ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>(
+            new(
                 _column1.DefaultValue,
                 _column2.DefaultValue,
                 _column3.DefaultValue,
@@ -1477,7 +1596,7 @@ namespace Octonica.ClickHouseClient.Types
                 _column5.GetValue(index),
                 _column6.GetValue(index),
                 _column7.GetValue(index),
-                ((IClickHouseTableColumn<TRest>) _columnRest).GetValue(index));
+                ((IClickHouseTableColumn<TRest>)_columnRest).GetValue(index));
         }
 
         protected override object GetTupleValue(int index)
@@ -1495,8 +1614,10 @@ namespace Octonica.ClickHouseClient.Types
             yield return _column6;
             yield return _column7;
 
-            foreach (var extraColumn in _columnRest.GetColumns())
+            foreach (IClickHouseTableColumn extraColumn in _columnRest.GetColumns())
+            {
                 yield return extraColumn;
+            }
         }
 
         protected override T Dispatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher)
@@ -1510,39 +1631,52 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 8);
 
-                var column1 = TryReinterpret<T1>(columns[0]);
+                IClickHouseTableColumn<T1>? column1 = TryReinterpret<T1>(columns[0]);
                 if (column1 == null)
+                {
                     return null;
+                }
 
-                var column2 = TryReinterpret<T2>(columns[1]);
+                IClickHouseTableColumn<T2>? column2 = TryReinterpret<T2>(columns[1]);
                 if (column2 == null)
+                {
                     return null;
+                }
 
-                var column3 = TryReinterpret<T3>(columns[2]);
+                IClickHouseTableColumn<T3>? column3 = TryReinterpret<T3>(columns[2]);
                 if (column3 == null)
+                {
                     return null;
+                }
 
-                var column4 = TryReinterpret<T4>(columns[3]);
+                IClickHouseTableColumn<T4>? column4 = TryReinterpret<T4>(columns[3]);
                 if (column4 == null)
+                {
                     return null;
+                }
 
-                var column5 = TryReinterpret<T5>(columns[4]);
+                IClickHouseTableColumn<T5>? column5 = TryReinterpret<T5>(columns[4]);
                 if (column5 == null)
+                {
                     return null;
+                }
 
-                var column6 = TryReinterpret<T6>(columns[5]);
+                IClickHouseTableColumn<T6>? column6 = TryReinterpret<T6>(columns[5]);
                 if (column6 == null)
+                {
                     return null;
+                }
 
-                var column7 = TryReinterpret<T7>(columns[6]);
+                IClickHouseTableColumn<T7>? column7 = TryReinterpret<T7>(columns[6]);
                 if (column7 == null)
+                {
                     return null;
+                }
 
-                var column8 = TryReinterpret<TRest>(columns[7]);
-                if (!(column8 is TColumnRest columnRest))
-                    return null;
-
-                return new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6, T7, TRest, TColumnRest>(rowCount, column1, column2, column3, column4, column5, column6, column7, columnRest);
+                IClickHouseTableColumn<TRest>? column8 = TryReinterpret<TRest>(columns[7]);
+                return column8 is not TColumnRest columnRest
+                    ? null
+                    : (TupleTableColumnBase)new ValueTupleTableColumn<T1, T2, T3, T4, T5, T6, T7, TRest, TColumnRest>(rowCount, column1, column2, column3, column4, column5, column6, column7, columnRest);
             }
         }
     }

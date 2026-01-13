@@ -15,16 +15,16 @@
  */
 #endregion
 
+using NodaTime;
+using NodaTime.Extensions;
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
-using NodaTime;
-using NodaTime.Extensions;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -61,7 +61,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            var timeZone = GetTimeZone();
+            DateTimeZone timeZone = GetTimeZone();
             return new DateTimeReader(rowCount, timeZone);
         }
 
@@ -74,13 +74,13 @@ namespace Octonica.ClickHouseClient.Types
         {
             if (typeof(T) == typeof(DateTime))
             {
-                var timeZone = GetTimeZone();
+                DateTimeZone timeZone = GetTimeZone();
                 return new DateTimeWriter(columnName, ComplexTypeName, timeZone, (IReadOnlyList<DateTime>)rows);
             }
 
             if (typeof(T) == typeof(DateTimeOffset))
             {
-                var timeZone = GetTimeZone();
+                DateTimeZone timeZone = GetTimeZone();
                 return new DateTimeOffsetWriter(columnName, ComplexTypeName, timeZone, (IReadOnlyList<DateTimeOffset>)rows);
             }
 
@@ -89,9 +89,11 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             object converter = default(T) switch
             {
@@ -106,9 +108,11 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (options.Count > 1)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
+            }
 
-            var tzCode = options[0].Trim('\'').ToString();
+            string tzCode = options[0].Trim('\'').ToString();
             return new DateTimeTypeInfo(tzCode, true);
         }
 
@@ -129,13 +133,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetTypeArgument(int index)
         {
-            if (_timeZoneCode == null || !_explicitTimeZoneCode)
-                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
-
-            if (index != 0)
-                throw new IndexOutOfRangeException();
-
-            return _timeZoneCode;
+            return _timeZoneCode == null || !_explicitTimeZoneCode
+                ? throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.")
+                : index != 0 ? throw new IndexOutOfRangeException() : (object)_timeZoneCode;
         }
 
         public IClickHouseColumnTypeInfo Configure(ClickHouseServerInfo serverInfo)
@@ -146,10 +146,14 @@ namespace Octonica.ClickHouseClient.Types
         private DateTimeZone GetTimeZone()
         {
             if (_timeZone != null)
+            {
                 return _timeZone;
+            }
 
             if (_timeZoneCode == null)
+            {
                 return DateTimeZone.Utc;
+            }
 
             _timeZone = TimeZoneHelper.GetDateTimeZone(_timeZoneCode);
             return _timeZone;
@@ -157,7 +161,7 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class DateTimeReader : StructureReaderBase<uint, DateTimeOffset>
         {
-            private readonly DateTimeZone _timeZone;            
+            private readonly DateTimeZone _timeZone;
 
             protected override bool BitwiseCopyAllowed => true;
 
@@ -203,11 +207,13 @@ namespace Octonica.ClickHouseClient.Types
                 }
                 else
                 {
-                    var doubleSeconds = (value - DateTime.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
-                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
+                    double doubleSeconds = (value - DateTime.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
+                    if (doubleSeconds is < 0 or > uint.MaxValue)
+                    {
                         throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
+                    }
 
-                    seconds = (uint) doubleSeconds;
+                    seconds = (uint)doubleSeconds;
                 }
                 return seconds;
             }
@@ -238,13 +244,15 @@ namespace Octonica.ClickHouseClient.Types
                 }
                 else
                 {
-                    var doubleSeconds = (value - DateTimeOffset.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
-                    if (doubleSeconds < 0 || doubleSeconds > uint.MaxValue)
+                    double doubleSeconds = (value - DateTimeOffset.UnixEpoch).TotalSeconds - _timeZone.GetUtcOffset(value.ToInstant()).Seconds;
+                    if (doubleSeconds is < 0 or > uint.MaxValue)
+                    {
                         throw new OverflowException("The value must be in range [1970-01-01 00:00:00, 2105-12-31 23:59:59].");
+                    }
 
-                    seconds = (uint) doubleSeconds;
+                    seconds = (uint)doubleSeconds;
                 }
-                
+
                 return seconds;
             }
         }
@@ -262,28 +270,28 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(T value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var seconds = _converter.Convert(value);
-                var str = seconds.ToString(CultureInfo.InvariantCulture);
+                uint seconds = _converter.Convert(value);
+                string str = seconds.ToString(CultureInfo.InvariantCulture);
                 valueWriter = new SimpleLiteralValueWriter(str.AsMemory());
                 return true;
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
-                queryBuilder.Append("CAST(");
-                var seconds = _converter.Convert(value);
-                queryBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
+                _ = queryBuilder.Append("CAST(");
+                uint seconds = _converter.Convert(value);
+                _ = queryBuilder.Append(seconds.ToString(CultureInfo.InvariantCulture));
                 return queryBuilder.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
             }
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, IClickHouseTypeInfoProvider typeInfoProvider, Func<StringBuilder, IClickHouseColumnTypeInfo, Func<StringBuilder, Func<StringBuilder, StringBuilder>, StringBuilder>, StringBuilder> writeValue)
             {
-                var ticksType = typeInfoProvider.GetTypeInfo("UInt32");
+                IClickHouseColumnTypeInfo ticksType = typeInfoProvider.GetTypeInfo("UInt32");
 
                 return writeValue(queryBuilder, ticksType, (qb, realWrite) =>
                 {
-                    qb.Append("CAST(");
-                    realWrite(qb);
+                    _ = qb.Append("CAST(");
+                    _ = realWrite(qb);
                     return qb.AppendFormat(" AS ").Append(_typeInfo.ComplexTypeName).Append(')');
                 });
             }

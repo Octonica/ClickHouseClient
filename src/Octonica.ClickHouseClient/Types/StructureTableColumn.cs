@@ -45,10 +45,7 @@ namespace Octonica.ClickHouseClient.Types
 
         public virtual IClickHouseTableColumn<TAs>? TryReinterpret<TAs>()
         {
-            if (typeof(TAs) == typeof(T?))
-                return (IClickHouseTableColumn<TAs>) (object) new NullableStructTableColumn<T>(null, this);
-
-            return null;
+            return typeof(TAs) == typeof(T?) ? (IClickHouseTableColumn<TAs>)(object)new NullableStructTableColumn<T>(null, this) : null;
         }
 
         object IClickHouseTableColumn.GetValue(int index)

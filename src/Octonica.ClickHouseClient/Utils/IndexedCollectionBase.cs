@@ -63,7 +63,7 @@ namespace Octonica.ClickHouseClient.Utils
         protected IndexedCollectionBase(IEqualityComparer<TKey>? comparer)
         {
             _items = new Dictionary<TKey, TValue>(comparer);
-            _keys = new List<TKey>();
+            _keys = [];
         }
 
         /// <summary>
@@ -108,12 +108,16 @@ namespace Octonica.ClickHouseClient.Utils
         public int IndexOf(TKey key)
         {
             if (key == null)
+            {
                 throw new ArgumentNullException(nameof(key));
+            }
 
             if (!_items.ContainsKey(key))
+            {
                 return -1;
+            }
 
-            var comparer = _items.Comparer;
+            IEqualityComparer<TKey> comparer = _items.Comparer;
             return _keys.FindIndex(item => comparer.Equals(item, key));
         }
 
@@ -121,13 +125,17 @@ namespace Octonica.ClickHouseClient.Utils
         public int IndexOf(TValue item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
-            var key = GetKey(item);
-            if (!_items.TryGetValue(key, out var existingValue) || !existingValue.Equals(item))
+            TKey key = GetKey(item);
+            if (!_items.TryGetValue(key, out TValue? existingValue) || !existingValue.Equals(item))
+            {
                 return -1;
+            }
 
-            var comparer = _items.Comparer;
+            IEqualityComparer<TKey> comparer = _items.Comparer;
             return _keys.FindIndex(item => comparer.Equals(item, key));
         }
 
@@ -135,9 +143,11 @@ namespace Octonica.ClickHouseClient.Utils
         public void Insert(int index, TValue item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
-            var key = GetKey(item);
+            TKey key = GetKey(item);
             _items.Add(key, item);
             try
             {
@@ -145,7 +155,7 @@ namespace Octonica.ClickHouseClient.Utils
             }
             catch
             {
-                _items.Remove(key);
+                _ = _items.Remove(key);
                 throw;
             }
         }
@@ -154,14 +164,18 @@ namespace Octonica.ClickHouseClient.Utils
         public bool Remove(TValue item)
         {
             if (item == null)
+            {
                 return false;
+            }
 
-            var key = GetKey(item);
-            if (!_items.TryGetValue(key, out var existingValue) || !existingValue.Equals(item))
+            TKey key = GetKey(item);
+            if (!_items.TryGetValue(key, out TValue? existingValue) || !existingValue.Equals(item))
+            {
                 return false;
+            }
 
-            var comparer = _items.Comparer;
-            var idx = _keys.FindIndex(item => comparer.Equals(item, key));
+            IEqualityComparer<TKey> comparer = _items.Comparer;
+            int idx = _keys.FindIndex(item => comparer.Equals(item, key));
             Debug.Assert(idx >= 0);
 
             RemoveAt(idx);
@@ -176,13 +190,17 @@ namespace Octonica.ClickHouseClient.Utils
         public bool Remove(TKey key)
         {
             if (key == null)
+            {
                 return false;
+            }
 
-            if (!_items.TryGetValue(key, out var existingValue))
+            if (!_items.TryGetValue(key, out TValue? existingValue))
+            {
                 return false;
+            }
 
-            var comparer = _items.Comparer;
-            var idx = _keys.FindIndex(item => comparer.Equals(item, key));
+            IEqualityComparer<TKey> comparer = _items.Comparer;
+            int idx = _keys.FindIndex(item => comparer.Equals(item, key));
             Debug.Assert(idx >= 0);
 
             RemoveAt(idx);
@@ -192,18 +210,20 @@ namespace Octonica.ClickHouseClient.Utils
         /// <inheritdoc/>
         public void RemoveAt(int index)
         {
-            var key = _keys[index];
+            TKey key = _keys[index];
             _keys.RemoveAt(index);
-            _items.Remove(key);
+            _ = _items.Remove(key);
         }
 
         /// <inheritdoc/>
         public void Add(TValue item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
-            var key = GetKey(item);
+            TKey key = GetKey(item);
             _items.Add(key, item);
             _keys.Add(key);
         }
@@ -219,13 +239,12 @@ namespace Octonica.ClickHouseClient.Utils
         public bool Contains(TValue item)
         {
             if (item == null)
+            {
                 throw new ArgumentNullException(nameof(item));
+            }
 
-            var key = GetKey(item);
-            if (!_items.TryGetValue(key, out var existingItem))
-                return false;
-
-            return existingItem.Equals(item);
+            TKey key = GetKey(item);
+            return _items.TryGetValue(key, out TValue? existingItem) && existingItem.Equals(item);
         }
 
         /// <inheritdoc/>
@@ -233,14 +252,18 @@ namespace Octonica.ClickHouseClient.Utils
         {
             int sourceIdx = 0, targetIdx = arrayIndex;
             while (sourceIdx < _keys.Count)
+            {
                 array[targetIdx++] = _items[_keys[sourceIdx++]];
+            }
         }
 
         void ICollection.CopyTo(Array array, int index)
         {
             int sourceIdx = 0, targetIdx = index;
             while (sourceIdx < _keys.Count)
+            {
                 array.SetValue(_items[_keys[sourceIdx++]], targetIdx++);
+            }
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -250,15 +273,19 @@ namespace Octonica.ClickHouseClient.Utils
 
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
         {
-            foreach (var name in _keys)
+            foreach (TKey name in _keys)
+            {
                 yield return new KeyValuePair<TKey, TValue>(name, _items[name]);
+            }
         }
 
         /// <inheritdoc/>
         public IEnumerator<TValue> GetEnumerator()
         {
-            foreach (var name in _keys)
+            foreach (TKey name in _keys)
+            {
                 yield return _items[name];
+            }
         }
 
         /// <inheritdoc/>
@@ -271,11 +298,13 @@ namespace Octonica.ClickHouseClient.Utils
             set
             {
                 if (value == null)
+                {
                     throw new ArgumentNullException(nameof(value));
+                }
 
-                var valueKey = GetKey(value);
-                var item = _items[_keys[index]];
-                var itemKey = GetKey(item);
+                TKey valueKey = GetKey(value);
+                TValue item = _items[_keys[index]];
+                TKey itemKey = GetKey(item);
                 if (_items.Comparer.Equals(itemKey, valueKey))
                 {
                     _items[valueKey] = value;
@@ -284,7 +313,7 @@ namespace Octonica.ClickHouseClient.Utils
                 else
                 {
                     _items.Add(valueKey, value);
-                    _items.Remove(itemKey);
+                    _ = _items.Remove(itemKey);
                 }
 
                 _keys[index] = valueKey;

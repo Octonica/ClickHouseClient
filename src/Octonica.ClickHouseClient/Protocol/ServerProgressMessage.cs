@@ -57,14 +57,18 @@ namespace Octonica.ClickHouseClient.Protocol
 
             ulong totalBytes = 0;
             if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithTotalBytesInProgress)
+            {
                 totalBytes = await reader.Read7BitUInt64(async, cancellationToken);
+            }
 
             ulong writtenRows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong writtenBytes = await reader.Read7BitUInt64(async, cancellationToken);
 
             ulong elapsedNanoseconds = 0;
             if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithServerQueryTimeInProgress)
+            {
                 elapsedNanoseconds = await reader.Read7BitUInt64(async, cancellationToken);
+            }
 
             return new ServerProgressMessage(rows, bytes, totalRows, totalBytes, writtenRows, writtenBytes, elapsedNanoseconds);
         }

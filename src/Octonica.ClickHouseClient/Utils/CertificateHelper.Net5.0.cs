@@ -22,7 +22,7 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    partial class CertificateHelper
+    internal partial class CertificateHelper
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static partial void ImportPemCertificates(string filePath, X509Certificate2Collection collection)

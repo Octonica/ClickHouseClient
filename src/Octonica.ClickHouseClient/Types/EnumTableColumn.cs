@@ -36,8 +36,10 @@ namespace Octonica.ClickHouseClient.Types
             _internalColumn = internalColumn;
             _valueMap = valueMap;
 
-            if (!_valueMap.TryGetValue(_internalColumn.DefaultValue, out var defaultStr))
+            if (!_valueMap.TryGetValue(_internalColumn.DefaultValue, out string? defaultStr))
+            {
                 defaultStr = string.Empty;
+            }
 
             DefaultValue = defaultStr;
         }
@@ -50,11 +52,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public string GetValue(int index)
         {
-            var value = _internalColumn.GetValue(index);
-            if (!_valueMap.TryGetValue(value, out var strValue))
-                throw new InvalidCastException($"There is no string representation for the value {value} in the enum.");
-
-            return strValue;
+            TKey value = _internalColumn.GetValue(index);
+            return !_valueMap.TryGetValue(value, out string? strValue)
+                ? throw new InvalidCastException($"There is no string representation for the value {value} in the enum.")
+                : strValue;
         }
 
         object IClickHouseTableColumn.GetValue(int index)
@@ -64,11 +65,8 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            var internalReinterpreted = _internalColumn as IClickHouseTableColumn<T> ?? _internalColumn.TryReinterpret<T>();
-            if (internalReinterpreted != null)
-                return new ReinterpretedTableColumn<T>(this, internalReinterpreted);
-
-            return null;
+            IClickHouseTableColumn<T>? internalReinterpreted = _internalColumn as IClickHouseTableColumn<T> ?? _internalColumn.TryReinterpret<T>();
+            return internalReinterpreted != null ? new ReinterpretedTableColumn<T>(this, internalReinterpreted) : (IClickHouseTableColumn<T>?)null;
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -96,8 +94,10 @@ namespace Octonica.ClickHouseClient.Types
             _enumMap = enumMap;
             _stringMap = stringMap;
 
-            if (!_enumMap.TryGetValue(_internalColumn.DefaultValue, out var defaultEnum))
+            if (!_enumMap.TryGetValue(_internalColumn.DefaultValue, out TEnum? defaultEnum))
+            {
                 defaultEnum = default;
+            }
 
             Debug.Assert(defaultEnum != null);
             DefaultValue = defaultEnum;
@@ -111,11 +111,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public TEnum GetValue(int index)
         {
-            var value = _internalColumn.GetValue(index);
-            if (!_enumMap.TryGetValue(value, out var strValue))
+            TKey value = _internalColumn.GetValue(index);
+            if (!_enumMap.TryGetValue(value, out TEnum? strValue))
             {
-                if (_stringMap.TryGetValue(value, out var nativeValue))
+                if (_stringMap.TryGetValue(value, out string? nativeValue))
+                {
                     throw new InvalidCastException($"The value '{nativeValue}'={value} of the enum can't be converted to the type '{typeof(Enum).FullName}'.");
+                }
 
                 throw new InvalidCastException($"The value {value} doesn't belong to the enum.");
             }
@@ -130,16 +132,10 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            IClickHouseTableColumn<T>? reinterpretedColumn;
-            if (typeof(T) == typeof(string))
-                reinterpretedColumn = (IClickHouseTableColumn<T>) (object) new EnumTableColumn<TKey>(_internalColumn, _stringMap);
-            else
-                reinterpretedColumn = _internalColumn.TryReinterpret<T>();
-
-            if (reinterpretedColumn == null)
-                return null;
-
-            return new ReinterpretedTableColumn<T>(this, reinterpretedColumn);
+            IClickHouseTableColumn<T>? reinterpretedColumn = typeof(T) == typeof(string)
+                ? (IClickHouseTableColumn<T>)(object)new EnumTableColumn<TKey>(_internalColumn, _stringMap)
+                : _internalColumn.TryReinterpret<T>();
+            return reinterpretedColumn == null ? null : (IClickHouseTableColumn<T>)new ReinterpretedTableColumn<T>(this, reinterpretedColumn);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)

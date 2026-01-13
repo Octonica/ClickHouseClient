@@ -15,6 +15,9 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -22,9 +25,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -53,82 +53,99 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            if (_length == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
-
-            return new FixedStringReader(rowCount, _length.Value);
+            return _length == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.")
+                : (IClickHouseColumnReader)new FixedStringReader(rowCount, _length.Value);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            if (_length == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
-
-            return new SimpleSkippingColumnReader(_length.Value, rowCount);
+            return _length == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.")
+                : (IClickHouseColumnReaderBase)new SimpleSkippingColumnReader(_length.Value, rowCount);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_length == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(byte[]))
+            {
                 return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<byte[]?>)rows, _length.Value);
-            if (type == typeof(string))
-                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string?>)rows, _length.Value, columnSettings?.StringEncoding);
-            if (type == typeof(ReadOnlyMemory<byte>))
-                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>)rows, _length.Value);
-            if (type == typeof(Memory<byte>))
-                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<byte>>)rows, _length.Value);
-            if (type == typeof(ReadOnlyMemory<char>))
-                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>)rows, _length.Value, columnSettings?.StringEncoding);
-            if (type == typeof(Memory<char>))
-                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<char>>)rows, _length.Value, columnSettings?.StringEncoding);
+            }
 
-            throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            if (type == typeof(string))
+            {
+                return new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<string?>)rows, _length.Value, columnSettings?.StringEncoding);
+            }
+
+            if (type == typeof(ReadOnlyMemory<byte>))
+            {
+                return new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<byte>>)rows, _length.Value);
+            }
+
+            return type == typeof(Memory<byte>)
+                ? new FixedStringBytesColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<byte>>)rows, _length.Value)
+                : type == typeof(ReadOnlyMemory<char>)
+                ? new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<ReadOnlyMemory<char>>)rows, _length.Value, columnSettings?.StringEncoding)
+                : type == typeof(Memory<char>)
+                ? (IClickHouseColumnWriter)new FixedStringStringColumnWriter(columnName, ComplexTypeName, (IReadOnlyList<Memory<char>>)rows, _length.Value, columnSettings?.StringEncoding)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{typeof(T)}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             if (_length == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, "The length of the fixed string is not specified.");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values");
+            }
 
             object writer;
             if (type == typeof(string))
+            {
                 writer = new FixedStringParameterWriter<string>(this, s => s.AsMemory());
+            }
             else if (type == typeof(ReadOnlyMemory<char>))
+            {
                 writer = new FixedStringParameterWriter(this);
+            }
             else if (type == typeof(Memory<char>))
+            {
                 writer = new FixedStringParameterWriter<Memory<char>>(this, mem => mem);
-            else if (type == typeof(byte[]))
-                writer = new FixedStringHexParameterWriter<byte[]>(this, a => a.AsMemory());
-            else if (type == typeof(ReadOnlyMemory<byte>))
-                writer = new FixedStringHexParameterWriter(this);
-            else if (type == typeof(Memory<byte>))
-                writer = new FixedStringHexParameterWriter<Memory<byte>>(this, mem => mem);
+            }
             else
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            {
+                writer = type == typeof(byte[])
+                    ? new FixedStringHexParameterWriter<byte[]>(this, a => a.AsMemory())
+                    : type == typeof(ReadOnlyMemory<byte>)
+                    ? new FixedStringHexParameterWriter(this)
+                    : type == typeof(Memory<byte>)
+                ? (object)new FixedStringHexParameterWriter<Memory<byte>>(this, mem => mem)
+                : throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{type}\" can't be converted to the ClickHouse type \"{ComplexTypeName}\".");
+            }
 
             return (IClickHouseParameterWriter<T>)writer;
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
-            if (_length != null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
-
-            if (options.Count > 1)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".");
-
-            if (!int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length) || length <= 0)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The length of \"{TypeName}({options[0].ToString()})\" must be a positive number.");
-
-            return new FixedStringTypeInfo(length);
+            return _length != null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.")
+                : options.Count > 1
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"Too many arguments in the definition of \"{TypeName}\".")
+                : !int.TryParse(options[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out int length) || length <= 0
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The length of \"{TypeName}({options[0]})\" must be a positive number.")
+                : (IClickHouseColumnTypeInfo)new FixedStringTypeInfo(length);
         }
 
         public Type GetFieldType()
@@ -148,13 +165,9 @@ namespace Octonica.ClickHouseClient.Types
 
         public object GetTypeArgument(int index)
         {
-            if (_length == null)
-                throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.");
-
-            if (index == 0)
-                return _length;
-
-            throw new IndexOutOfRangeException();
+            return _length == null
+                ? throw new NotSupportedException($"The type \"{TypeName}\" doesn't have arguments.")
+                : index == 0 ? (object)_length : throw new IndexOutOfRangeException();
         }
 
         private sealed class FixedStringReader : IClickHouseColumnReader
@@ -171,23 +184,31 @@ namespace Octonica.ClickHouseClient.Types
                 _rowCount = rowCount;
                 _rowSize = rowSize;
                 if (rowCount > 0)
+                {
                     _buffer = new Memory<byte>(new byte[rowCount * rowSize]);
+                }
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 if (_position / _rowSize >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
                 if (sequence.Length < _rowSize)
+                {
                     return new SequenceSize(0, 0);
+                }
 
-                var elementsCount = Math.Min((int) sequence.Length / _rowSize, _rowCount - _position / _rowSize);
+                int elementsCount = Math.Min((int)sequence.Length / _rowSize, _rowCount - (_position / _rowSize));
                 if (elementsCount == 0)
+                {
                     return new SequenceSize(0, 0);
+                }
 
-                var bytesCount = _rowSize * elementsCount;
-                sequence.Slice(0, bytesCount).CopyTo(_buffer.Span.Slice(_position));
+                int bytesCount = _rowSize * elementsCount;
+                sequence.Slice(0, bytesCount).CopyTo(_buffer.Span[_position..]);
                 _position += bytesCount;
                 return new SequenceSize(bytesCount, elementsCount);
             }
@@ -222,9 +243,11 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override int GetBytes(int position, Span<byte> buffer)
             {
-                var bytes = _rows[position];
+                ReadOnlyMemory<byte> bytes = _rows[position];
                 if (bytes.Length > buffer.Length)
+                {
                     throw new InvalidCastException($"The length of the array ({bytes.Length}) is greater than the maximum length ({buffer.Length}).");
+                }
 
                 bytes.Span.CopyTo(buffer);
                 return bytes.Length;
@@ -257,14 +280,16 @@ namespace Octonica.ClickHouseClient.Types
 
             protected override int GetBytes(int position, Span<byte> buffer)
             {
-                var str = _rows[position].Span;
-                var bytesCount = _stringEncoding.GetByteCount(str);
+                ReadOnlySpan<char> str = _rows[position].Span;
+                int bytesCount = _stringEncoding.GetByteCount(str);
                 if (bytesCount == 0)
+                {
                     return 0;
+                }
 
                 if (bytesCount <= buffer.Length)
                 {
-                    _stringEncoding.GetBytes(str, buffer);
+                    _ = _stringEncoding.GetBytes(str, buffer);
                     return bytesCount;
                 }
 
@@ -293,14 +318,14 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var size = Math.Min(RowCount - _position, writeTo.Length / _length);
+                int size = Math.Min(RowCount - _position, writeTo.Length / _length);
 
                 ReadOnlySpan<byte> zeroSpan = new byte[_length];
-                var span = writeTo;
-                for (int i = 0; i < size; i++, span = span.Slice(_length))
+                Span<byte> span = writeTo;
+                for (int i = 0; i < size; i++, span = span[_length..])
                 {
-                    var bytesCount = GetBytes(_position++, span.Slice(0, _length));
-                    zeroSpan.Slice(bytesCount).CopyTo(span.Slice(bytesCount));
+                    int bytesCount = GetBytes(_position++, span[.._length]);
+                    zeroSpan[bytesCount..].CopyTo(span[bytesCount..]);
                 }
 
                 return new SequenceSize(size * _length, size);
@@ -320,11 +345,13 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryCreateParameterValueWriter(ReadOnlyMemory<char> value, bool isNested, [NotNullWhen(true)] out IClickHouseParameterValueWriter? valueWriter)
             {
-                var writer = new StringLiteralValueWriter(value, isNested);
+                StringLiteralValueWriter writer = new(value, isNested);
 
                 Debug.Assert(_type._length != null);
                 if (writer.Length - 2 > _type._length.Value)
+                {
                     ValidateLength(value); // Validate the length of the unescaped string without quota signs
+                }
 
                 valueWriter = writer;
                 return true;
@@ -344,11 +371,13 @@ namespace Octonica.ClickHouseClient.Types
             private void ValidateLength(ReadOnlyMemory<char> value)
             {
                 Debug.Assert(_type._length != null);
-                var length = _type._length.Value;
-                var encoding = Encoding.UTF8;
-                var bytesCount = encoding.GetByteCount(value.Span);
+                int length = _type._length.Value;
+                Encoding encoding = Encoding.UTF8;
+                int bytesCount = encoding.GetByteCount(value.Span);
                 if (bytesCount > length)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the string ({bytesCount}) is greater than the maximum length ({length}).");
+                }
             }
         }
 
@@ -403,9 +432,11 @@ namespace Octonica.ClickHouseClient.Types
             private void ValidateLength(ReadOnlyMemory<byte> value)
             {
                 Debug.Assert(_type._length != null);
-                var length = _type._length.Value;
+                int length = _type._length.Value;
                 if (value.Length > length)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidQueryParameterConfiguration, $"The length of the array ({value.Length}) is greater than the maximum length ({length}).");
+                }
             }
         }
 

@@ -28,7 +28,7 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an unspecified error. This code means that an error of an unknown origin was wrapped in <see cref="ClickHouseException"/>.
         /// </summary>
         public const int Unspecified = 0;
-        
+
         /// <summary>
         /// The code for an error provided by the ClickHouse server.
         /// </summary>
@@ -109,7 +109,7 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an error caused by a network error.
         /// </summary>
         public const int NetworkError = 16;
-        
+
         /// <summary>
         /// The code for an error caused by invalid settings (<see cref="ClickHouseColumnSettings"/>).
         /// </summary>
@@ -129,7 +129,7 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an error caused by an attempt to execute an asyncronous operation in a syncronous method.
         /// </summary>
         public const int NotSupportedInSyncronousMode = 20;
-        
+
         /// <summary>
         /// The code for an error caused by the callback to an external code.
         /// </summary>

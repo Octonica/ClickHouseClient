@@ -41,31 +41,27 @@ namespace Octonica.ClickHouseClient.Types
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlyMemory<char> value)
         {
-            Interpolate(queryBuilder, value.Span);
+            _ = Interpolate(queryBuilder, value.Span);
 
             if (_type.ComplexTypeName != "String")
-                queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            {
+                _ = queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            }
 
             return queryBuilder;
         }
 
         public static StringBuilder Interpolate(StringBuilder queryBuilder, ReadOnlySpan<char> stringSpan)
         {
-            queryBuilder.Append('\'');
-            foreach (var charValue in stringSpan)
+            _ = queryBuilder.Append('\'');
+            foreach (char charValue in stringSpan)
             {
-                switch (charValue)
+                _ = charValue switch
                 {
-                    case '\\':
-                        queryBuilder.Append("\\\\");
-                        break;
-                    case '\'':
-                        queryBuilder.Append("''");
-                        break;
-                    default:
-                        queryBuilder.Append(charValue);
-                        break;
-                }
+                    '\\' => queryBuilder.Append("\\\\"),
+                    '\'' => queryBuilder.Append("''"),
+                    _ => queryBuilder.Append(charValue),
+                };
             }
 
             return queryBuilder.Append('\'');
@@ -102,11 +98,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
         {
-            var str = _toString(value);
-            StringParameterWriter.Interpolate(queryBuilder, str.Span);
+            ReadOnlyMemory<char> str = _toString(value);
+            _ = StringParameterWriter.Interpolate(queryBuilder, str.Span);
 
             if (_type.ComplexTypeName != "String")
-                queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            {
+                _ = queryBuilder.Append("::").Append(_type.ComplexTypeName);
+            }
 
             return queryBuilder;
         }

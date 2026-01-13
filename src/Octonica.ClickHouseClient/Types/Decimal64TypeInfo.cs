@@ -38,21 +38,16 @@ namespace Octonica.ClickHouseClient.Types
 
         protected override DecimalTypeInfoBase CloneWithOptions(string complexTypeName, int? precision, int scale)
         {
-            if (precision != null)
-                throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value of the precision can not be redefined for the type \"{TypeName}\".");
-
-            return new Decimal64TypeInfo(TypeName, complexTypeName, scale);
+            return precision != null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The value of the precision can not be redefined for the type \"{TypeName}\".")
+                : (DecimalTypeInfoBase)new Decimal64TypeInfo(TypeName, complexTypeName, scale);
         }
 
         public override object GetTypeArgument(int index)
         {
-            if (base.TypeArgumentsCount == 0)
-                return base.GetTypeArgument(index);
-
-            if (index != 0)
-                throw new IndexOutOfRangeException();
-
-            return base.GetTypeArgument(1);
+            return base.TypeArgumentsCount == 0
+                ? base.GetTypeArgument(index)
+                : index != 0 ? throw new IndexOutOfRangeException() : base.GetTypeArgument(1);
         }
     }
 }

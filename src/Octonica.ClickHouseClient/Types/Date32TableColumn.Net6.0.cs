@@ -21,7 +21,7 @@ using System;
 
 namespace Octonica.ClickHouseClient.Types
 {
-    partial class Date32TableColumn : IClickHouseTableColumn<DateOnly>
+    internal partial class Date32TableColumn : IClickHouseTableColumn<DateOnly>
     {
         private static readonly DateOnly UnixEpoch = DateOnly.FromDateTime(DateTime.UnixEpoch);
 
@@ -31,22 +31,17 @@ namespace Octonica.ClickHouseClient.Types
 
         public DateOnly GetValue(int index)
         {
-            var value = _buffer.Span[index];
+            int value = _buffer.Span[index];
             return UnixEpoch.AddDays(value);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
         {
-            if (typeof(T) == typeof(DateTime))
-                return (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue));
-
-            if (typeof(T) == typeof(DateTime?))
-                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue)));
-
-            if (typeof(T) == typeof(DateOnly?))
-                return (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateOnly>(null, this);
-
-            return null;
+            return typeof(T) == typeof(DateTime)
+                ? (IClickHouseTableColumn<T>)(object)new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue))
+                : typeof(T) == typeof(DateTime?)
+                ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateTime>(null, new ReinterpretedTableColumn<DateOnly, DateTime>(this, dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue)))
+                : typeof(T) == typeof(DateOnly?) ? (IClickHouseTableColumn<T>)(object)new NullableStructTableColumn<DateOnly>(null, this) : null;
         }
     }
 }

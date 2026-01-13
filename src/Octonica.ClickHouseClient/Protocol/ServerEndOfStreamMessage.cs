@@ -19,7 +19,7 @@ namespace Octonica.ClickHouseClient.Protocol
 {
     internal sealed class ServerEndOfStreamMessage : IServerMessage
     {
-        public static readonly ServerEndOfStreamMessage Instance = new ServerEndOfStreamMessage();
+        public static readonly ServerEndOfStreamMessage Instance = new();
 
         public ServerMessageCode MessageCode => ServerMessageCode.EndOfStream;
 

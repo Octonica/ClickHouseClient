@@ -15,6 +15,9 @@
  */
 #endregion
 
+using Octonica.ClickHouseClient.Exceptions;
+using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Utils;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -22,9 +25,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
-using Octonica.ClickHouseClient.Exceptions;
-using Octonica.ClickHouseClient.Protocol;
-using Octonica.ClickHouseClient.Utils;
 
 namespace Octonica.ClickHouseClient.Types
 {
@@ -48,7 +48,9 @@ namespace Octonica.ClickHouseClient.Types
         private TupleTypeInfo(string complexTypeName, List<IClickHouseColumnTypeInfo> elementTypes, List<string>? elementNames)
         {
             if (elementNames != null && elementTypes.Count != elementNames.Count)
+            {
                 throw new ArgumentException("The number of elements must be equal to the number of element's types.", nameof(elementNames));
+            }
 
             ComplexTypeName = complexTypeName;
             _elementTypes = elementTypes;
@@ -58,97 +60,99 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             if (_elementTypes == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var elementReaders = _elementTypes.Select(t => t.CreateColumnReader(rowCount)).ToList();
+            List<IClickHouseColumnReader> elementReaders = _elementTypes.Select(t => t.CreateColumnReader(rowCount)).ToList();
             return new TupleColumnReader(rowCount, elementReaders);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateColumnReader(rowCount);
-
-            if (serializationMode == ClickHouseColumnSerializationMode.Custom)
-            {
-                if (_elementTypes == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-                return new TupleCustomSerializationColumnReader(this, rowCount);
-            }
-
-            throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateColumnReader(rowCount)
+                : serializationMode == ClickHouseColumnSerializationMode.Custom
+                ? _elementTypes == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                    : (IClickHouseColumnReader)new TupleCustomSerializationColumnReader(this, rowCount)
+                : throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
             if (_elementTypes == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var elementReaders = _elementTypes.Select(t => t.CreateSkippingColumnReader(rowCount)).ToList();
+            List<IClickHouseColumnReaderBase> elementReaders = _elementTypes.Select(t => t.CreateSkippingColumnReader(rowCount)).ToList();
             return new TupleSkippingColumnReader(rowCount, elementReaders);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateSkippingColumnReader(rowCount);
-
-            if (serializationMode == ClickHouseColumnSerializationMode.Custom)
-            {
-                if (_elementTypes == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-                return new TupleCustomSerializationSkippingColumnReader(this, rowCount);
-            }
-
-            throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode == ClickHouseColumnSerializationMode.Default
+                ? CreateSkippingColumnReader(rowCount)
+                : serializationMode == ClickHouseColumnSerializationMode.Custom
+                ? _elementTypes == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                    : (IClickHouseColumnReaderBase)new TupleCustomSerializationSkippingColumnReader(this, rowCount)
+                : throw new NotSupportedException($"The serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient.");
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
-            if (_elementTypes == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return TupleColumnWriter.CreateColumnWriter(columnName, ComplexTypeName, _elementTypes, rows, columnSettings);
+            return _elementTypes == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnWriter)TupleColumnWriter.CreateColumnWriter(columnName, ComplexTypeName, _elementTypes, rows, columnSettings);
         }
 
         public IClickHouseParameterWriter<T> CreateParameterWriter<T>()
         {
             // TODO: ClickHouseDbType.Tuple is not supported in DefaultTypeInfoProvider.GetTypeInfo
             if (_elementTypes == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var tupeType = typeof(T);
-            if (tupeType == typeof(DBNull))
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
-
-            return TupleColumnWriter.CreateParameterWriter<T>(this, ComplexTypeName, _elementTypes, false);
+            Type tupeType = typeof(T);
+            return tupeType == typeof(DBNull)
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.")
+                : TupleColumnWriter.CreateParameterWriter<T>(this, ComplexTypeName, _elementTypes, false);
         }
 
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_elementTypes != null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
+            }
 
-            var complexTypeNameBuilder = new StringBuilder(TypeName).Append('(');
-            var elementTypes = new List<IClickHouseColumnTypeInfo>(options.Count);
+            StringBuilder complexTypeNameBuilder = new StringBuilder(TypeName).Append('(');
+            List<IClickHouseColumnTypeInfo> elementTypes = new(options.Count);
             List<string>? elementNames = null;
-            foreach(var option in options)
+            foreach (ReadOnlyMemory<char> option in options)
             {
                 if (elementTypes.Count > 0)
-                    complexTypeNameBuilder.Append(", ");
+                {
+                    _ = complexTypeNameBuilder.Append(", ");
+                }
 
-                var identifierLen = ClickHouseSyntaxHelper.GetIdentifierLiteralLength(option.Span);
+                int identifierLen = ClickHouseSyntaxHelper.GetIdentifierLiteralLength(option.Span);
                 if (identifierLen == option.Span.Length)
+                {
                     identifierLen = -1;
-                
+                }
+
                 if (identifierLen < 0)
                 {
                     if (elementNames != null)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
+                    }
 
-                    var typeInfo = typeInfoProvider.GetTypeInfo(option);
+                    IClickHouseColumnTypeInfo typeInfo = typeInfoProvider.GetTypeInfo(option);
                     elementTypes.Add(typeInfo);
                 }
                 else
@@ -156,33 +160,34 @@ namespace Octonica.ClickHouseClient.Types
                     if (elementNames == null)
                     {
                         if (elementTypes.Count > 0)
+                        {
                             throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, "A tuple can be either named or not. Mixing of named and unnamed arguments is not allowed.");
+                        }
 
                         elementNames = new List<string>(options.Count);
                     }
 
-                    var name = ClickHouseSyntaxHelper.GetIdentifier(option.Span.Slice(0, identifierLen));
-                    var typeInfo = typeInfoProvider.GetTypeInfo(option.Slice(identifierLen + 1));
+                    string name = ClickHouseSyntaxHelper.GetIdentifier(option.Span[..identifierLen]);
+                    IClickHouseColumnTypeInfo typeInfo = typeInfoProvider.GetTypeInfo(option[(identifierLen + 1)..]);
 
                     elementTypes.Add(typeInfo);
                     elementNames.Add(name);
 
-                    complexTypeNameBuilder.Append(option.Slice(0, identifierLen)).Append(' ');
+                    _ = complexTypeNameBuilder.Append(option[..identifierLen]).Append(' ');
                 }
 
-                complexTypeNameBuilder.Append(elementTypes[^1].ComplexTypeName);
+                _ = complexTypeNameBuilder.Append(elementTypes[^1].ComplexTypeName);
             }
 
-            var complexTypeName = complexTypeNameBuilder.Append(')').ToString();
+            string complexTypeName = complexTypeNameBuilder.Append(')').ToString();
             return new TupleTypeInfo(complexTypeName, elementTypes, elementNames);
         }
 
         public Type GetFieldType()
         {
-            if (_elementTypes == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return MakeTupleType(_elementTypes.Select(elt => elt.GetFieldType()).ToArray());
+            return _elementTypes == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : MakeTupleType(_elementTypes.Select(elt => elt.GetFieldType()).ToArray());
         }
 
         public ClickHouseDbType GetDbType()
@@ -192,21 +197,18 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
-            if (_elementTypes == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _elementTypes[index];
+            return _elementTypes == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseTypeInfo)_elementTypes[index];
         }
 
         public object GetTypeArgument(int index)
         {
-            if (_elementTypes == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            if (_elementNames == null)
-                return _elementTypes[index];
-
-            return new KeyValuePair<string, IClickHouseTypeInfo>(_elementNames[index], _elementTypes[index]);
+            return _elementTypes == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _elementNames == null
+                ? _elementTypes[index]
+                : new KeyValuePair<string, IClickHouseTypeInfo>(_elementNames[index], _elementTypes[index]);
         }
 
         public static Type MakeTupleType(IReadOnlyList<Type> genericArgs)
@@ -239,24 +241,26 @@ namespace Octonica.ClickHouseClient.Types
                     break;
                 default:
                     tupleType = typeof(Tuple<,,,,,,,>);
-                    var restType = MakeTupleType(genericArgs.Slice(7));
+                    Type restType = MakeTupleType(genericArgs.Slice(7));
 
-                    var tuple8ArgsArr = new Type[8];
+                    Type[] tuple8ArgsArr = new Type[8];
                     for (int i = 0; i < 7; i++)
+                    {
                         tuple8ArgsArr[i] = genericArgs[i];
+                    }
 
                     tuple8ArgsArr[7] = restType;
                     return tupleType.MakeGenericType(tuple8ArgsArr);
             }
 
-            var genericArgsArr = genericArgs as Type[] ?? genericArgs.ToArray();
+            Type[] genericArgsArr = genericArgs as Type[] ?? genericArgs.ToArray();
             return tupleType.MakeGenericType(genericArgsArr);
         }
 
         private static void AddParameterWriter<TTuple, TItem>(List<IClickHouseParameterWriter<TTuple>> writers, IClickHouseColumnTypeInfo elementType, Func<TTuple, TItem> getItem)
         {
-            var elementWriter = elementType.CreateParameterWriter<TItem>();
-            var writer = new TupleItemParameterWriter<TTuple, TItem>(elementWriter, getItem);
+            IClickHouseParameterWriter<TItem> elementWriter = elementType.CreateParameterWriter<TItem>();
+            TupleItemParameterWriter<TTuple, TItem> writer = new(elementWriter, getItem);
             writers.Add(writer);
         }
 
@@ -281,50 +285,54 @@ namespace Octonica.ClickHouseClient.Types
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
                 if (_realReader != null)
+                {
                     return ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(sequence);
+                }
 
-                var elementTypes = _typeInfo._elementTypes;
+                List<IClickHouseColumnTypeInfo>? elementTypes = _typeInfo._elementTypes;
                 Debug.Assert(elementTypes != null);
 
                 if (sequence.Length < elementTypes.Count + 1)
+                {
                     return SequenceSize.Empty;
+                }
 
-                var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
+                ClickHouseColumnSerializationMode mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
                 if (mode != ClickHouseColumnSerializationMode.Default)
+                {
                     throw new NotSupportedException($"The serialization mode {mode} is not supported by {_typeInfo.TypeName} type. Only the default mode is supported.");
+                }
 
-                var seq = sequence.Slice(1);
-                var typeModes = new List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)>(elementTypes.Count);
-                foreach (var type in elementTypes)
+                ReadOnlySequence<byte> seq = sequence.Slice(1);
+                List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> typeModes = new(elementTypes.Count);
+                foreach (IClickHouseColumnTypeInfo type in elementTypes)
                 {
                     mode = (ClickHouseColumnSerializationMode)seq.FirstSpan[0];
-                    if (mode != ClickHouseColumnSerializationMode.Default && mode != ClickHouseColumnSerializationMode.Sparse)
+                    if (mode is not ClickHouseColumnSerializationMode.Default and not ClickHouseColumnSerializationMode.Sparse)
+                    {
                         throw new NotSupportedException($"Invalid serialization mode ({mode}) for an elment of tuple.");
+                    }
 
                     typeModes.Add((type, mode));
                     seq = seq.Slice(1);
                 }
 
-                var readers = typeModes.Select(tm => tm.type.CreateColumnReader(_rowCount, tm.mode)).ToList();
+                List<IClickHouseColumnReader> readers = typeModes.Select(tm => tm.type.CreateColumnReader(_rowCount, tm.mode)).ToList();
                 _realReader = new TupleColumnReader(_rowCount, readers);
-                var result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
+                SequenceSize result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
                 return result.AddBytes(elementTypes.Count + 1);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                if (_realReader == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.");
-
-                return _realReader.ReadNext(sequence);
+                return _realReader == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.")
+                    : _realReader.ReadNext(sequence);
             }
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                if (_realReader == null)
-                    return _typeInfo.CreateColumnReader(0).EndRead(settings);
-
-                return _realReader.EndRead(settings);
+                return _realReader == null ? _typeInfo.CreateColumnReader(0).EndRead(settings)! : _realReader.EndRead(settings)!;
             }
         }
 
@@ -350,23 +358,27 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var isLastColumn = _readerPosition == _readers.Count - 1;
+                bool isLastColumn = _readerPosition == _readers.Count - 1;
                 if (!isLastColumn && _position >= _rowCount)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Internal error. Attempt to read after the end of the column.");
+                }
 
-                var currentReader = _readers[_readerPosition];
-                var result = new SequenceSize(0, 0);
+                IClickHouseColumnReader currentReader = _readers[_readerPosition];
+                SequenceSize result = new(0, 0);
                 while (!isLastColumn)
                 {
                     if (_position < _rowCount)
                     {
-                        var elementsCount = _rowCount - _position;
-                        var size = currentReader.ReadNext(sequence.Slice(result.Bytes));
+                        int elementsCount = _rowCount - _position;
+                        SequenceSize size = currentReader.ReadNext(sequence.Slice(result.Bytes));
 
                         result = new SequenceSize(result.Bytes + size.Bytes, result.Elements);
                         _position += size.Elements;
                         if (size.Elements < elementsCount)
+                        {
                             return result;
+                        }
                     }
 
                     _position = 0;
@@ -374,7 +386,7 @@ namespace Octonica.ClickHouseClient.Types
                     isLastColumn = _readerPosition == _readers.Count - 1;
                 }
 
-                var lastColumnSize = currentReader.ReadNext(sequence.Slice(result.Bytes));
+                SequenceSize lastColumnSize = currentReader.ReadNext(sequence.Slice(result.Bytes));
                 _position += lastColumnSize.Elements;
 
                 return new SequenceSize(result.Bytes + lastColumnSize.Bytes, lastColumnSize.Elements);
@@ -382,11 +394,16 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var columns = new List<IClickHouseTableColumn>(_readers.Count);
-                foreach(var reader in _readers)
+                List<IClickHouseTableColumn> columns = new(_readers.Count);
+                foreach (IClickHouseColumnReader reader in _readers)
                 {
-                    var column = reader.EndRead(settings);
+                    IClickHouseTableColumn column = reader.EndRead(settings)!;
                     columns.Add(column);
+                }
+
+                if (columns.Count == 0)
+                {
+                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Tuple reader produced no columns.");
                 }
 
                 return TupleTableColumnBase.MakeTupleColumn(columns[^1].RowCount, columns);
@@ -394,23 +411,27 @@ namespace Octonica.ClickHouseClient.Types
 
             public static SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence, IReadOnlyList<IClickHouseColumnReaderBase> elementReaders, ref int prefixPosition)
             {
-                var totalBytes = 0;
-                var prefixReader = elementReaders[prefixPosition];
+                int totalBytes = 0;
+                IClickHouseColumnReaderBase prefixReader = elementReaders[prefixPosition];
                 while (prefixPosition < elementReaders.Count - 1)
                 {
-                    var prefixSize = prefixReader.ReadPrefix(sequence);
+                    SequenceSize prefixSize = prefixReader.ReadPrefix(sequence);
                     totalBytes += prefixSize.Bytes;
 
                     if (prefixSize.Elements == 0)
+                    {
                         return new SequenceSize(totalBytes, 0);
+                    }
 
                     if (prefixSize.Elements != 1)
+                    {
                         throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {prefixSize.Elements}.");
+                    }
 
                     prefixReader = elementReaders[++prefixPosition];
                 }
 
-                var lastPrefixSize = prefixReader.ReadPrefix(sequence);
+                SequenceSize lastPrefixSize = prefixReader.ReadPrefix(sequence);
                 return lastPrefixSize.AddBytes(totalBytes);
             }
         }
@@ -431,42 +452,49 @@ namespace Octonica.ClickHouseClient.Types
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
                 if (_realReader != null)
+                {
                     return ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(sequence);
+                }
 
-                var elementTypes = _typeInfo._elementTypes;
+                List<IClickHouseColumnTypeInfo>? elementTypes = _typeInfo._elementTypes;
                 Debug.Assert(elementTypes != null);
 
                 if (sequence.Length < elementTypes.Count + 1)
+                {
                     return SequenceSize.Empty;
+                }
 
-                var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
+                ClickHouseColumnSerializationMode mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
                 if (mode != ClickHouseColumnSerializationMode.Default)
+                {
                     throw new NotSupportedException($"The serialization mode {mode} is not supported by {_typeInfo.TypeName} type. Only the default mode is supported.");
+                }
 
-                var seq = sequence.Slice(1);
-                var typeModes = new List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)>(elementTypes.Count);
-                foreach (var type in elementTypes)
+                ReadOnlySequence<byte> seq = sequence.Slice(1);
+                List<(IClickHouseColumnTypeInfo type, ClickHouseColumnSerializationMode mode)> typeModes = new(elementTypes.Count);
+                foreach (IClickHouseColumnTypeInfo type in elementTypes)
                 {
                     mode = (ClickHouseColumnSerializationMode)seq.FirstSpan[0];
-                    if (mode != ClickHouseColumnSerializationMode.Default && mode != ClickHouseColumnSerializationMode.Sparse)
+                    if (mode is not ClickHouseColumnSerializationMode.Default and not ClickHouseColumnSerializationMode.Sparse)
+                    {
                         throw new NotSupportedException($"Invalid serialization mode ({mode}) for an elment of tuple.");
+                    }
 
                     typeModes.Add((type, mode));
                     seq = seq.Slice(1);
                 }
 
-                var readers = typeModes.Select(tm => tm.type.CreateSkippingColumnReader(_rowCount, tm.mode)).ToList();
+                List<IClickHouseColumnReaderBase> readers = typeModes.Select(tm => tm.type.CreateSkippingColumnReader(_rowCount, tm.mode)).ToList();
                 _realReader = new TupleSkippingColumnReader(_rowCount, readers);
-                var result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
+                SequenceSize result = ((IClickHouseColumnReaderBase)_realReader).ReadPrefix(seq);
                 return result.AddBytes(elementTypes.Count + 1);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                if (_realReader == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.");
-
-                return _realReader.ReadNext(sequence);
+                return _realReader == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Detected an attempt to read the column before reading its prefix.")
+                    : _realReader.ReadNext(sequence);
             }
         }
 
@@ -493,22 +521,24 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
-                var result = new SequenceSize(0, 0);
-                var elementReader = _elementReaders[_elementReaderIndex];
+                SequenceSize result = new(0, 0);
+                IClickHouseColumnReaderBase elementReader = _elementReaders[_elementReaderIndex];
                 while (_elementReaderIndex < _elementReaders.Count - 1)
                 {
-                    var actualCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
+                    SequenceSize actualCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
 
                     result = result.AddBytes(actualCount.Bytes);
                     _position += actualCount.Elements;
                     if (_position < _rowCount)
+                    {
                         return result;
+                    }
 
                     _position = 0;
                     elementReader = _elementReaders[++_elementReaderIndex];
                 }
 
-                var lastColumnCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
+                SequenceSize lastColumnCount = elementReader.ReadNext(sequence.Slice(result.Bytes));
                 _position += lastColumnCount.Elements;
 
                 return lastColumnCount.AddBytes(result.Bytes);
@@ -535,53 +565,54 @@ namespace Octonica.ClickHouseClient.Types
                 ColumnName = columnName;
                 _columns = columns;
 
-                var typeNameBuilder = _columns.Aggregate(new StringBuilder("Tuple("), (b, c) => b.Append(c.ColumnType).Append(','));
+                StringBuilder typeNameBuilder = _columns.Aggregate(new StringBuilder("Tuple("), (b, c) => b.Append(c.ColumnType).Append(','));
                 typeNameBuilder[^1] = ')';
                 ColumnType = typeNameBuilder.ToString();
             }
 
             SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
-                var totalBytes = 0;
+                int totalBytes = 0;
                 for (; _prefixPosition < _columns.Count; _prefixPosition++)
                 {
-                    var slice = writeTo.Slice(totalBytes);
-                    var size = _columns[_prefixPosition].WritePrefix(slice);
+                    Span<byte> slice = writeTo[totalBytes..];
+                    SequenceSize size = _columns[_prefixPosition].WritePrefix(slice);
 
                     totalBytes += size.Bytes;
                     if (size.Elements == 0)
+                    {
                         break;
+                    }
                 }
 
-                if (_prefixPosition == _columns.Count)
-                    return new SequenceSize(totalBytes, 1);
-
-                return new SequenceSize(totalBytes, 0);
+                return _prefixPosition == _columns.Count ? new SequenceSize(totalBytes, 1) : new SequenceSize(totalBytes, 0);
             }
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var result = new SequenceSize(0, 0);
+                SequenceSize result = new(0, 0);
 
                 while (_currentWriterIdx < _columns.Count - 1)
                 {
-                    var columnWriter = _columns[_currentWriterIdx];
+                    IClickHouseColumnWriter columnWriter = _columns[_currentWriterIdx];
                     if (_currentWriterPosition < _rowCount)
                     {
-                        var expectedElementsCount = _rowCount - _currentWriterPosition;
-                        var actualCount = columnWriter.WriteNext(writeTo.Slice(result.Bytes));
+                        int expectedElementsCount = _rowCount - _currentWriterPosition;
+                        SequenceSize actualCount = columnWriter.WriteNext(writeTo[result.Bytes..]);
 
                         _currentWriterPosition += actualCount.Elements;
                         result = result.AddBytes(actualCount.Bytes);
                         if (actualCount.Elements < expectedElementsCount)
+                        {
                             return result;
+                        }
                     }
 
                     ++_currentWriterIdx;
                     _currentWriterPosition = 0;
                 }
 
-                var lastColumnCount = _columns[^1].WriteNext(writeTo.Slice(result.Bytes));
+                SequenceSize lastColumnCount = _columns[^1].WriteNext(writeTo[result.Bytes..]);
                 _currentWriterPosition += lastColumnCount.Elements;
 
                 return result.Add(lastColumnCount);
@@ -589,7 +620,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public static TupleColumnWriter CreateColumnWriter<T>(string columnName, string columnType, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
             {
-                var factory = CreateWriterFactory(typeof(T), columnType, elementTypes);
+                ITupleWriterFactory factory = CreateWriterFactory(typeof(T), columnType, elementTypes);
 
                 try
                 {
@@ -603,7 +634,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public static IClickHouseParameterWriter<T> CreateParameterWriter<T>(TupleTypeInfo typeInfo, string columnType, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
             {
-                var factory = CreateWriterFactory(typeof(T), columnType, elementTypes);
+                ITupleWriterFactory factory = CreateWriterFactory(typeof(T), columnType, elementTypes);
 
                 object writer;
                 try
@@ -623,60 +654,101 @@ namespace Octonica.ClickHouseClient.Types
                 Type? factoryType = null;
                 if (tupleType.IsGenericType)
                 {
-                    var listItemTypeDef = tupleType.GetGenericTypeDefinition();
+                    Type listItemTypeDef = tupleType.GetGenericTypeDefinition();
                     switch (elementTypes.Count)
                     {
                         case 1:
                             if (listItemTypeDef == typeof(Tuple<>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<>);
+                            }
+
                             break;
                         case 2:
                             if (listItemTypeDef == typeof(Tuple<,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,>);
+                            }
                             else if (listItemTypeDef == typeof(KeyValuePair<,>))
+                            {
                                 factoryType = typeof(KeyValuePairColumnFactory<,>);
+                            }
+
                             break;
                         case 3:
                             if (listItemTypeDef == typeof(Tuple<,,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,,>);
+                            }
+
                             break;
                         case 4:
                             if (listItemTypeDef == typeof(Tuple<,,,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,,,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,,,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,,,>);
+                            }
+
                             break;
                         case 5:
                             if (listItemTypeDef == typeof(Tuple<,,,,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,,,,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,,,,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,,,,>);
+                            }
+
                             break;
                         case 6:
                             if (listItemTypeDef == typeof(Tuple<,,,,,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,,,,,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,,,,,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,,,,,>);
+                            }
+
                             break;
                         case 7:
                             if (listItemTypeDef == typeof(Tuple<,,,,,,>))
+                            {
                                 factoryType = typeof(TupleColumnFactory<,,,,,,>);
+                            }
                             else if (listItemTypeDef == typeof(ValueTuple<,,,,,,>))
+                            {
                                 factoryType = typeof(ValueTupleColumnFactory<,,,,,,>);
+                            }
+
                             break;
                         default:
                             if (elementTypes.Count >= 8)
                             {
                                 if (listItemTypeDef == typeof(Tuple<,,,,,,,>))
+                                {
                                     factoryType = typeof(TupleColumnFactory<,,,,,,,>);
+                                }
                                 else if (listItemTypeDef == typeof(ValueTuple<,,,,,,,>))
+                                {
                                     factoryType = typeof(ValueTupleColumnFactory<,,,,,,,>);
+                                }
                             }
 
                             break;
@@ -684,13 +756,15 @@ namespace Octonica.ClickHouseClient.Types
 
                     if (factoryType != null)
                     {
-                        var args = tupleType.GetGenericArguments();
+                        Type[] args = tupleType.GetGenericArguments();
                         factoryType = factoryType.MakeGenericType(args);
                     }
                 }
 
                 if (factoryType == null)
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The type \"{tupleType}\" can't be converted to the ClickHouse type \"{columnType}\".");
+                }
 
                 ITupleWriterFactory? factory;
                 try
@@ -717,18 +791,18 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(1)
-                    {
+                    IReadOnlyList<Tuple<T1>> rows = (IReadOnlyList<Tuple<T1>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1>>> elementWriters = new(elementTypes.Count);
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     return TupleTypeInfo.CreateParameterWriter(typeInfo, elementWriters, isRest);
                 }
@@ -738,19 +812,19 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(2)
-                    {
+                    IReadOnlyList<Tuple<T1, T2>> rows = (IReadOnlyList<Tuple<T1, T2>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -763,20 +837,20 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(3)
-                    {
+                    IReadOnlyList<Tuple<T1, T2, T3>> rows = (IReadOnlyList<Tuple<T1, T2, T3>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -790,21 +864,21 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(4)
-                    {
+                    IReadOnlyList<Tuple<T1, T2, T3, T4>> rows = (IReadOnlyList<Tuple<T1, T2, T3, T4>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -819,22 +893,22 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(5)
-                    {
+                    IReadOnlyList<Tuple<T1, T2, T3, T4, T5>> rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -850,23 +924,23 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(6)
-                    {
+                    IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6>> rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings)
-                    };
-                    
+                    ];
+
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -883,9 +957,9 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7>>) untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(7)
-                    {
+                    IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7>> rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
@@ -893,14 +967,14 @@ namespace Octonica.ClickHouseClient.Types
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
                         elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6, T7>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6, T7>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -919,30 +993,30 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>>) untypedRows;
+                    IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>> rows = (IReadOnlyList<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>>)untypedRows;
 
-                    var subColumns = elementTypes.Slice(7);
-                    var subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
-                    var lastColumn = TupleColumnWriter.CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
+                    IReadOnlyList<IClickHouseColumnTypeInfo> subColumns = elementTypes.Slice(7);
+                    string subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
+                    TupleColumnWriter lastColumn = TupleColumnWriter.CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
 
-                    var columns = new List<IClickHouseColumnWriter>(7 + lastColumn._columns.Count)
-                    {
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
-                    };
-                    columns.AddRange(lastColumn._columns);
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings),
+                        .. lastColumn._columns,
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -952,9 +1026,9 @@ namespace Octonica.ClickHouseClient.Types
                     AddParameterWriter(elementWriters, elementTypes[5], t => t.Item6);
                     AddParameterWriter(elementWriters, elementTypes[6], t => t.Item7);
 
-                    var restElements = elementTypes.Slice(7);
-                    var restType = "Tuple(" + string.Join(", ", restElements.Select(c => c.ComplexTypeName)) + ")";
-                    var restWriter = CreateParameterWriter<TRest>(typeInfo, restType, restElements, true);
+                    IReadOnlyList<IClickHouseColumnTypeInfo> restElements = elementTypes.Slice(7);
+                    string restType = "Tuple(" + string.Join(", ", restElements.Select(c => c.ComplexTypeName)) + ")";
+                    IClickHouseParameterWriter<TRest> restWriter = CreateParameterWriter<TRest>(typeInfo, restType, restElements, true);
 
                     elementWriters.Add(new TupleItemParameterWriter<Tuple<T1, T2, T3, T4, T5, T6, T7, TRest>, TRest>(restWriter, t => t.Rest));
                     return TupleTypeInfo.CreateParameterWriter(typeInfo, elementWriters, isRest);
@@ -965,18 +1039,18 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(1)
-                    {
+                    IReadOnlyList<ValueTuple<T1>> rows = (IReadOnlyList<ValueTuple<T1>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<ValueTuple<T1>>> elementWriters = new(elementTypes.Count);
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     return TupleTypeInfo.CreateParameterWriter(typeInfo, elementWriters, isRest);
                 }
@@ -986,19 +1060,19 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(2)
-                    {
+                    IReadOnlyList<(T1, T2)> rows = (IReadOnlyList<ValueTuple<T1, T2>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1011,20 +1085,20 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(3)
-                    {
+                    IReadOnlyList<(T1, T2, T3)> rows = (IReadOnlyList<ValueTuple<T1, T2, T3>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2, T3)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1038,21 +1112,21 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(4)
-                    {
+                    IReadOnlyList<(T1, T2, T3, T4)> rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2, T3, T4)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1067,22 +1141,22 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(5)
-                    {
+                    IReadOnlyList<(T1, T2, T3, T4, T5)> rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4, T5>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2, T3, T4, T5)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1098,23 +1172,23 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(6)
-                    {
+                    IReadOnlyList<(T1, T2, T3, T4, T5, T6)> rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4, T5, T6>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2, T3, T4, T5, T6)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1131,9 +1205,9 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>)untypedRows;
-                    var columns = new List<IClickHouseColumnWriter>(7)
-                    {
+                    IReadOnlyList<(T1, T2, T3, T4, T5, T6, T7)> rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>)untypedRows;
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
@@ -1141,14 +1215,14 @@ namespace Octonica.ClickHouseClient.Types
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
                         elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<(T1, T2, T3, T4, T5, T6, T7)>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1167,30 +1241,30 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>>) untypedRows;
+                    IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>> rows = (IReadOnlyList<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>>)untypedRows;
 
-                    var subColumns = elementTypes.Slice(7);
-                    var subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
-                    var lastColumn = TupleColumnWriter.CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
+                    IReadOnlyList<IClickHouseColumnTypeInfo> subColumns = elementTypes.Slice(7);
+                    string subType = "Tuple(" + string.Join(", ", subColumns.Select(c => c.ComplexTypeName)) + ")";
+                    TupleColumnWriter lastColumn = TupleColumnWriter.CreateColumnWriter(columnName, subType, subColumns, rows.Map(t => t.Rest), columnSettings);
 
-                    var columns = new List<IClickHouseColumnWriter>(7 + lastColumn._columns.Count)
-                    {
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(t => t.Item1), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(t => t.Item2), columnSettings),
                         elementTypes[2].CreateColumnWriter(columnName, rows.Map(t => t.Item3), columnSettings),
                         elementTypes[3].CreateColumnWriter(columnName, rows.Map(t => t.Item4), columnSettings),
                         elementTypes[4].CreateColumnWriter(columnName, rows.Map(t => t.Item5), columnSettings),
                         elementTypes[5].CreateColumnWriter(columnName, rows.Map(t => t.Item6), columnSettings),
-                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings)
-                    };
-                    columns.AddRange(lastColumn._columns);
+                        elementTypes[6].CreateColumnWriter(columnName, rows.Map(t => t.Item7), columnSettings),
+                        .. lastColumn._columns,
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var elementWriters = new List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>>>(elementTypes.Count);
+                    List<IClickHouseParameterWriter<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>>> elementWriters = new(elementTypes.Count);
 
                     AddParameterWriter(elementWriters, elementTypes[0], t => t.Item1);
                     AddParameterWriter(elementWriters, elementTypes[1], t => t.Item2);
@@ -1200,9 +1274,9 @@ namespace Octonica.ClickHouseClient.Types
                     AddParameterWriter(elementWriters, elementTypes[5], t => t.Item6);
                     AddParameterWriter(elementWriters, elementTypes[6], t => t.Item7);
 
-                    var restElements = elementTypes.Slice(7);
-                    var restType = "Tuple(" + string.Join(", ", restElements.Select(c => c.ComplexTypeName)) + ")";
-                    var restWriter = CreateParameterWriter<TRest>(typeInfo, restType, restElements, true);
+                    IReadOnlyList<IClickHouseColumnTypeInfo> restElements = elementTypes.Slice(7);
+                    string restType = "Tuple(" + string.Join(", ", restElements.Select(c => c.ComplexTypeName)) + ")";
+                    IClickHouseParameterWriter<TRest> restWriter = CreateParameterWriter<TRest>(typeInfo, restType, restElements, true);
 
                     elementWriters.Add(new TupleItemParameterWriter<ValueTuple<T1, T2, T3, T4, T5, T6, T7, TRest>, TRest>(restWriter, t => t.Rest));
                     return TupleTypeInfo.CreateParameterWriter(typeInfo, elementWriters, isRest);
@@ -1213,20 +1287,20 @@ namespace Octonica.ClickHouseClient.Types
             {
                 public TupleColumnWriter CreateColumnWriter(string columnName, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, object untypedRows, ClickHouseColumnSettings? columnSettings)
                 {
-                    var rows = (IReadOnlyList<KeyValuePair<TKey, TValue>>)untypedRows;
+                    IReadOnlyList<KeyValuePair<TKey, TValue>> rows = (IReadOnlyList<KeyValuePair<TKey, TValue>>)untypedRows;
 
-                    var columns = new List<IClickHouseColumnWriter>(2)
-                    {
+                    List<IClickHouseColumnWriter> columns =
+                    [
                         elementTypes[0].CreateColumnWriter(columnName, rows.Map(p => p.Key), columnSettings),
                         elementTypes[1].CreateColumnWriter(columnName, rows.Map(p => p.Value), columnSettings)
-                    };
+                    ];
 
                     return new TupleColumnWriter(columnName, columns, rows.Count);
                 }
 
                 public object CreateParameterWriter(TupleTypeInfo typeInfo, IReadOnlyList<IClickHouseColumnTypeInfo> elementTypes, bool isRest)
                 {
-                    var writers = new List<IClickHouseParameterWriter<KeyValuePair<TKey, TValue>>>(2);
+                    List<IClickHouseParameterWriter<KeyValuePair<TKey, TValue>>> writers = new(2);
                     AddParameterWriter(writers, elementTypes[0], pair => pair.Key);
                     AddParameterWriter(writers, elementTypes[1], pair => pair.Value);
 
@@ -1283,22 +1357,30 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, T value)
             {
-                if(!_isRest)
-                    queryBuilder.Append("tuple(");
+                if (!_isRest)
+                {
+                    _ = queryBuilder.Append("tuple(");
+                }
 
                 bool isFirst = true;
-                foreach(var itemWriter in _itemWriters)
+                foreach (IClickHouseParameterWriter<T> itemWriter in _itemWriters)
                 {
                     if (isFirst)
+                    {
                         isFirst = false;
+                    }
                     else
-                        queryBuilder.Append(',');
+                    {
+                        _ = queryBuilder.Append(',');
+                    }
 
-                    itemWriter.Interpolate(queryBuilder, value);
+                    _ = itemWriter.Interpolate(queryBuilder, value);
                 }
 
                 if (!_isRest)
-                    queryBuilder.Append(')');
+                {
+                    _ = queryBuilder.Append(')');
+                }
 
                 return queryBuilder;
             }

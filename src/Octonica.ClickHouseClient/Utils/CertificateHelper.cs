@@ -24,7 +24,7 @@ namespace Octonica.ClickHouseClient.Utils
     {
         public static X509Certificate2Collection LoadFromFile(string filePath)
         {
-            var collection = new X509Certificate2Collection();
+            X509Certificate2Collection collection = [];
             switch (Path.GetExtension(filePath).ToLowerInvariant())
             {
                 case ".pem":
@@ -32,8 +32,8 @@ namespace Octonica.ClickHouseClient.Utils
                     ImportPemCertificates(filePath, collection);
                     break;
                 default:
-                    var cert = X509CertificateLoader.LoadCertificateFromFile(filePath);
-                    collection.Add(cert);
+                    X509Certificate2 cert = X509CertificateLoader.LoadCertificateFromFile(filePath);
+                    _ = collection.Add(cert);
                     break;
             }
 

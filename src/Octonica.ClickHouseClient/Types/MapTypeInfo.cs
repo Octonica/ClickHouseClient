@@ -56,45 +56,49 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             if (_underlyingType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var fieldType = GetFieldType();
+            Type fieldType = GetFieldType();
             return new MapReader(_underlyingType.CreateColumnReader(rowCount), fieldType);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
             if (_underlyingType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var fieldType = GetFieldType();
+            Type fieldType = GetFieldType();
             return new MapReader(_underlyingType.CreateColumnReader(rowCount, serializationMode), fieldType);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            if (_underlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _underlyingType.CreateSkippingColumnReader(rowCount);
+            return _underlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _underlyingType.CreateSkippingColumnReader(rowCount);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (_underlyingType == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _underlyingType.CreateSkippingColumnReader(rowCount, serializationMode);
+            return _underlyingType == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : _underlyingType.CreateSkippingColumnReader(rowCount, serializationMode);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_underlyingType == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var elementType = typeof(T);
+            Type elementType = typeof(T);
             Type? dictionaryItf = null;
-            foreach (var itf in elementType.GetInterfaces())
+            foreach (Type itf in elementType.GetInterfaces())
             {
                 if (itf.IsGenericType && itf.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
                 {
@@ -111,8 +115,8 @@ namespace Octonica.ClickHouseClient.Types
             IClickHouseColumnWriter underlyingWriter;
             if (dictionaryItf != null)
             {
-                var dispatcherType = typeof(DictionaryDispatcher<,>).MakeGenericType(dictionaryItf.GetGenericArguments());
-                var dispatcher = (IDictionaryDispatcher)Activator.CreateInstance(dispatcherType)!;
+                Type dispatcherType = typeof(DictionaryDispatcher<,>).MakeGenericType(dictionaryItf.GetGenericArguments());
+                IDictionaryDispatcher dispatcher = (IDictionaryDispatcher)Activator.CreateInstance(dispatcherType)!;
                 underlyingWriter = dispatcher.Dispatch(_underlyingType, columnName, rows, columnSettings);
             }
             else
@@ -128,14 +132,18 @@ namespace Octonica.ClickHouseClient.Types
             // TODO: ClickHouseDbType.Map is not supported in DefaultTypeInfoProvider.GetTypeInfo
 
             if (_underlyingType == null || _typeArgs == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var type = typeof(T);
+            Type type = typeof(T);
             if (type == typeof(DBNull))
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, $"The ClickHouse type \"{ComplexTypeName}\" does not allow null values.");
+            }
 
             Type? dictionaryItf = null;
-            foreach (var itf in type.GetInterfaces())
+            foreach (Type itf in type.GetInterfaces())
             {
                 if (itf.IsGenericType && itf.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
                 {
@@ -150,11 +158,13 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             if (dictionaryItf == null)
+            {
                 return _underlyingType.CreateParameterWriter<T>();
+            }
 
-            var dispatcherTypeArgs = new[] { type }.Concat(dictionaryItf.GetGenericArguments()).ToArray();
-            var dispatcherType = typeof(ParameterDictionaryDispatcher<,,>).MakeGenericType(dispatcherTypeArgs);
-            var dispatcher = (IDictionaryParameterWirterDispatcher?)Activator.CreateInstance(dispatcherType);
+            Type[] dispatcherTypeArgs = new[] { type }.Concat(dictionaryItf.GetGenericArguments()).ToArray();
+            Type dispatcherType = typeof(ParameterDictionaryDispatcher<,,>).MakeGenericType(dispatcherTypeArgs);
+            IDictionaryParameterWirterDispatcher? dispatcher = (IDictionaryParameterWirterDispatcher?)Activator.CreateInstance(dispatcherType);
             Debug.Assert(dispatcher != null);
 
             return dispatcher.Dispatch<T>(this);
@@ -168,19 +178,25 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_typeArgs != null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
+            }
 
             if (options.Count < 2)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"The type \"{TypeName}\" requires two type arguments: key and value.");
+            }
 
             if (options.Count > 2)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.InvalidTypeName, $"Too many options for the type \"{TypeName}\".");
+            }
 
-            var keyType = typeInfoProvider.GetTypeInfo(options[0]);
-            var valueType = typeInfoProvider.GetTypeInfo(options[1]);
+            IClickHouseColumnTypeInfo keyType = typeInfoProvider.GetTypeInfo(options[0]);
+            IClickHouseColumnTypeInfo valueType = typeInfoProvider.GetTypeInfo(options[1]);
 
-            var underlyingTypeName = $"Array(Tuple({keyType.ComplexTypeName}, {valueType.ComplexTypeName}))";
-            var undelyingType = typeInfoProvider.GetTypeInfo(underlyingTypeName);
+            string underlyingTypeName = $"Array(Tuple({keyType.ComplexTypeName}, {valueType.ComplexTypeName}))";
+            IClickHouseColumnTypeInfo undelyingType = typeInfoProvider.GetTypeInfo(underlyingTypeName);
 
             return new MapTypeInfo(keyType, valueType, undelyingType);
         }
@@ -188,29 +204,27 @@ namespace Octonica.ClickHouseClient.Types
         public Type GetFieldType()
         {
             if (_typeArgs == null)
+            {
                 throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
 
-            var keyType = _typeArgs.Value.Key.GetFieldType();
-            var valueType = _typeArgs.Value.Value.GetFieldType();
+            Type keyType = _typeArgs.Value.Key.GetFieldType();
+            Type valueType = _typeArgs.Value.Value.GetFieldType();
 
-            var fieldType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType).MakeArrayType();
+            Type fieldType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType).MakeArrayType();
             return fieldType;
         }
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
-            if (_typeArgs == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            switch (index)
-            {
-                case 0:
-                    return _typeArgs.Value.Key;
-                case 1:
-                    return _typeArgs.Value.Value;
-                default:
-                    throw new IndexOutOfRangeException();
-            }
+            return _typeArgs == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseTypeInfo)(index switch
+                {
+                    0 => _typeArgs.Value.Key,
+                    1 => _typeArgs.Value.Value,
+                    _ => throw new IndexOutOfRangeException(),
+                });
         }
 
         private sealed class MapReader : IClickHouseColumnReader
@@ -222,7 +236,7 @@ namespace Octonica.ClickHouseClient.Types
             {
                 _underlyingReader = underlyingReader;
                 _fieldType = fieldType;
-            }            
+            }
 
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
@@ -236,9 +250,9 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
-                var column = _underlyingReader.EndRead(settings);
-                var dispatcher = new MapColumnDispatcher(column);
-                return TypeDispatcher.Dispatch(_fieldType, dispatcher);                
+                IClickHouseTableColumn column = _underlyingReader.EndRead(settings)!;
+                MapColumnDispatcher dispatcher = new(column);
+                return TypeDispatcher.Dispatch(_fieldType, dispatcher);
             }
         }
 
@@ -253,11 +267,10 @@ namespace Octonica.ClickHouseClient.Types
 
             public IClickHouseTableColumn Dispatch<T>()
             {
-                var column = _column.TryReinterpret<T>();
-                if (column == null)
-                    throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Column was not converted to the type \"{typeof(T)}\" as expected.");
-
-                return column;
+                IClickHouseTableColumn<T>? column = _column.TryReinterpret<T>();
+                return column == null
+                    ? throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Column was not converted to the type \"{typeof(T)}\" as expected.")
+                    : (IClickHouseTableColumn)column;
             }
         }
 
@@ -272,9 +285,11 @@ namespace Octonica.ClickHouseClient.Types
             public MapColumnWriter(IClickHouseColumnWriter underlyingWriter)
             {
                 const string typeNameStart = "Array(Tuple", typeNameEnd = ")";
-                var typeName = underlyingWriter.ColumnType;
+                string typeName = underlyingWriter.ColumnType;
                 if (!typeName.StartsWith(typeNameStart) || !typeName.EndsWith(typeNameEnd))
+                {
                     throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The name of the type \"{typeName}\" doesn't match to the expected pattern \"{Regex.Escape(typeNameStart)}.*{Regex.Escape(typeNameEnd)}\".");
+                }
 
                 ColumnType = "Map" + typeName[typeNameStart.Length..^typeNameEnd.Length];
                 _underlyingWriter = underlyingWriter;
@@ -301,11 +316,13 @@ namespace Octonica.ClickHouseClient.Types
         {
             public IClickHouseColumnWriter Dispatch(IClickHouseColumnTypeInfo underlyingType, string columnName, object rows, ClickHouseColumnSettings? columnSettings)
             {
-                var dictionaryList = (IReadOnlyList<IReadOnlyDictionary<TKey, TValue>>)rows;
-                var listOfLists = new KeyValuePair<TKey, TValue>[dictionaryList.Count][];
+                IReadOnlyList<IReadOnlyDictionary<TKey, TValue>> dictionaryList = (IReadOnlyList<IReadOnlyDictionary<TKey, TValue>>)rows;
+                KeyValuePair<TKey, TValue>[][] listOfLists = new KeyValuePair<TKey, TValue>[dictionaryList.Count][];
                 for (int i = 0; i < listOfLists.Length; i++)
-                    listOfLists[i] = ((IEnumerable<KeyValuePair<TKey, TValue>>)dictionaryList[i]).ToArray();
-                    
+                {
+                    listOfLists[i] = dictionaryList[i].ToArray();
+                }
+
                 return underlyingType.CreateColumnWriter(columnName, listOfLists, columnSettings);
             }
         }
@@ -317,17 +334,17 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ParameterDictionaryDispatcher<TDictionary, TKey, TValue> : IDictionaryParameterWirterDispatcher
             where TKey : notnull
-            where TDictionary: IReadOnlyDictionary<TKey, TValue>
+            where TDictionary : IReadOnlyDictionary<TKey, TValue>
         {
             public IClickHouseParameterWriter<T> Dispatch<T>(MapTypeInfo typeInfo)
             {
                 Debug.Assert(typeof(T) == typeof(TDictionary));
                 Debug.Assert(typeInfo._typeArgs != null);
-                var (keyType, valueType) = typeInfo._typeArgs.Value;
+                (IClickHouseColumnTypeInfo? keyType, IClickHouseColumnTypeInfo? valueType) = typeInfo._typeArgs.Value;
 
-                var keyWriter = keyType.CreateParameterWriter<TKey>();
-                var valueWriter = valueType.CreateParameterWriter<TValue>();
-                var writer = new MapParameterWriter<TDictionary, TKey, TValue>(typeInfo, keyWriter, valueWriter);
+                IClickHouseParameterWriter<TKey> keyWriter = keyType.CreateParameterWriter<TKey>();
+                IClickHouseParameterWriter<TValue> valueWriter = valueType.CreateParameterWriter<TValue>();
+                MapParameterWriter<TDictionary, TKey, TValue> writer = new(typeInfo, keyWriter, valueWriter);
 
                 return (IClickHouseParameterWriter<T>)(object)writer;
             }
@@ -356,23 +373,27 @@ namespace Octonica.ClickHouseClient.Types
 
             public StringBuilder Interpolate(StringBuilder queryBuilder, TDictionary dictionary)
             {
-                queryBuilder.Append("{tuple([");
-                var valuesBuilder = new StringBuilder();
+                _ = queryBuilder.Append("{tuple([");
+                StringBuilder valuesBuilder = new();
 
-                var isFirst = true;
-                foreach (var (key, value) in dictionary)
+                bool isFirst = true;
+                foreach ((TKey? key, TValue? value) in dictionary)
                 {
                     if (isFirst)
+                    {
                         isFirst = false;
+                    }
                     else
-                        queryBuilder.Append(',');
+                    {
+                        _ = queryBuilder.Append(',');
+                    }
 
-                    _keyWriter.Interpolate(queryBuilder, key);
-                    _valueWriter.Interpolate(valuesBuilder, value);
+                    _ = _keyWriter.Interpolate(queryBuilder, key);
+                    _ = _valueWriter.Interpolate(valuesBuilder, value);
                 }
 
-                queryBuilder.Append("],[");
-                queryBuilder.Append(valuesBuilder);
+                _ = queryBuilder.Append("],[");
+                _ = queryBuilder.Append(valuesBuilder);
                 return queryBuilder.Append("])}");
             }
 

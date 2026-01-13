@@ -50,56 +50,54 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
-            if (_types == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return new VariantColumnReader(rowCount, this);
+            return _types == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnReader)new VariantColumnReader(rowCount, this);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode != ClickHouseColumnSerializationMode.Default)
-                throw new NotSupportedException($"Custom serialization for \"{ComplexTypeName}\" is not supported by ClickHouseClient.");
-
-            return CreateColumnReader(rowCount);
+            return serializationMode != ClickHouseColumnSerializationMode.Default
+                ? throw new NotSupportedException($"Custom serialization for \"{ComplexTypeName}\" is not supported by ClickHouseClient.")
+                : CreateColumnReader(rowCount);
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
         {
-            if (_types == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return new VariantSkippingColumnReader(rowCount, this);
+            return _types == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseColumnReaderBase)new VariantSkippingColumnReader(rowCount, this);
         }
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode != ClickHouseColumnSerializationMode.Default)
-                throw new NotSupportedException($"Custom serialization for \"{ComplexTypeName}\" is not supported by ClickHouseClient.");
-
-            return CreateSkippingColumnReader(rowCount);
+            return serializationMode != ClickHouseColumnSerializationMode.Default
+                ? throw new NotSupportedException($"Custom serialization for \"{ComplexTypeName}\" is not supported by ClickHouseClient.")
+                : CreateSkippingColumnReader(rowCount);
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)
         {
             if (_types == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            var valueHandlers = new List<IValueHandler>(_types.Count);
-            var nonGenericHandlerType = typeof(ValueHandler<>);
-            foreach (var type in _types)
             {
-                var clrType = type.GetFieldType();
-                var handler = (IValueHandler?)Activator.CreateInstance(nonGenericHandlerType.MakeGenericType(clrType));
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
+            }
+
+            List<IValueHandler> valueHandlers = new(_types.Count);
+            Type nonGenericHandlerType = typeof(ValueHandler<>);
+            foreach (IClickHouseColumnTypeInfo type in _types)
+            {
+                Type clrType = type.GetFieldType();
+                IValueHandler? handler = (IValueHandler?)Activator.CreateInstance(nonGenericHandlerType.MakeGenericType(clrType));
                 Debug.Assert(handler != null);
                 valueHandlers.Add(handler);
             }
 
-            var indices = new byte[rows.Count];
+            byte[] indices = new byte[rows.Count];
             int count = 0;
-            foreach (var value in rows)
+            foreach (T? value in rows)
             {
-                if (value == null || value is DBNull)
+                if (value is null or DBNull)
                 {
                     indices[count++] = 0xFF;
                     continue;
@@ -118,7 +116,7 @@ namespace Octonica.ClickHouseClient.Types
 
                 if (!handled)
                 {
-                    var allowedTypeList = string.Join(", ", _types.Select(t => $"\"{t.GetFieldType().Name}\""));
+                    string allowedTypeList = string.Join(", ", _types.Select(t => $"\"{t.GetFieldType().Name}\""));
                     throw new ClickHouseException(
                         ClickHouseErrorCodes.TypeNotSupported,
                         $"Column \"{columnName}\". A value of type \"{value.GetType().Name}\" can't be written to the column of type \"{ComplexTypeName}\". Allowed types are: {allowedTypeList}.");
@@ -126,8 +124,8 @@ namespace Octonica.ClickHouseClient.Types
             }
 
             Debug.Assert(count == indices.Length);
-            var rowCounts = new List<int>(valueHandlers.Count);
-            var writers = new List<IClickHouseColumnWriter>(valueHandlers.Count);
+            List<int> rowCounts = new(valueHandlers.Count);
+            List<IClickHouseColumnWriter> writers = new(valueHandlers.Count);
             for (int i = 0; i < valueHandlers.Count; i++)
             {
                 IValueHandler? handler = valueHandlers[i];
@@ -151,24 +149,30 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnTypeInfo GetDetailedTypeInfo(List<ReadOnlyMemory<char>> options, IClickHouseTypeInfoProvider typeInfoProvider)
         {
             if (_types != null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
-
-            var types = new List<IClickHouseColumnTypeInfo>(options.Count);
-            var typeNameBuilder = new StringBuilder(TypeName).Append('(');
-            bool isFirst = true;
-            foreach(var option in options)
             {
-                if (isFirst)
-                    isFirst = false;
-                else
-                    typeNameBuilder.Append(", ");
-
-                var type = typeInfoProvider.GetTypeInfo(option);
-                types.Add(type);
-                typeNameBuilder.Append(type.ComplexTypeName);
+                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotSupported, "The type is already fully specified.");
             }
 
-            var complexTypeName = typeNameBuilder.Append(')').ToString();
+            List<IClickHouseColumnTypeInfo> types = new(options.Count);
+            StringBuilder typeNameBuilder = new StringBuilder(TypeName).Append('(');
+            bool isFirst = true;
+            foreach (ReadOnlyMemory<char> option in options)
+            {
+                if (isFirst)
+                {
+                    isFirst = false;
+                }
+                else
+                {
+                    _ = typeNameBuilder.Append(", ");
+                }
+
+                IClickHouseColumnTypeInfo type = typeInfoProvider.GetTypeInfo(option);
+                types.Add(type);
+                _ = typeNameBuilder.Append(type.ComplexTypeName);
+            }
+
+            string complexTypeName = typeNameBuilder.Append(')').ToString();
             return new VariantTypeInfo(complexTypeName, types);
         }
 
@@ -179,14 +183,13 @@ namespace Octonica.ClickHouseClient.Types
 
         public IClickHouseTypeInfo GetGenericArgument(int index)
         {
-            if (_types == null)
-                throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.");
-
-            return _types[index];
+            return _types == null
+                ? throw new ClickHouseException(ClickHouseErrorCodes.TypeNotFullySpecified, $"The type \"{ComplexTypeName}\" is not fully specified.")
+                : (IClickHouseTypeInfo)_types[index];
         }
 
         private abstract class VariantColumnReaderBase<TReader>
-            where TReader:IClickHouseColumnReaderBase
+            where TReader : IClickHouseColumnReaderBase
         {
             private readonly List<byte[]> _prefixes;
 
@@ -210,14 +213,14 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence)
             {
-                var types = TypeInfo._types;
+                List<IClickHouseColumnTypeInfo>? types = TypeInfo._types;
                 Debug.Assert(types != null);
-                var totalBytes = 0;
+                int totalBytes = 0;
                 for (int i = _prefixes.Count; i < types.Count; i++)
                 {
-                    var slice = sequence.Slice(totalBytes);
-                    var reader = _prefixReader ?? types[i].CreateSkippingColumnReader(0);
-                    var prefixSize = reader.ReadPrefix(slice);
+                    ReadOnlySequence<byte> slice = sequence.Slice(totalBytes);
+                    IClickHouseColumnReaderBase reader = _prefixReader ?? types[i].CreateSkippingColumnReader(0);
+                    SequenceSize prefixSize = reader.ReadPrefix(slice);
                     if (prefixSize.Elements == 0)
                     {
                         _prefixReader = reader;
@@ -228,7 +231,7 @@ namespace Octonica.ClickHouseClient.Types
                     totalBytes += prefixSize.Bytes;
                     if (prefixSize.Bytes > 0)
                     {
-                        var prefix = new byte[prefixSize.Bytes];
+                        byte[] prefix = new byte[prefixSize.Bytes];
                         slice.Slice(0, prefix.Length).CopyTo(prefix);
                         _prefixes.Add(prefix);
                     }
@@ -243,9 +246,9 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence, int[] rowCounts)
             {
-                var seq = sequence;
+                ReadOnlySequence<byte> seq = sequence;
                 int totalBytes = 0;
-                var totalElements = 0;
+                int totalElements = 0;
                 Debug.Assert(TypeInfo._types != null);
                 for (; _readerPosition < rowCounts.Length; _readerPosition++)
                 {
@@ -254,19 +257,25 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         reader = CreateReader(TypeInfo._types[_readerPosition], rowCounts[_readerPosition]);
 
-                        var prefixBytes = _prefixes[_readerPosition];
+                        byte[] prefixBytes = _prefixes[_readerPosition];
                         if (prefixBytes.Length > 0)
                         {
-                            var prefixSize = reader.ReadPrefix(new ReadOnlySequence<byte>(prefixBytes));
+                            SequenceSize prefixSize = reader.ReadPrefix(new ReadOnlySequence<byte>(prefixBytes));
 
                             if (prefixSize.Bytes == 0 && prefixSize.Elements == 0)
+                            {
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Failed to read the column prefix.");
+                            }
 
                             if (prefixSize.Bytes != prefixBytes.Length)
+                            {
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. The column prefix' size is {prefixBytes.Length}, but the number of consumed bytes is {prefixSize.Bytes}.");
+                            }
 
                             if (prefixSize.Elements != 1)
+                            {
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {prefixSize.Elements}.");
+                            }
                         }
 
                         Readers.Add(reader);
@@ -276,12 +285,7 @@ namespace Octonica.ClickHouseClient.Types
                         reader = Readers[^1];
                     }
 
-                    SequenceSize size;
-                    if (rowCounts[_readerPosition] == 0)
-                        size = SequenceSize.Empty;
-                    else
-                        size = reader.ReadNext(seq);
-
+                    SequenceSize size = rowCounts[_readerPosition] == 0 ? SequenceSize.Empty : reader.ReadNext(seq);
                     totalBytes += size.Bytes;
                     _rowPosition += size.Elements;
 
@@ -289,11 +293,15 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         totalElements += size.Elements;
                         if (_rowPosition == rowCounts[_readerPosition])
+                        {
                             totalElements += RowCount - rowCounts[_readerPosition];
+                        }
                     }
 
                     if (_rowPosition < rowCounts[_readerPosition])
+                    {
                         break;
+                    }
 
                     _rowPosition = 0;
                     seq = seq.Slice(size.Bytes);
@@ -314,7 +322,7 @@ namespace Octonica.ClickHouseClient.Types
             private int _indexPosition;
 
             public VariantColumnReader(int rowCount, VariantTypeInfo typeInfo)
-                :base(rowCount, typeInfo)
+                : base(rowCount, typeInfo)
             {
                 Debug.Assert(typeInfo._types != null);
 
@@ -331,29 +339,33 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 int totalBytes = 0;
-                var seq = sequence;
+                ReadOnlySequence<byte> seq = sequence;
                 if (_indexPosition < _typeIndices.Length)
                 {
-                    var length = Math.Min(_typeIndices.Length - _indexPosition, (int)seq.Length);
-                    seq.Slice(0, length).CopyTo(((Span<byte>)_typeIndices).Slice(_indexPosition));
+                    int length = Math.Min(_typeIndices.Length - _indexPosition, (int)seq.Length);
+                    seq.Slice(0, length).CopyTo(((Span<byte>)_typeIndices)[_indexPosition..]);
 
                     totalBytes += length;
 
                     for (int i = 0; i < length; i++, _indexPosition++)
                     {
-                        var typeIndex = _typeIndices[_indexPosition];
+                        byte typeIndex = _typeIndices[_indexPosition];
                         // 0xFF stands for NULL
                         if (typeIndex != 0xFF)
+                        {
                             _elementIndices[_indexPosition] = _rowCounts[typeIndex]++;
+                        }
                     }
 
                     if (_indexPosition < _typeIndices.Length)
+                    {
                         return new SequenceSize(totalBytes, 0);
+                    }
 
                     seq = seq.Slice(length);
                 }
 
-                var result = ReadNext(seq, _rowCounts);
+                SequenceSize result = ReadNext(seq, _rowCounts);
                 result = result.AddBytes(totalBytes);
                 return result;
             }
@@ -366,23 +378,32 @@ namespace Octonica.ClickHouseClient.Types
             public IClickHouseTableColumn EndRead(ClickHouseColumnSettings? settings)
             {
                 if (_typeIndices.Length == 0)
+                {
                     return new StructureTableColumn<int>(ReadOnlyMemory<int>.Empty);
+                }
 
                 Debug.Assert(TypeInfo._types != null);
-                var columns = new List<IClickHouseTableColumn>(_rowCounts.Length);
+                List<IClickHouseTableColumn> columns = new(_rowCounts.Length);
                 for (int i = 0; i < TypeInfo._types.Count; i++)
                 {
                     if (i < Readers.Count)
                     {
-                        columns.Add(Readers[i].EndRead(settings));
+                        IClickHouseTableColumn? column = Readers[i].EndRead(settings);
+                        if (column != null)
+                        {
+                            columns.Add(column);
+                        }
                     }
                     else
                     {
-                        var reader = TypeInfo._types[i].CreateColumnReader(0);
-                        columns.Add(reader.EndRead(settings));
+                        IClickHouseColumnReader reader = TypeInfo._types[i].CreateColumnReader(0);
+                        IClickHouseTableColumn? column = reader.EndRead(settings);
+                        if (column != null)
+                        {
+                            columns.Add(column);
+                        }
                     }
                 }
-
                 return new VariantTableColumn(columns, _typeIndices, _elementIndices);
             }
         }
@@ -408,11 +429,11 @@ namespace Octonica.ClickHouseClient.Types
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
             {
                 int totalBytes = 0;
-                var seq = sequence;
+                ReadOnlySequence<byte> seq = sequence;
                 if (_indexPosition < RowCount)
                 {
-                    var length = Math.Min(RowCount - _indexPosition, (int)seq.Length);
-                    var typeIndices = new byte[length];
+                    int length = Math.Min(RowCount - _indexPosition, (int)seq.Length);
+                    byte[] typeIndices = new byte[length];
                     seq.Slice(0, length).CopyTo(typeIndices);
 
                     totalBytes += length;
@@ -421,16 +442,20 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         // 0xFF stands for NULL
                         if (typeIndices[i] != 0xFF)
+                        {
                             ++_rowCounts[typeIndices[i]];
+                        }
                     }
 
                     if (_indexPosition < RowCount)
+                    {
                         return new SequenceSize(totalBytes, 0);
+                    }
 
                     seq = seq.Slice(length);
                 }
 
-                var result = ReadNext(seq, _rowCounts);
+                SequenceSize result = ReadNext(seq, _rowCounts);
                 result = result.AddBytes(totalBytes);
                 return result;
             }
@@ -452,7 +477,7 @@ namespace Octonica.ClickHouseClient.Types
 
         private sealed class ValueHandler<T> : IValueHandler
         {
-            private readonly List<T> _rows = new List<T>();
+            private readonly List<T> _rows = [];
 
             public int RowCount => _rows.Count;
 
@@ -463,7 +488,7 @@ namespace Octonica.ClickHouseClient.Types
 
             public bool TryHandle(object value)
             {
-                if(value is T typedValue)
+                if (value is T typedValue)
                 {
                     _rows.Add(typedValue);
                     return true;
@@ -499,13 +524,15 @@ namespace Octonica.ClickHouseClient.Types
 
             SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
-                var totalBytes = 0;
+                int totalBytes = 0;
                 for (; _prefixPosition < _columnWriters.Count; _prefixPosition++)
                 {
-                    var prefixSize = _columnWriters[_prefixPosition].WritePrefix(writeTo.Slice(totalBytes));
+                    SequenceSize prefixSize = _columnWriters[_prefixPosition].WritePrefix(writeTo[totalBytes..]);
                     totalBytes += prefixSize.Bytes;
                     if (prefixSize.Elements == 0)
+                    {
                         return new SequenceSize(totalBytes, 0);
+                    }
                 }
 
                 return new SequenceSize(totalBytes, 1);
@@ -513,30 +540,27 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize WriteNext(Span<byte> writeTo)
             {
-                var totalBytes = 0;
-                var span = writeTo;
+                int totalBytes = 0;
+                Span<byte> span = writeTo;
                 if (_indexPosition < _indices.Length)
                 {
-                    var length = Math.Min(writeTo.Length, _indices.Length - _indexPosition);
-                    ((ReadOnlySpan<byte>)_indices).Slice(_indexPosition, length).CopyTo(span.Slice(0, length));
+                    int length = Math.Min(writeTo.Length, _indices.Length - _indexPosition);
+                    ((ReadOnlySpan<byte>)_indices).Slice(_indexPosition, length).CopyTo(span[..length]);
                     totalBytes += length;
                     _indexPosition += length;
 
                     if (_indexPosition < _indices.Length)
+                    {
                         return new SequenceSize(totalBytes, 0);
+                    }
 
-                    span = span.Slice(length);
+                    span = span[length..];
                 }
 
-                var totalElements = 0;
+                int totalElements = 0;
                 for (; _columnPosition < _columnWriters.Count; _columnPosition++)
                 {
-                    SequenceSize size;
-                    if (_rowCounts[_columnPosition] == 0)
-                        size = SequenceSize.Empty;
-                    else
-                        size = _columnWriters[_columnPosition].WriteNext(span);
-
+                    SequenceSize size = _rowCounts[_columnPosition] == 0 ? SequenceSize.Empty : _columnWriters[_columnPosition].WriteNext(span);
                     _rowPosition += size.Elements;
                     totalBytes += size.Bytes;
 
@@ -544,14 +568,18 @@ namespace Octonica.ClickHouseClient.Types
                     {
                         totalElements += size.Elements;
                         if (_rowPosition == _rowCounts[_columnPosition])
+                        {
                             totalElements += _indices.Length - _rowPosition;
+                        }
                     }
 
                     if (_rowPosition < _rowCounts[_columnPosition])
+                    {
                         break;
+                    }
 
                     _rowPosition = 0;
-                    span = span.Slice(size.Bytes);
+                    span = span[size.Bytes..];
                 }
 
                 return new SequenceSize(totalBytes, totalElements);

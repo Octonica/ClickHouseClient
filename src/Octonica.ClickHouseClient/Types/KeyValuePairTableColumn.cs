@@ -25,7 +25,7 @@ namespace Octonica.ClickHouseClient.Types
         private readonly IClickHouseTableColumn<TKey> _keyColumn;
         private readonly IClickHouseTableColumn<TValue> _valueColumn;
 
-        public KeyValuePair<TKey, TValue> DefaultValue => new KeyValuePair<TKey, TValue>(_keyColumn.DefaultValue, _valueColumn.DefaultValue);
+        public KeyValuePair<TKey, TValue> DefaultValue => new(_keyColumn.DefaultValue, _valueColumn.DefaultValue);
 
         public KeyValuePairTableColumn(int rowCount, IClickHouseTableColumn<TKey> keyColumn, IClickHouseTableColumn<TValue> valueColumn)
             : base(rowCount)
@@ -43,7 +43,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             CheckIndex(index);
 
-            return new KeyValuePair<TKey, TValue>(_keyColumn.GetValue(index), _valueColumn.GetValue(index));            
+            return new KeyValuePair<TKey, TValue>(_keyColumn.GetValue(index), _valueColumn.GetValue(index));
         }
 
         public override IEnumerable<IClickHouseTableColumn> GetColumns()
@@ -63,15 +63,14 @@ namespace Octonica.ClickHouseClient.Types
             {
                 Debug.Assert(columns.Count == 2);
 
-                var keyColumn = TryReinterpret<TKey>(columns[0]);
+                IClickHouseTableColumn<TKey>? keyColumn = TryReinterpret<TKey>(columns[0]);
                 if (keyColumn == null)
+                {
                     return null;
+                }
 
-                var valueColumn = TryReinterpret<TValue>(columns[1]);
-                if (valueColumn == null)
-                    return null;
-
-                return new KeyValuePairTableColumn<TKey, TValue>(rowCount, keyColumn, valueColumn);
+                IClickHouseTableColumn<TValue>? valueColumn = TryReinterpret<TValue>(columns[1]);
+                return valueColumn == null ? null : (TupleTableColumnBase)new KeyValuePairTableColumn<TKey, TValue>(rowCount, keyColumn, valueColumn);
             }
         }
     }
