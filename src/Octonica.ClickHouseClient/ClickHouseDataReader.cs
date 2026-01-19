@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2024 Octonica
+/* Copyright 2019-2021, 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Numerics;
@@ -108,6 +110,22 @@ namespace Octonica.ClickHouseClient
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
             State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
+        }
+
+        /// <summary>
+        /// An empty, closed reader. Only for a disposed session.
+        /// </summary>
+        internal ClickHouseDataReader(ClickHouseTcpClient.Session session)
+        {
+            _currentTable = new ClickHouseTable(new BlockHeader(null, new List<ColumnInfo>(0).AsReadOnly(), 0), new List<IClickHouseTableColumn>(0).AsReadOnly());
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+            _rowLimit = 0;
+            _ignoreProfileEvents = true;
+            _reinterpretedColumnsCache = Array.Empty<IClickHouseTableColumn>();
+            _recordsAffected = 0;
+
+            Debug.Assert(session.IsDisposed);
+            State = ClickHouseDataReaderState.Closed;
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumn

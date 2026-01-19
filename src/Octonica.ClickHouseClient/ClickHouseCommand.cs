@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2025 Octonica
+/* Copyright 2019-2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -711,7 +711,9 @@ namespace Octonica.ClickHouseClient
                             break;
 
                         case ServerMessageCode.EndOfStream:
-                            throw ClickHouseHandledException.Wrap(new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response."));
+                            // The query was executed without errors but returned no data. Highly likely it was a DDL query. Closing the session.
+                            await session.Dispose(async);
+                            return new ClickHouseDataReader(session);
 
                         default:
                             throw new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response.");

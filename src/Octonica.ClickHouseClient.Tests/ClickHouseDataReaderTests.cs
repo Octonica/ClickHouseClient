@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2024 Octonica
+/* Copyright 2019-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -743,6 +743,23 @@ FROM
             Assert.Equal(21, result[2]);
 
             Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task ExecuteDdlQuery()
+        {
+            await WithTemporaryTable("reader_drop", "dummy Int32", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var cmd = cn.CreateCommand($"DROP TABLE {tableName}");
+                await using var reader = await cmd.ExecuteReaderAsync(CancellationToken.None);
+
+                Assert.True(reader.IsClosed);
+                Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+                Assert.Equal(0, reader.FieldCount);
+                Assert.False(await reader.ReadAsync());
+            }
         }
     }
 }
