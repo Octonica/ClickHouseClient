@@ -715,11 +715,20 @@ namespace Octonica.ClickHouseClient
                             await session.Dispose(async);
                             return new ClickHouseDataReader(session);
 
+                        case ServerMessageCode.Progress:
+                        case ServerMessageCode.ProfileInfo:
+                        case ServerMessageCode.Pong:
+                            continue;
+
+                        case ServerMessageCode.Totals:
+                        case ServerMessageCode.Extremes:
+                            throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, "Received unexpected totals or extremes before the main dataset.");
+
                         default:
                             throw new ClickHouseException(ClickHouseErrorCodes.QueryTypeMismatch, "There is no table in the server's response.");
                     }
                 }
-                while (isProfileEvents);
+                while (!(message is ServerDataMessage) || isProfileEvents);
 
                 var firstTable = await session.ReadTable((ServerDataMessage) message, null, async, cancellationToken);
                 if (rowLimit == ClickHouseDataReaderRowLimit.Zero)

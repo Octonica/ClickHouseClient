@@ -761,5 +761,41 @@ FROM
                 Assert.False(await reader.ReadAsync());
             }
         }
+
+        [Fact]
+        public async Task ExecuteCreateInsertFromSelect()
+        {
+            await WithTemporaryTable("reader_from_select", "dummy Int32", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var cmd = cn.CreateCommand($"INSERT INTO {tableName} SELECT number FROM system.numbers LIMIT 42");
+                await using (var reader = await cmd.ExecuteReaderAsync(CancellationToken.None))
+                {
+                    Assert.True(reader.IsClosed);
+                    Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+                    Assert.Equal(0, reader.FieldCount);
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                cmd.CommandText = $"DROP TABLE {tableName}";
+                await using (var reader = await cmd.ExecuteReaderAsync(CancellationToken.None))
+                {
+                    Assert.True(reader.IsClosed);
+                    Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+                    Assert.Equal(0, reader.FieldCount);
+                    Assert.False(await reader.ReadAsync());
+                }
+
+                cmd.CommandText = $"CREATE TABLE {tableName} ENGINE = Memory AS SELECT number FROM system.numbers LIMIT 100";
+                await using (var reader = await cmd.ExecuteReaderAsync(CancellationToken.None))
+                {
+                    Assert.True(reader.IsClosed);
+                    Assert.Equal(ClickHouseDataReaderState.Closed, reader.State);
+                    Assert.Equal(0, reader.FieldCount);
+                    Assert.False(await reader.ReadAsync());
+                }
+            }
+        }
     }
 }
