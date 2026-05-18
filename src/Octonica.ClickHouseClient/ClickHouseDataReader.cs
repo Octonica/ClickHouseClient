@@ -20,6 +20,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Net;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -227,6 +228,43 @@ namespace Octonica.ClickHouseClient
             _columnSettings[ordinal] = _columnSettings[ordinal].WithUserDefinedReader(_currentTable.Header.Columns[ordinal].Name, reinterpreter);
         }
 
+        /// <summary>
+        /// Configures the reader to invoke an arbitrary type converter callback function provided by the dispatcher when reading a value of a column.
+        /// </summary>
+        /// <param name="ordinal">The zero-based column ordinal.</param>
+        /// <param name="readAsDispatcher">The instance of a dispatcher that provides a type converter callback function or <see langword="null"/> to reset the dispatcher for the column.</param>
+        /// <remarks>A callback function provided by the dispathcer must never return <see langword="null"/> when its argument is not null.</remarks>
+        public void ConfigureColumnReader(int ordinal, IConverterDispatcher? readAsDispatcher)
+        {
+            if (_rowIndex >= 0)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+
+            if (State == ClickHouseDataReaderState.ProfileEvents)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
+
+            if (readAsDispatcher == null && _columnSettings == null)
+                return;
+
+            IClickHouseColumnReinterpreter? reinterpreter = null;
+            if (readAsDispatcher != null)
+            {
+                var dispatcher = ClickHouseColumnReinterpreter.CreateDispatcher(readAsDispatcher);
+                if (!_currentTable.Columns[ordinal].TryDipatch(dispatcher, out reinterpreter))
+                    reinterpreter = dispatcher.Dispatch<object>();
+
+                // Dry run. The interpreter could invoke the function 'readAs' and it could fail.
+                reinterpreter?.TryReinterpret(_currentTable.Columns[ordinal]);
+            }
+
+            if (reinterpreter == null && _columnSettings == null)
+                return;
+
+            if (_columnSettings == null)
+                _columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+
+            _columnSettings[ordinal] = _columnSettings[ordinal].WithUserDefinedReader(_currentTable.Header.Columns[ordinal].Name, reinterpreter);
+        }
+
         // Note that this xml comment is inherited by ClickHouseColumnWriter.ConfigureColumnWriter
         /// <summary>
         /// Applies the settings to all columns. All previously applied settings are discarded.
@@ -256,6 +294,50 @@ namespace Octonica.ClickHouseClient
 
                 _columnSettings = settingsCopy;
             }
+        }
+
+        /// <summary>
+        /// Configures the reader to invoke an arbitrary type converter callback function provided by the dispatcher when reading values.
+        /// </summary>
+        /// <param name="readAsDispatcher">The instance of a dispatcher that provides a type converter callback function.</param>
+        /// <remarks>A callback function provided by the dispathcer must never return <see langword="null"/> when its argument is not null.</remarks>
+        public void ConfigureDataReader(IConverterDispatcher readAsDispatcher)
+        {
+            if (readAsDispatcher == null)
+                throw new ArgumentNullException(nameof(readAsDispatcher));
+
+            if (_rowIndex >= 0)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be reconfigured during reading.");
+
+            if (State == ClickHouseDataReaderState.ProfileEvents)
+                throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "The column can't be configured when reading profile events.");
+
+            ClickHouseReaderColumnSettings[] columnSettings;
+            if (_columnSettings == null)
+                columnSettings = new ClickHouseReaderColumnSettings[_currentTable.Columns.Count];
+            else
+                columnSettings = _columnSettings.ToArray();
+
+            Debug.Assert(columnSettings.Length == FieldCount);
+            var dispatcher = ClickHouseColumnReinterpreter.CreateDispatcher(readAsDispatcher);
+            bool affected = false;
+            for (int ordinal = 0; ordinal < columnSettings.Length; ordinal++)
+            {
+                if (!_currentTable.Columns[ordinal].TryDipatch(dispatcher, out var reinterpreter))
+                    reinterpreter = dispatcher.Dispatch<object>();
+
+                if (!ReferenceEquals(reinterpreter, columnSettings[ordinal].Reinterpreter))
+                    continue;
+
+                // Dry run. The interpreter could invoke the function 'readAs' and it could fail.
+                reinterpreter?.TryReinterpret(_currentTable.Columns[ordinal]);
+
+                columnSettings[ordinal] = columnSettings[ordinal].WithUserDefinedReader(_currentTable.Header.Columns[ordinal].Name, reinterpreter);
+                affected = true;
+            }
+
+            if (affected)
+                _columnSettings = columnSettings;
         }
 
         // Note that this xml comment is inherited by ClickHouseColumnWriter.GetFieldTypeInfo

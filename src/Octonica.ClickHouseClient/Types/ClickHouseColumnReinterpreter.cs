@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2024 Octonica
+/* Copyright 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,11 @@ namespace Octonica.ClickHouseClient.Types
         public static IClickHouseColumnReinterpreter Create(Type type)
         {
             return TypeDispatcher.Create(type).Dispatch(Instance);
+        }
+
+        public static ClickhouseColumnReinterpreterDispatcher CreateDispatcher(IConverterDispatcher dispatcher)
+        {
+            return new ClickhouseColumnReinterpreterDispatcher(dispatcher);
         }
 
         public static IClickHouseColumnReinterpreter Create<T, TRes>(Func<T, TRes> convert)
@@ -106,6 +111,39 @@ namespace Octonica.ClickHouseClient.Types
                 return rc.Chain(convert);
 
             return new ReinterpretedTableColumn<T, TRes>(root, column, convert);
+        }
+    }
+
+    internal sealed class ClickhouseColumnReinterpreterDispatcher : IClickHouseTableColumnDispatcher<IClickHouseColumnReinterpreter?>, IConverterDispatcher<IClickHouseColumnReinterpreter?>
+    {
+        private readonly IConverterDispatcher _converterDispatcher;
+
+        public ClickhouseColumnReinterpreterDispatcher(IConverterDispatcher converterDispatcher)
+        {
+            _converterDispatcher = converterDispatcher;
+        }
+
+        public IClickHouseColumnReinterpreter? Dispatch<T>(IClickHouseTableColumn<T> column)
+        {
+            return Dispatch<T>();
+        }
+
+        public IClickHouseColumnReinterpreter? Dispatch<TFrom>()
+        {
+            return _converterDispatcher.Dispatch<TFrom, IClickHouseColumnReinterpreter?>(this);
+        }
+
+        public IClickHouseColumnReinterpreter Dispatch<TFrom, TTo>(Func<TFrom, TTo> convert)
+        {
+            if (typeof(TFrom) == typeof(object))
+                return new ClickHouseObjectColumnReinterpreter<TTo>((Func<object, TTo>)(object)convert);
+
+            return ClickHouseColumnReinterpreter.Create(convert);
+        }
+
+        public IClickHouseColumnReinterpreter? DispatchNoConvert()
+        {
+            return null;
         }
     }
 
