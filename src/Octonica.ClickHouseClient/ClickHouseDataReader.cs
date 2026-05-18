@@ -57,6 +57,11 @@ namespace Octonica.ClickHouseClient
         public ClickHouseDataReaderState State { get; private set; }
 
         /// <summary>
+        /// Gets the query execution progress reported by the server.
+        /// </summary>
+        public ClickHouseQueryExecutionProgress ExecutionProgress { get; private set; }
+
+        /// <summary>
         /// Gets the number of affected rows.
         /// </summary>
         /// <returns>A non-negative number of rows affected by the query.</returns>
@@ -102,7 +107,7 @@ namespace Octonica.ClickHouseClient
         /// <returns>Always returns 0.</returns>
         public override int Depth => 0;
 
-        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseDataReaderRowLimit rowLimit, bool ignoreProfileEvents)
+        internal ClickHouseDataReader(ClickHouseTable table, ClickHouseTcpClient.Session session, ClickHouseQueryExecutionProgress executionProgress, ClickHouseDataReaderRowLimit rowLimit, bool ignoreProfileEvents)
         {
             _currentTable = table.Header == null || table.Columns == null ? throw new ArgumentNullException(nameof(table)) : table;
             _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -110,6 +115,7 @@ namespace Octonica.ClickHouseClient
             _ignoreProfileEvents = ignoreProfileEvents;
             _reinterpretedColumnsCache = new IClickHouseTableColumn[_currentTable.Columns.Count];
             _recordsAffected = checked((ulong) _currentTable.Header.RowCount);
+            ExecutionProgress = executionProgress;
             State = _rowLimit == ClickHouseDataReaderRowLimit.Zero ? ClickHouseDataReaderState.ClosePending : ClickHouseDataReaderState.Data;
         }
 
@@ -1006,7 +1012,8 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.Progress:
                             var progressMessage = (ServerProgressMessage) message;
-                            _recordsAffected = progressMessage.Rows;
+                            ExecutionProgress = progressMessage.ExecutionProgress;
+                            _recordsAffected = ExecutionProgress.Rows;
                             continue;
 
                         case ServerMessageCode.EndOfStream:
@@ -1249,7 +1256,8 @@ namespace Octonica.ClickHouseClient
 
                             case ServerMessageCode.Progress:
                                 var progressMessage = (ServerProgressMessage) message;
-                                _recordsAffected = progressMessage.Rows;
+                                ExecutionProgress = progressMessage.ExecutionProgress;
+                                _recordsAffected = ExecutionProgress.Rows;
                                 continue;
 
                             case ServerMessageCode.EndOfStream:

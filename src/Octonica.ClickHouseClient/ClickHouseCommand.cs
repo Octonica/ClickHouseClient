@@ -269,7 +269,7 @@ namespace Octonica.ClickHouseClient
 
                         case ServerMessageCode.Progress:
                             var progressMessage = (ServerProgressMessage) message;
-                            progress = (progressMessage.Rows, progressMessage.WrittenRows);
+                            progress = (progressMessage.ExecutionProgress.Rows, progressMessage.ExecutionProgress.WrittenRows);
                             continue;
 
                         case ServerMessageCode.ProfileInfo:
@@ -692,6 +692,7 @@ namespace Octonica.ClickHouseClient
                 cancelOnFailure = true;
                 bool isProfileEvents;
                 IServerMessage message;
+                var executionProgress = new ClickHouseQueryExecutionProgress();
                 do
                 {
                     isProfileEvents = false;
@@ -716,6 +717,10 @@ namespace Octonica.ClickHouseClient
                             return new ClickHouseDataReader(session);
 
                         case ServerMessageCode.Progress:
+                            var progressMessage = (ServerProgressMessage)message;
+                            executionProgress = progressMessage.ExecutionProgress;
+                            break;
+
                         case ServerMessageCode.ProfileInfo:
                         case ServerMessageCode.Pong:
                             continue;
@@ -734,7 +739,7 @@ namespace Octonica.ClickHouseClient
                 if (rowLimit == ClickHouseDataReaderRowLimit.Zero)
                     await session.SendCancel(async);
 
-                return new ClickHouseDataReader(firstTable, session, rowLimit, ignoreProfileEvents);
+                return new ClickHouseDataReader(firstTable, session, executionProgress, rowLimit, ignoreProfileEvents);
             }
             catch (ClickHouseHandledException)
             {

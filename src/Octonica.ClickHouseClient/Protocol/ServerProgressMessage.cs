@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020, 2023 Octonica
+/* Copyright 2019-2020, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,29 +24,11 @@ namespace Octonica.ClickHouseClient.Protocol
     {
         public ServerMessageCode MessageCode => ServerMessageCode.Progress;
 
-        public ulong Rows { get; }
-
-        public ulong Bytes { get; }
-
-        public ulong TotalRows { get; }
-
-        public ulong TotalBytes { get; }
-
-        public ulong WrittenRows { get; }
-
-        public ulong WrittenBytes { get; }
-
-        public ulong ElapsedNanoseconds { get; }
+        public ClickHouseQueryExecutionProgress ExecutionProgress { get; }
 
         private ServerProgressMessage(ulong rows, ulong bytes, ulong totalRows, ulong totalBytes, ulong writtenRows, ulong writtenBytes, ulong elapsedNanoseconds)
         {
-            Rows = rows;
-            Bytes = bytes;
-            TotalRows = totalRows;
-            TotalBytes = totalBytes;
-            WrittenRows = writtenRows;
-            WrittenBytes = writtenBytes;
-            ElapsedNanoseconds = elapsedNanoseconds;
+            ExecutionProgress = new ClickHouseQueryExecutionProgress(rows, bytes, totalRows, totalBytes, writtenRows, writtenBytes, elapsedNanoseconds);
         }
 
         public static async ValueTask<ServerProgressMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
