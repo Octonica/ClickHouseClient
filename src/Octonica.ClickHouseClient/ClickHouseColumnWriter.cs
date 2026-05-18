@@ -73,6 +73,11 @@ namespace Octonica.ClickHouseClient
             }
         }
 
+        /// <summary>
+        /// Gets the query execution progress reported by the server.
+        /// </summary>
+        public ClickHouseQueryExecutionProgress ExecutionProgress { get; private set; }
+
         internal ClickHouseColumnWriter(ClickHouseTcpClient.Session session, ClientQueryMessage query, ReadOnlyCollection<ColumnInfo> columns)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -778,6 +783,14 @@ namespace Octonica.ClickHouseClient
                             isProfileEvents = true;
                             var profileEventsMessage = (ServerDataMessage)message;
                             await _session.SkipTable(profileEventsMessage, async, cancellationToken);
+                            break;
+
+                        case ServerMessageCode.ProfileInfo:
+                            break;
+
+                        case ServerMessageCode.Progress:
+                            var progressMessage = (ServerProgressMessage)message;
+                            ExecutionProgress = progressMessage.ExecutionProgress;
                             break;
 
                         default:
