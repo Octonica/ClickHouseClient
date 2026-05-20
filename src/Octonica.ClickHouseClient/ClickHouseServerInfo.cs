@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,6 +61,11 @@ namespace Octonica.ClickHouseClient
         public ReadOnlyCollection<ClickHousePasswordComplexityRule>? PasswordComplexityRules { get; }
 
         /// <summary>
+        /// Gets the server parallel replicas protocol version.
+        /// </summary>
+        public int ParallelReplicasProtocolVersion { get; }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseServerInfo"/> with specified arguments.
         /// </summary>
         /// <param name="name">The name of the server provided by the server when opening a connection.</param>
@@ -70,7 +75,8 @@ namespace Octonica.ClickHouseClient
         /// <param name="timezone">The default timezone of the server.</param>
         /// <param name="displayName">The display name of the server provided by the server when opening a connection.</param>
         /// <param name="passwordComplexityRules">Password complexity rules provided by the server when opening a connection.</param>
-        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName, ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules)
+        /// <param name="parallelReplicasProtocolVersion">The server parallel replicas protocol version.</param>
+        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName, ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules, int parallelReplicasProtocolVersion)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
@@ -79,6 +85,7 @@ namespace Octonica.ClickHouseClient
             Timezone = timezone;
             DisplayName = displayName;
             PasswordComplexityRules = passwordComplexityRules;
+            ParallelReplicasProtocolVersion = parallelReplicasProtocolVersion;
         }
 
         /// <summary>
@@ -95,7 +102,8 @@ namespace Octonica.ClickHouseClient
                 revision: Revision,
                 timezone: timezone,
                 displayName: DisplayName,
-                passwordComplexityRules: PasswordComplexityRules);
+                passwordComplexityRules: PasswordComplexityRules,
+                parallelReplicasProtocolVersion: ParallelReplicasProtocolVersion);
         }
     }
 }

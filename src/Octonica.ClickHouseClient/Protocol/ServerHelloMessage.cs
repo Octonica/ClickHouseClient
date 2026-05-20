@@ -53,6 +53,10 @@ namespace Octonica.ClickHouseClient.Protocol
                     $"The revision {rv} of ClickHouse server is not supported. Minimal supported revision is {ClickHouseProtocolRevisions.MinSupportedRevision}.");
             }
 
+            int parralelReplicasProtocolVersion = -1;
+            if (rv >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
+                parralelReplicasProtocolVersion = await reader.Read7BitInt32(async, cancellationToken);
+
             var tz = await reader.ReadString(async, cancellationToken);
             var displayName = await reader.ReadString(async, cancellationToken);
             var versionPatch = await reader.Read7BitInt32(async, cancellationToken);
@@ -90,7 +94,7 @@ namespace Octonica.ClickHouseClient.Protocol
             if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecretV2)
                 await reader.SkipBytes(8, async, cancellationToken); // nonce
 
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
+            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly(), parralelReplicasProtocolVersion);
             return new ServerHelloMessage(serverInfo, sendChunked, receiveChunked);
         }
 

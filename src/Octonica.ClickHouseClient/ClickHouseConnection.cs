@@ -608,7 +608,8 @@ namespace Octonica.ClickHouseClient
                             var clientHelloAddendumBuilder = new ClientHelloMessageAddendum.Builder
                             {
                                 QuotaKey = connectionSettings.QuotaKey,
-                                ProtocolRevision = Math.Min(clientHello.ProtocolRevision, serverInfo.Revision)
+                                ProtocolRevision = Math.Min(clientHello.ProtocolRevision, serverInfo.Revision),
+                                ParallelReplicasProtocolVersion = serverInfo.ParallelReplicasProtocolVersion
                             };
 
                             if (clientHelloAddendumBuilder.ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithChunkedPackets)

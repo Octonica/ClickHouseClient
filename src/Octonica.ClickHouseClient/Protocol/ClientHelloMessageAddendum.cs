@@ -29,6 +29,8 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public int ProtocolRevision { get; }
 
+        public int ParallelReplicasProtocolVersion { get; }
+
         private ClientHelloMessageAddendum(Builder builder)
         {
             if (builder.ProtocolRevision < ClickHouseProtocolRevisions.MinSupportedRevision)
@@ -50,6 +52,7 @@ namespace Octonica.ClickHouseClient.Protocol
             SendChunked = builder.SendChunked;
             ReceiveChunked = builder.ReceiveChunked;
             ProtocolRevision = builder.ProtocolRevision;
+            ParallelReplicasProtocolVersion = builder.ParallelReplicasProtocolVersion;
         }
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
@@ -61,6 +64,9 @@ namespace Octonica.ClickHouseClient.Protocol
                 writer.WriteString(SendChunked ? "chunked" : "notchunked");
                 writer.WriteString(ReceiveChunked ? "chunked" : "notchunked");
             }
+
+            if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
+                writer.Write7BitInt32(ParallelReplicasProtocolVersion);
         }
 
         internal sealed class Builder
@@ -72,6 +78,8 @@ namespace Octonica.ClickHouseClient.Protocol
             public bool ReceiveChunked { get; set; }
 
             public int ProtocolRevision { get; set; }
+
+            public int ParallelReplicasProtocolVersion { get; set; }
 
             public ClientHelloMessageAddendum Build()
             {

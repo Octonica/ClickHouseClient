@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithChunkedPackets;
+        public const int CurrentRevision = MinRevisionWithVersionedParallelReplicasProtocol;
+
+        /// <summary>
+        /// The number of protocol's revision parallel replicas
+        /// </summary>
+        public const int MinRevisionWithVersionedParallelReplicasProtocol = 54471;
 
         /// <summary>
         /// The number of protocol's revision with chunked packets
