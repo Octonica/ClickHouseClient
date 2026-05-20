@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,17 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithSshAuthentication;
+        public const int CurrentRevision = MinRevisionWithChunkedPackets;
+
+        /// <summary>
+        /// The number of protocol's revision with chunked packets
+        /// </summary>
+        public const int MinRevisionWithChunkedPackets = 54470;
+
+        /// <summary>
+        /// The number of protocol's revision with aggregation info in the profile events
+        /// </summary>
+        public const int MinRevisionWithRowsBeforAggregation = 54469;
 
         /// <summary>
         /// The number of protocol's revision that supports SSH authentication.

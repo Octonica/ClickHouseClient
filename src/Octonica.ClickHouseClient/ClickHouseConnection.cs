@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2024 Octonica
+/* Copyright 2019-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -581,8 +581,7 @@ namespace Octonica.ClickHouseClient
                     User = connectionSettings.User,
                     Database = connectionSettings.Database,
                     Password = connectionSettings.Password,
-                    ProtocolRevision = ClickHouseProtocolRevisions.CurrentRevision,
-                    QuotaKey = connectionSettings.QuotaKey
+                    ProtocolRevision = ClickHouseProtocolRevisions.CurrentRevision
                 }.Build();
 
                 clientHello.Write(writer);
@@ -606,11 +605,25 @@ namespace Octonica.ClickHouseClient
                             // an error message could be delayed. Instead, we are going to add the ping message after the addendum, forcing the server
                             // to send a reply in any case.
 
-                            clientHello.WriteAddendum(writer);
+                            var clientHelloAddendumBuilder = new ClientHelloMessageAddendum.Builder
+                            {
+                                QuotaKey = connectionSettings.QuotaKey,
+                                ProtocolRevision = Math.Min(clientHello.ProtocolRevision, serverInfo.Revision)
+                            };
+
+                            if (clientHelloAddendumBuilder.ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithChunkedPackets)
+                            {
+                                // TODO: chunked mode support
+                                if (helloMessage.SendChunkedMode == ChunkedPacketsMode.Chunked || helloMessage.ReceiveChunkedMode == ChunkedPacketsMode.Chunked)
+                                    throw new ClickHouseException(ClickHouseErrorCodes.FeatureNotImplemented, "Chunked packets mode required by the server is not supported.");
+                            }
+
+                            var clientHelloAddendum = clientHelloAddendumBuilder.Build();
+                            clientHelloAddendum.Write(writer);
                             writer.Write7BitInt32((int)ClientMessageCode.Ping);
                             await writer.Flush(async, cancellationToken);
 
-                            var extraMessage = await reader.ReadMessage(Math.Min(clientHello.ProtocolRevision, serverInfo.Revision), false, async, cancellationToken);
+                            var extraMessage = await reader.ReadMessage(clientHelloAddendum.ProtocolRevision, false, async, cancellationToken);
                             if (extraMessage.MessageCode != ServerMessageCode.Pong)
                             {
                                 if (extraMessage.MessageCode == ServerMessageCode.Error)

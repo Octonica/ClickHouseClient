@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,11 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public bool CalculatedRowsBeforeLimit { get; }
 
-        private ServerProfileInfoMessage(ulong rows, ulong blocks, ulong bytes, bool limitApplied, ulong rowsBeforeLimit, bool calculatedRowsBeforeLimit)
+        public bool HasAppliedAggregation { get; }
+
+        public ulong RowsBeforeAggregation { get; }
+
+        private ServerProfileInfoMessage(ulong rows, ulong blocks, ulong bytes, bool limitApplied, ulong rowsBeforeLimit, bool calculatedRowsBeforeLimit, bool hasAppliedAggregation, ulong rowsBeforeAggregation)
         {
             Rows = rows;
             Blocks = blocks;
@@ -44,9 +48,11 @@ namespace Octonica.ClickHouseClient.Protocol
             LimitApplied = limitApplied;
             RowsBeforeLimit = rowsBeforeLimit;
             CalculatedRowsBeforeLimit = calculatedRowsBeforeLimit;
+            HasAppliedAggregation = hasAppliedAggregation;
+            RowsBeforeAggregation = rowsBeforeAggregation;
         }
 
-        public static async ValueTask<ServerProfileInfoMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
+        public static async ValueTask<ServerProfileInfoMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
         {
             ulong rows = await reader.Read7BitUInt64(async, cancellationToken);
             ulong blocks = await reader.Read7BitUInt64(async, cancellationToken);
@@ -55,7 +61,15 @@ namespace Octonica.ClickHouseClient.Protocol
             ulong rowsBeforeLimit = await reader.Read7BitUInt64(async, cancellationToken);
             bool calculatedRowsBeforeLimit = await reader.ReadBool(async, cancellationToken);
 
-            return new ServerProfileInfoMessage(rows, blocks, bytes, limitApplied, rowsBeforeLimit, calculatedRowsBeforeLimit);
+            bool hasAppliedAggregation = false;
+            ulong rowsBeforeAggregation = 0;
+            if (protocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithRowsBeforAggregation)
+            {
+                hasAppliedAggregation = await reader.ReadBool(async, cancellationToken);
+                rowsBeforeAggregation = await reader.Read7BitUInt64(async, cancellationToken);
+            }
+
+            return new ServerProfileInfoMessage(rows, blocks, bytes, limitApplied, rowsBeforeLimit, calculatedRowsBeforeLimit, hasAppliedAggregation, rowsBeforeAggregation);
         }
     }
 }

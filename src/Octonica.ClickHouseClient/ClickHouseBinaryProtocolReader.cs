@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -267,7 +267,7 @@ namespace Octonica.ClickHouseClient
                     return ServerEndOfStreamMessage.Instance;
 
                 case ServerMessageCode.ProfileInfo:
-                    return await ServerProfileInfoMessage.Read(this, async, cancellationToken);
+                    return await ServerProfileInfoMessage.Read(this, protocolRevision, async, cancellationToken);
 
                 case ServerMessageCode.TableColumns:
                     return await ServerTableColumnsMessage.Read(this, async, cancellationToken);

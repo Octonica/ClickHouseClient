@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -144,5 +144,10 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an error caused by unexpected changes in the table's structure.
         /// </summary>
         public const int TableModified = 23;
+
+        /// <summary>
+        /// The code for indication that the server is required to use a protocol feature which is not implemented by ClickHouseClient.
+        /// </summary>
+        public const int FeatureNotImplemented = 24;
     }
 }

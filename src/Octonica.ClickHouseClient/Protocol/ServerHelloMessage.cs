@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020, 2023 Octonica
+/* Copyright 2019-2020, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,9 +29,15 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public ClickHouseServerInfo ServerInfo { get; }
 
-        private ServerHelloMessage(ClickHouseServerInfo serverInfo)
+        public ChunkedPacketsMode SendChunkedMode { get; }
+
+        public ChunkedPacketsMode ReceiveChunkedMode { get; }
+
+        private ServerHelloMessage(ClickHouseServerInfo serverInfo, ChunkedPacketsMode sendChunkedMode, ChunkedPacketsMode receiveChunkedMode)
         {
             ServerInfo = serverInfo ?? throw new ArgumentNullException(nameof(serverInfo));
+            SendChunkedMode = sendChunkedMode;
+            ReceiveChunkedMode = receiveChunkedMode;
         }
 
         public static async Task<ServerHelloMessage> Read(ClickHouseBinaryProtocolReader reader, int protocolRevision, bool async, CancellationToken cancellationToken)
@@ -52,7 +58,18 @@ namespace Octonica.ClickHouseClient.Protocol
             var versionPatch = await reader.Read7BitInt32(async, cancellationToken);
             var serverVersion = new ClickHouseVersion(mj, mr, versionPatch);
 
+            var sendChunked = ChunkedPacketsMode.Unknown;
+            var receiveChunked = ChunkedPacketsMode.Unknown;
             var negotiatedRevision = Math.Min(rv, protocolRevision);
+            if(negotiatedRevision>= ClickHouseProtocolRevisions.MinRevisionWithChunkedPackets)
+            {
+                var sendChunkedStr = await reader.ReadString(async, cancellationToken);
+                sendChunked = ParseChunkedMode(sendChunkedStr);
+
+                var receiveChunkedStr = await reader.ReadString(async, cancellationToken);
+                receiveChunked = ParseChunkedMode(receiveChunkedStr);
+            }
+
             List<ClickHousePasswordComplexityRule>? complexityRules = null;
             if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithPasswordComplexityRules)
             {
@@ -74,7 +91,19 @@ namespace Octonica.ClickHouseClient.Protocol
                 await reader.SkipBytes(8, async, cancellationToken); // nonce
 
             var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly());
-            return new ServerHelloMessage(serverInfo);
+            return new ServerHelloMessage(serverInfo, sendChunked, receiveChunked);
+        }
+
+        private static ChunkedPacketsMode ParseChunkedMode(string modeStr)
+        {
+            return modeStr switch
+            {
+                "notchunked" => ChunkedPacketsMode.NotChunked,
+                "notchunked_optional" => ChunkedPacketsMode.NotChunkedOptional,
+                "chunked" => ChunkedPacketsMode.Chunked,
+                "chunked_optional" => ChunkedPacketsMode.ChunkedOptional,
+                _ => throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected chunked packets mode: '{modeStr}'."),
+            };
         }
     }
 }
