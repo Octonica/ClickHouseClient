@@ -753,10 +753,8 @@ namespace Octonica.ClickHouseClient
                         break;
                 }
 
-                bool isProfileEvents;
                 do
                 {
-                    isProfileEvents = false;
                     var message = await _session.ReadMessage(async, CancellationToken.None);
                     switch (message.MessageCode)
                     {
@@ -780,7 +778,6 @@ namespace Octonica.ClickHouseClient
                             throw exception;
 
                         case ServerMessageCode.ProfileEvents:
-                            isProfileEvents = true;
                             var profileEventsMessage = (ServerDataMessage)message;
                             await _session.SkipTable(profileEventsMessage, async, cancellationToken);
                             break;
@@ -796,7 +793,7 @@ namespace Octonica.ClickHouseClient
                         default:
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Unexpected server message: \"{message.MessageCode}\".");
                     }
-                } while (isProfileEvents);
+                } while (!_endOfStream);
             }
             catch (ClickHouseHandledException ex)
             {
