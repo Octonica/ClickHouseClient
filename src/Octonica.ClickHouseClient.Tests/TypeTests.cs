@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2024 Octonica
+/* Copyright 2019-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -3251,13 +3251,6 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             await using var connection = await OpenConnectionAsync();
             var cmd = connection.CreateCommand();
 
-            // TODO: remove when this feature will be non-experimental
-            cmd.CommandText = "SET allow_experimental_variant_type = 1";
-            await cmd.ExecuteNonQueryAsync();
-
-            cmd.CommandText = "SET use_variant_as_common_type = 1";
-            await cmd.ExecuteNonQueryAsync();
-
             cmd.CommandText = query;
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -3286,6 +3279,73 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
                 }
 
                 ++count;
+            }
+        }
+
+        [Fact]
+        public Task ReadVariantLowCardinality()
+        {
+            return WithTemporaryTable("variant_low_cardinality_col", "number Int32, varval Variant(LowCardinality(String), Array(UInt64), UInt64)", Test);
+
+            static async Task Test(ClickHouseConnection cn, string tableName)
+            {
+                var query =
+                    $"INSERT INTO {tableName}(number, varval)" + Environment.NewLine +
+                    "SELECT number, if(number = 1, NULL::Variant(Array(UInt64), UInt64), if(number % 2 != 0, number, range(number))) as variant FROM numbers(5)";
+
+                var cmd = cn.CreateCommand(query);
+                await cmd.ExecuteNonQueryAsync();
+
+                query =
+                    $"INSERT INTO {tableName}(number, varval)" + Environment.NewLine +
+                    "SELECT number, multiIf(number=7, NULL::Nullable(String), number%2=0, 'some_str', 'some_other_str') FROM numbers(10) OFFSET 5";
+
+                cmd.CommandText = query;
+                await cmd.ExecuteNonQueryAsync();
+
+                query = $"SELECT varval, number FROM {tableName}";
+                cmd.CommandText = query;
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                int count = 0;
+                while (await reader.ReadAsync())
+                {
+                    var value = reader.GetValue(0);
+                    var intNumber = reader.GetInt32(1);
+                    var number = checked((ulong)intNumber);
+                    if (number == 1 || number == 7)
+                    {
+                        Assert.IsType<DBNull>(value);
+                        Assert.True(reader.IsDBNull(0));
+                    }
+                    else if (number < 5)
+                    {
+                        if (number % 2 == 0)
+                        {
+                            Assert.False(reader.IsDBNull(0));
+                            var arrValue = Assert.IsType<ulong[]>(value);
+                            Assert.Equal(number, (ulong)arrValue.Length);
+                            for (ulong i = 0; i < number; i++)
+                                Assert.Equal(i, arrValue[i]);
+                        }
+                        else
+                        {
+                            Assert.False(reader.IsDBNull(0));
+                            var longVal = Assert.IsType<ulong>(value);
+                            Assert.Equal(number, longVal);
+                        }
+                    }
+                    else
+                    {
+                        var strValue = Assert.IsType<string>(value);
+                        var expectedValue = number % 2 == 0 ? "some_str" : "some_other_str";
+                        Assert.Equal(expectedValue, strValue);
+                    }
+
+                    ++count;
+                }
+
+                Assert.Equal(10, count);
             }
         }
 

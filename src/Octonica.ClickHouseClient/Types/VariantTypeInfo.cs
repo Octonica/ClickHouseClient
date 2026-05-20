@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2024 Octonica
+/* Copyright 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Octonica.ClickHouseClient.Types
@@ -190,6 +191,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly List<byte[]> _prefixes;
 
+            private int _globalDescriminatorPosition;
             private IClickHouseColumnReaderBase? _prefixReader;
             private int _readerPosition;
             private int _rowPosition;
@@ -210,9 +212,26 @@ namespace Octonica.ClickHouseClient.Types
 
             public SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence)
             {
+                var totalBytes = 0;
+                if (_globalDescriminatorPosition < sizeof(ulong))
+                {
+                    var len = (int)Math.Min(sizeof(ulong) - _globalDescriminatorPosition, sequence.Length);
+
+                    // Make it a field if (when) we need to process a global discriminator that is not BASIC
+                    ulong globalDescriminator = 0;
+                    sequence.Slice(0, len).CopyTo(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref globalDescriminator, 1)).Slice(_globalDescriminatorPosition, len));
+                    if (globalDescriminator != 0)
+                        throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Unexpected global descriminator value received for a column of Variant type. Only BASIC global discriminator is supported.");
+
+                    totalBytes += len;
+                    _globalDescriminatorPosition += len;
+
+                    if (totalBytes == sequence.Length)
+                        return new SequenceSize(totalBytes, 0);
+                }
+
                 var types = TypeInfo._types;
                 Debug.Assert(types != null);
-                var totalBytes = 0;
                 for (int i = _prefixes.Count; i < types.Count; i++)
                 {
                     var slice = sequence.Slice(totalBytes);
@@ -479,6 +498,7 @@ namespace Octonica.ClickHouseClient.Types
             private readonly List<int> _rowCounts;
             private readonly List<IClickHouseColumnWriter> _columnWriters;
 
+            private int _globalDiscriminatorPosition;
             private int _prefixPosition;
             private int _indexPosition;
             private int _columnPosition;
@@ -500,6 +520,19 @@ namespace Octonica.ClickHouseClient.Types
             SequenceSize IClickHouseColumnWriter.WritePrefix(Span<byte> writeTo)
             {
                 var totalBytes = 0;
+                if (_globalDiscriminatorPosition < sizeof(ulong))
+                {
+                    // Only BASIC value of the global discriminator is supported. Filling the first 8 bytes with zeroes
+                    var len = Math.Min(sizeof(ulong) - _globalDiscriminatorPosition, writeTo.Length);
+                    writeTo.Slice(0, len).Fill(0);
+
+                    totalBytes += len;
+                    _globalDiscriminatorPosition += len;
+
+                    if (writeTo.Length == len)
+                        return new SequenceSize(totalBytes, 0);
+                }
+
                 for (; _prefixPosition < _columnWriters.Count; _prefixPosition++)
                 {
                     var prefixSize = _columnWriters[_prefixPosition].WritePrefix(writeTo.Slice(totalBytes));

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023-2024 Octonica
+/* Copyright 2019-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1611,7 +1611,7 @@ namespace Octonica.ClickHouseClient.Tests
         [Fact]
         public Task InsertVariant()
         {
-            return WithTemporaryTable("variant", "id Int32, v Variant(UInt64, LowCardinality(String), Array(Int32))", Test, afterOpen: (cn, ct) => cn.CreateCommand("SET allow_experimental_variant_type = 1").ExecuteNonQueryAsync(ct));
+            return WithTemporaryTable("variant", "id Int32, v Variant(UInt64, LowCardinality(String), Array(Int32))", Test);
 
             static async Task Test(ClickHouseConnection cn, string tableName, CancellationToken ct)
             {
