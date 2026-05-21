@@ -94,7 +94,28 @@ namespace Octonica.ClickHouseClient.Protocol
             if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecretV2)
                 await reader.SkipBytes(8, async, cancellationToken); // nonce
 
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly(), parralelReplicasProtocolVersion);
+            List<ClickHouseServerSetting>? settings = null;
+            if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithServerSettings)
+            {
+                var name = await reader.ReadString(async, cancellationToken);
+
+                // Empty string is a marker of the end of settings.
+                if (!string.IsNullOrEmpty(name))
+                {
+                    settings ??= new List<ClickHouseServerSetting>();
+                    do
+                    {
+                        var flags = await reader.Read7BitInt32(async, cancellationToken);
+                        var value = await reader.ReadString(async, cancellationToken);
+                        settings.Add(new ClickHouseServerSetting(name, value, (ClickHouseServerSettingFlags)flags));
+
+                        // The name of the next setting or a marker of the end of settings
+                        name = await reader.ReadString(async, cancellationToken);
+                    } while (!string.IsNullOrEmpty(name));
+                }
+            }
+
+            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly(), parralelReplicasProtocolVersion, settings?.AsReadOnly());
             return new ServerHelloMessage(serverInfo, sendChunked, receiveChunked);
         }
 

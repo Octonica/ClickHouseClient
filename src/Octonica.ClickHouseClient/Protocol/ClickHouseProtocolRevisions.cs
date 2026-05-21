@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithInterserverExternallyGrantedRoles;
+        public const int CurrentRevision = MinRevisionWithServerSettings;
+
+        /// <summary>
+        /// The number of protocol's revision with server settings
+        /// </summary>
+        public const int MinRevisionWithServerSettings = 54474;
 
         /// <summary>
         /// The number of protocol's revision with interserver externally granted roles

@@ -66,6 +66,12 @@ namespace Octonica.ClickHouseClient
         public int ParallelReplicasProtocolVersion { get; }
 
         /// <summary>
+        /// Gets the list of settings provided by the server when opening a connection.
+        /// Returns <see langword="null"/> if the server didn't provide settings.
+        /// </summary>
+        public ReadOnlyCollection<ClickHouseServerSetting>? Settings { get; }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseServerInfo"/> with specified arguments.
         /// </summary>
         /// <param name="name">The name of the server provided by the server when opening a connection.</param>
@@ -76,7 +82,17 @@ namespace Octonica.ClickHouseClient
         /// <param name="displayName">The display name of the server provided by the server when opening a connection.</param>
         /// <param name="passwordComplexityRules">Password complexity rules provided by the server when opening a connection.</param>
         /// <param name="parallelReplicasProtocolVersion">The server parallel replicas protocol version.</param>
-        public ClickHouseServerInfo(string name, ClickHouseVersion version, int serverRevision, int revision, string timezone, string displayName, ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules, int parallelReplicasProtocolVersion)
+        /// <param name="settings">The list of settings provided by the server when opening a connection.</param>
+        public ClickHouseServerInfo(
+            string name,
+            ClickHouseVersion version,
+            int serverRevision,
+            int revision,
+            string timezone,
+            string displayName,
+            ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules,
+            int parallelReplicasProtocolVersion,
+            ReadOnlyCollection<ClickHouseServerSetting>? settings)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
@@ -86,6 +102,7 @@ namespace Octonica.ClickHouseClient
             DisplayName = displayName;
             PasswordComplexityRules = passwordComplexityRules;
             ParallelReplicasProtocolVersion = parallelReplicasProtocolVersion;
+            Settings = settings;
         }
 
         /// <summary>
@@ -103,7 +120,8 @@ namespace Octonica.ClickHouseClient
                 timezone: timezone,
                 displayName: DisplayName,
                 passwordComplexityRules: PasswordComplexityRules,
-                parallelReplicasProtocolVersion: ParallelReplicasProtocolVersion);
+                parallelReplicasProtocolVersion: ParallelReplicasProtocolVersion,
+                settings: Settings);
         }
     }
 }
