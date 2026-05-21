@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021 Octonica
+/* Copyright 2019-2021, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,5 +37,10 @@ namespace Octonica.ClickHouseClient.Protocol
         ///* Otherwise -1.
         /// </summary>
         public const int BucketNum = 2;
+
+        /// <summary>
+        /// * List of id-s of buckets delayed by `ConvertingAggregatedToChunksTransform` on the current node.
+        /// </summary>
+        public const int OutOfOrderBuckets = 3;
     }
 }

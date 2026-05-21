@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023-2024 Octonica
+/* Copyright 2019-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -298,6 +298,13 @@ namespace Octonica.ClickHouseClient
                 writer.WriteBool(false); // is overflow
                 writer.WriteByte(BlockFieldCodes.BucketNum);
                 writer.WriteInt32(-1); // data size in block. -1 for null
+
+                if (_client.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithOutOfOrderBucketsInAggregation)
+                {
+                    writer.WriteByte(BlockFieldCodes.OutOfOrderBuckets);
+                    writer.Write7BitInt32(0); // There's no out-of-order buckets
+                }
+
                 writer.WriteByte(BlockFieldCodes.End);
 
                 writer.Write7BitInt32(table.Columns.Count);
@@ -404,11 +411,21 @@ namespace Octonica.ClickHouseClient
                         case BlockFieldCodes.IsOverflows:
                             isOverflows = await reader.ReadBool(async, cancellationToken);
                             break;
+
                         case BlockFieldCodes.BucketNum:
                             bucketNum = await reader.ReadInt32(async, cancellationToken);
                             break;
+
+                        case BlockFieldCodes.OutOfOrderBuckets:
+                            var outOfOrderBucketsNum = await reader.Read7BitInt32(async, cancellationToken);
+                            if (outOfOrderBucketsNum != 0)
+                                throw new ClickHouseException(ClickHouseErrorCodes.FeatureNotImplemented, $"ClickHouseClient received {outOfOrderBucketsNum} out-of-order bucket(s) in the server reply. This feature is not supported on the client side.");
+
+                            break;
+
                         case BlockFieldCodes.End:
                             break;
+
                         default:
                             throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Internal error. Unexpected block field code (0x{blockFieldCode:X}) received from the server.");
                     }
