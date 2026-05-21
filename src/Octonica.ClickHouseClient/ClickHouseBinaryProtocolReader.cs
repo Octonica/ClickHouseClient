@@ -270,7 +270,7 @@ namespace Octonica.ClickHouseClient
                     return await ServerProfileInfoMessage.Read(this, protocolRevision, async, cancellationToken);
 
                 case ServerMessageCode.TableColumns:
-                    return await ServerTableColumnsMessage.Read(this, async, cancellationToken);
+                    return ServerTableColumnsMessage.Instance;
 
                 case ServerMessageCode.TableStatusResponse:
                 case ServerMessageCode.Log:

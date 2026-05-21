@@ -358,9 +358,30 @@ namespace Octonica.ClickHouseClient
                 return message;
             }
 
+            public async ValueTask<string> ReadTableColumns(bool async, CancellationToken cancellationToken)
+            {
+                var compression = CompressionAlgorithm.None;
+                if (ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCompressedLogsProfileEventsColumns)
+                    compression = _client._settings.Compress ? CompressionAlgorithm.Lz4 : CompressionAlgorithm.None;
+
+                var reader = _client._reader;
+                if (compression != CompressionAlgorithm.None)
+                    reader.BeginDecompress(compression);
+
+                await reader.ReadString(async, cancellationToken);
+                var result = await reader.ReadString(async, cancellationToken);
+
+                if (compression != CompressionAlgorithm.None)
+                    reader.EndDecompress();
+
+                return result;
+            }
+
             public async ValueTask<ClickHouseTable> ReadTable(ServerDataMessage dataMessage, IReadOnlyList<ClickHouseReaderColumnSettings>? columnSettings, bool async, CancellationToken cancellationToken)
             {
-                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+                var withDecompression = true;
+                if (dataMessage.MessageCode == ServerMessageCode.ProfileEvents)
+                    withDecompression = ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCompressedLogsProfileEventsColumns;
 
                 var result = await WithCancellationToken(
                     cancellationToken,
@@ -380,7 +401,10 @@ namespace Octonica.ClickHouseClient
 
             public async ValueTask<BlockHeader> SkipTable(ServerDataMessage dataMessage, bool async, CancellationToken cancellationToken)
             {
-                var withDecompression = dataMessage.MessageCode != ServerMessageCode.ProfileEvents;
+                bool withDecompression = true;
+                if (dataMessage.MessageCode == ServerMessageCode.ProfileEvents)
+                    withDecompression = ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithCompressedLogsProfileEventsColumns;
+
                 var result = await WithCancellationToken(cancellationToken, ct => ReadTable(withDecompression, (typeInfo, rowCount, mode) => typeInfo.CreateSkippingColumnReader(rowCount, mode), null, async, ct));
                 return new BlockHeader(dataMessage.TempTableName, result.columnInfos.AsReadOnly(), result.rowCount);
             }

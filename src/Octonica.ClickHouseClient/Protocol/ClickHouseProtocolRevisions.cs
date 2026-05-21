@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithOutOfOrderBucketsInAggregation;
+        public const int CurrentRevision = MinRevisionWithCompressedLogsProfileEventsColumns;
+
+        /// <summary>
+        /// The number of protocol's revision with compressed logs profile events columns
+        /// </summary>
+        public const int MinRevisionWithCompressedLogsProfileEventsColumns = 54481;
 
         /// <summary>
         /// The number of protocol's revision with out-of-order buckets in aggregation

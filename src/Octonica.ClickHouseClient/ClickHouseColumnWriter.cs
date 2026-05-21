@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,6 +101,7 @@ namespace Octonica.ClickHouseClient
                     throw ((ServerErrorMessage)msg).Exception.CopyWithQuery(queryText);
 
                 case ServerMessageCode.TableColumns:
+                    await session.ReadTableColumns(async, cancellationToken);
                     break;
 
                 default:

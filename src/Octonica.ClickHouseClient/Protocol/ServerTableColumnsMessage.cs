@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,16 @@
  */
 #endregion
 
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Octonica.ClickHouseClient.Protocol
 {
     internal sealed class ServerTableColumnsMessage : IServerMessage
     {
+        public static readonly ServerTableColumnsMessage Instance = new ServerTableColumnsMessage();
+
         public ServerMessageCode MessageCode => ServerMessageCode.TableColumns;
 
-        public string Columns { get; }
-
-        private ServerTableColumnsMessage(string columns)
+        private ServerTableColumnsMessage()
         {
-            Columns = columns;
-        }
-
-        public static async ValueTask<ServerTableColumnsMessage> Read(ClickHouseBinaryProtocolReader reader, bool async, CancellationToken cancellationToken)
-        {
-            await reader.ReadString(async, cancellationToken);
-            var columns = await reader.ReadString(async, cancellationToken);
-
-            return new ServerTableColumnsMessage(columns);
         }
     }
 }
