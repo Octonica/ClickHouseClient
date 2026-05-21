@@ -25,7 +25,12 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithCompressedLogsProfileEventsColumns;
+        public const int CurrentRevision = MinRevisionWithNullableSparseSerialization;
+
+        /// <summary>
+        /// The number of protocol's revision with nullable sparse serialization
+        /// </summary>
+        public const int MinRevisionWithNullableSparseSerialization = 54483;
 
         /// <summary>
         /// The number of protocol's revision with compressed logs profile events columns
