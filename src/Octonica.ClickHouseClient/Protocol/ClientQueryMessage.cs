@@ -114,6 +114,16 @@ namespace Octonica.ClickHouseClient.Protocol
                         writer.WriteByte(0); // number_of_current_replica
                     }
 
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithQeryAndLineNumbers)
+                    {
+                        // TODO: add these values to ClickHouseCommand
+                        writer.Write7BitInt32(0); // query number
+                        writer.Write7BitInt32(0); // line number
+                    }
+
+                    if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithJwtInInterserver)
+                        writer.WriteBool(false); // There is not interserver JWT on the client
+
                     break;
 
                 case QueryKind.SecondaryQuery:
