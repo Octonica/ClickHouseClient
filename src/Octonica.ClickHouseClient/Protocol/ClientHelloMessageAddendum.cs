@@ -29,7 +29,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public int ProtocolRevision { get; }
 
-        public int ParallelReplicasProtocolVersion { get; }
+        public ulong ParallelReplicasProtocolVersion { get; }
 
         private ClientHelloMessageAddendum(Builder builder)
         {
@@ -66,7 +66,7 @@ namespace Octonica.ClickHouseClient.Protocol
             }
 
             if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
-                writer.Write7BitInt32(ParallelReplicasProtocolVersion);
+                writer.Write7BitUInt64(ParallelReplicasProtocolVersion);
         }
 
         internal sealed class Builder
@@ -79,7 +79,7 @@ namespace Octonica.ClickHouseClient.Protocol
 
             public int ProtocolRevision { get; set; }
 
-            public int ParallelReplicasProtocolVersion { get; set; }
+            public ulong ParallelReplicasProtocolVersion { get; set; }
 
             public ClientHelloMessageAddendum Build()
             {

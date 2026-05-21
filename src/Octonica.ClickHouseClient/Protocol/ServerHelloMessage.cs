@@ -53,9 +53,9 @@ namespace Octonica.ClickHouseClient.Protocol
                     $"The revision {rv} of ClickHouse server is not supported. Minimal supported revision is {ClickHouseProtocolRevisions.MinSupportedRevision}.");
             }
 
-            int parralelReplicasProtocolVersion = -1;
+            ulong parralelReplicasProtocolVersion = 0;
             if (rv >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
-                parralelReplicasProtocolVersion = await reader.Read7BitInt32(async, cancellationToken);
+                parralelReplicasProtocolVersion = await reader.Read7BitUInt64(async, cancellationToken);
 
             var tz = await reader.ReadString(async, cancellationToken);
             var displayName = await reader.ReadString(async, cancellationToken);
@@ -115,7 +115,27 @@ namespace Octonica.ClickHouseClient.Protocol
                 }
             }
 
-            var serverInfo = new ClickHouseServerInfo(serverName, serverVersion, serverRevision: rv, revision: negotiatedRevision, tz, displayName, complexityRules?.AsReadOnly(), parralelReplicasProtocolVersion, settings?.AsReadOnly());
+            ulong queryPlanSerializationVersion = 0;
+            if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithQeuryPlanSerialization)
+                queryPlanSerializationVersion = await reader.Read7BitUInt64(async, cancellationToken);
+
+            ulong clusterProcessingProtocolVersion = 0;
+            if (negotiatedRevision >= ClickHouseProtocolRevisions.MinRevisionWithVersionedClusterFunctionProtocol)
+                clusterProcessingProtocolVersion = await reader.Read7BitUInt64(async, cancellationToken);
+
+            var serverInfo = new ClickHouseServerInfo(
+                name: serverName,
+                version: serverVersion,
+                serverRevision: rv,
+                revision: negotiatedRevision,
+                timezone: tz,
+                displayName: displayName,
+                passwordComplexityRules: complexityRules?.AsReadOnly(),
+                parallelReplicasProtocolVersion: parralelReplicasProtocolVersion,
+                settings: settings?.AsReadOnly(),
+                queryPlanSerializationVersion: queryPlanSerializationVersion,
+                clusterProcessingProtocolVersion: clusterProcessingProtocolVersion);
+
             return new ServerHelloMessage(serverInfo, sendChunked, receiveChunked);
         }
 

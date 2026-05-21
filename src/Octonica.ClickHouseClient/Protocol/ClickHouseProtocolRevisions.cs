@@ -25,7 +25,17 @@ namespace Octonica.ClickHouseClient.Protocol
         /// <summary>
         /// The number of the current revision. It is the latest revision supported by the client.
         /// </summary>
-        public const int CurrentRevision = MinRevisionWithJwtInInterserver;
+        public const int CurrentRevision = MinRevisionWithVersionedClusterFunctionProtocol;
+
+        /// <summary>
+        /// The number of protocol's revision with versioned cluster function protocol
+        /// </summary>
+        public const int MinRevisionWithVersionedClusterFunctionProtocol = 54479;
+
+        /// <summary>
+        /// The number of protocol's revision with query plan serialization
+        /// </summary>
+        public const int MinRevisionWithQeuryPlanSerialization = 54477;
 
         /// <summary>
         /// The number of protocol's revision with a JWT token in the interserver exchange

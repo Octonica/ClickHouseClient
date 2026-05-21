@@ -63,13 +63,23 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets the server parallel replicas protocol version.
         /// </summary>
-        public int ParallelReplicasProtocolVersion { get; }
+        public ulong ParallelReplicasProtocolVersion { get; }
 
         /// <summary>
         /// Gets the list of settings provided by the server when opening a connection.
         /// Returns <see langword="null"/> if the server didn't provide settings.
         /// </summary>
         public ReadOnlyCollection<ClickHouseServerSetting>? Settings { get; }
+
+        /// <summary>
+        /// Gets the server query plan serialization version.
+        /// </summary>
+        public ulong QueryPlanSerializationVersion { get; }
+
+        /// <summary>
+        /// Gets server cluster processing protocol version.
+        /// </summary>
+        public ulong ClusterProcessingProtocolVersion { get; }
 
         /// <summary>
         /// Initializes a new instance of <see cref="ClickHouseServerInfo"/> with specified arguments.
@@ -83,6 +93,8 @@ namespace Octonica.ClickHouseClient
         /// <param name="passwordComplexityRules">Password complexity rules provided by the server when opening a connection.</param>
         /// <param name="parallelReplicasProtocolVersion">The server parallel replicas protocol version.</param>
         /// <param name="settings">The list of settings provided by the server when opening a connection.</param>
+        /// <param name="queryPlanSerializationVersion">The number of query plan serialization version.</param>
+        /// <param name="clusterProcessingProtocolVersion">The number of cluster processing protocol version.</param>
         public ClickHouseServerInfo(
             string name,
             ClickHouseVersion version,
@@ -91,8 +103,10 @@ namespace Octonica.ClickHouseClient
             string timezone,
             string displayName,
             ReadOnlyCollection<ClickHousePasswordComplexityRule>? passwordComplexityRules,
-            int parallelReplicasProtocolVersion,
-            ReadOnlyCollection<ClickHouseServerSetting>? settings)
+            ulong parallelReplicasProtocolVersion,
+            ReadOnlyCollection<ClickHouseServerSetting>? settings,
+            ulong queryPlanSerializationVersion,
+            ulong clusterProcessingProtocolVersion)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Version = version;
@@ -103,6 +117,8 @@ namespace Octonica.ClickHouseClient
             PasswordComplexityRules = passwordComplexityRules;
             ParallelReplicasProtocolVersion = parallelReplicasProtocolVersion;
             Settings = settings;
+            QueryPlanSerializationVersion = queryPlanSerializationVersion;
+            ClusterProcessingProtocolVersion = clusterProcessingProtocolVersion;
         }
 
         /// <summary>
@@ -121,7 +137,9 @@ namespace Octonica.ClickHouseClient
                 displayName: DisplayName,
                 passwordComplexityRules: PasswordComplexityRules,
                 parallelReplicasProtocolVersion: ParallelReplicasProtocolVersion,
-                settings: Settings);
+                settings: Settings,
+                queryPlanSerializationVersion: QueryPlanSerializationVersion,
+                clusterProcessingProtocolVersion: ClusterProcessingProtocolVersion);
         }
     }
 }

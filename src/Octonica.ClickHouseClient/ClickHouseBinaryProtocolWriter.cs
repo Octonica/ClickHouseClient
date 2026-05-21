@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023-2024 Octonica
+/* Copyright 2019-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -248,6 +248,11 @@ namespace Octonica.ClickHouseClient
         {
             var ulongValue = (ulong) unchecked((uint) value);
             Write7BitInteger(ulongValue);
+        }
+
+        public void Write7BitUInt64(ulong value)
+        {
+            Write7BitInteger(value);
         }
 
         private void Write7BitInteger(ulong value)
