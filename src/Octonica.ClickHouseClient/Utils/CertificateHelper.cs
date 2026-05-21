@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2021 Octonica
+/* Copyright 2021, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Octonica.ClickHouseClient.Utils
 {
-    internal static partial class CertificateHelper
+    internal static class CertificateHelper
     {
         public static X509Certificate2Collection LoadFromFile(string filePath)
         {
@@ -29,16 +29,19 @@ namespace Octonica.ClickHouseClient.Utils
             {
                 case ".pem":
                 case ".crt":
-                    ImportPemCertificates(filePath, collection);
+                    collection.ImportFromPemFile(filePath);
                     break;
                 default:
+#if NET10_0_OR_GREATER
+                    var cert = X509CertificateLoader.LoadCertificateFromFile(filePath);
+                    collection.Add(cert);
+#else
                     collection.Import(filePath);
+#endif
                     break;
             }
 
             return collection;
         }
-
-        static partial void ImportPemCertificates(string filePath, X509Certificate2Collection collection);
     }
 }
