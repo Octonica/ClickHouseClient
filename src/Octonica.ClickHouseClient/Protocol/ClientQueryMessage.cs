@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023, 2025 Octonica
+/* Copyright 2019-2021, 2023, 2025-2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -138,6 +138,9 @@ namespace Octonica.ClickHouseClient.Protocol
             }
 
             writer.WriteString(string.Empty); // empty string is a marker of the end of the settings
+
+            if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverExternallyGrantedRoles)
+                writer.WriteString(string.Empty);
 
             if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithInterserverSecret)
                 writer.WriteString(string.Empty);
