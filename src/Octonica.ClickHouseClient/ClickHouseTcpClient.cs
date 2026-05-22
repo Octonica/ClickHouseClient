@@ -491,6 +491,8 @@ namespace Octonica.ClickHouseClient
 
                             if (sequenceSize.Elements != 0)
                                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. Received an unexpected number of column prefixes: {sequenceSize.Elements}.");
+                            if (sequenceSize.Bytes == 0)
+                                throw new ClickHouseException(ClickHouseErrorCodes.InternalError, $"Internal error. A prefix reader for the column '{columnName}' of type '{columnTypeName}' consumed zero bytes from a non-empty sequence but didn't signal about completion.");
                         }
                     }
 
