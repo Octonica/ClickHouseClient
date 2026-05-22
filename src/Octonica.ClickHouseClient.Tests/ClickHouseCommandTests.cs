@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2024 Octonica
+/* Copyright 2019-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -648,6 +648,67 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(queryId, cmd.QueryId);
 
             Assert.False(await reader.ReadAsync());
+        }
+
+        [Fact]
+        public async Task MissingParameterSubstitution()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var connection = await OpenConnectionAsync(cancellationToken: ct);
+
+            // Full parameter format. It must be passed to the server as is
+            var cmd = connection.CreateCommand("SELECT {noParam:String}");
+            var serverEx = await Assert.ThrowsAnyAsync<ClickHouseServerException>(cmd.ExecuteScalarAsync);
+            Assert.Equal(456, serverEx.ServerErrorCode);
+
+            // Driver-specific parameter format. Trying to replace
+            cmd = connection.CreateCommand("SELECT @noParam");
+            var clientEx = await Assert.ThrowsAnyAsync<ClickHouseHandledException>(cmd.ExecuteScalarAsync);
+            Assert.Equal(ClickHouseErrorCodes.QueryParameterNotFound, clientEx.ErrorCode);
+
+            // Name-only parameter format. Incomplete without a type name. Trying to replace
+            cmd = connection.CreateCommand("SELECT {noParam}");
+            clientEx = await Assert.ThrowsAnyAsync<ClickHouseHandledException>(cmd.ExecuteScalarAsync);
+            Assert.Equal(ClickHouseErrorCodes.QueryParameterNotFound, clientEx.ErrorCode);
+        }
+
+        [Fact]
+        public async Task CreateParametrizedView()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            try
+            {
+                await using var connection = await OpenConnectionAsync(cancellationToken: ct);
+
+                var cmd = connection.CreateCommand("DROP VIEW IF EXISTS parametrized_view");
+                await cmd.ExecuteNonQueryAsync(ct);
+
+                cmd = connection.CreateCommand("CREATE VIEW parametrized_view AS SELECT number FROM system.numbers WHERE number >= {min:UInt32} AND number < {max:UInt64}");
+                await cmd.ExecuteNonQueryAsync(ct);
+
+                cmd = connection.CreateCommand("SELECT * FROM parametrized_view(min=@min, max=@max) ORDER BY number");
+                cmd.ParametersMode = ClickHouseParameterMode.Serialize;
+                cmd.Parameters.AddWithValue("min", 42);
+                cmd.Parameters.AddWithValue("max", 44);
+
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                int count = 0;
+                while(await reader.ReadAsync(ct))
+                {
+                    var num = reader.GetUInt64(0);
+                    Assert.Equal(count == 0 ? 42ul : 43, num);
+                    ++count;
+                }
+
+                Assert.Equal(2, count);
+            }
+            finally
+            {
+                await using var connection = await OpenConnectionAsync(cancellationToken: ct);
+                var cmd = connection.CreateCommand("DROP VIEW IF EXISTS parametrized_view");
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
         }
     }
 }

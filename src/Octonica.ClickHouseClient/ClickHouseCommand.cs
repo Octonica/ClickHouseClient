@@ -916,7 +916,17 @@ namespace Octonica.ClickHouseClient
 
                 var parameterName = typeSeparatorIdx < 0 ? query.Substring(offset, length) : query.Substring(offset + 1, typeSeparatorIdx - 1);
                 if (!Parameters.TryGetValue(parameterName, out var parameter))
+                {
+                    if (typeSeparatorIdx >= 0 && query[offset] == '{' && query[offset + length - 1] == '}')
+                    {
+                        // This is a valid parameter name. If there is no parameter with a matching name in the collection of parameters,
+                        // the parameter is still can be accepted by the server, for example when it is used in CREATE VIEW ... FROM SELECT
+                        queryStringBuilder.Append(query, offset, length);
+                        continue;
+                    }
+
                     throw new ClickHouseException(ClickHouseErrorCodes.QueryParameterNotFound, $"Parameter \"{parameterName}\" not found.");
+                }
 
                 if (typeSeparatorIdx >= 0)
                     queryStringBuilder.Append("(CAST(");
