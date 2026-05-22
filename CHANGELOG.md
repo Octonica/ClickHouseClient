@@ -1,14 +1,18 @@
-### Octonica.ClickHouseClient Next Version, Unscheduled
+### Octonica.ClickHouseClient v4.1.3, 2026-05-12
+
+#### Backward Incompatible Change
+
+* End of support for .NET Core 3.1.
 
 #### New Feature
 
-* Add method `ClickHouseDataReader.ConfigureColumnReader` which sets a value cast callback function for the column.
- The callback function is invoked whenever the reader reads a non-null value from the column. This feature could be useful in
- cases when ClcikHouseClient doesn't have a built-in type conversion rule, for expample, `double -> decimal`, `Guid -> string` or `uint -> int`.
+* Added support for .NET 10.
 
-#### Improvement
+#### Bug Fix
 
-* Add method `ClickHouseParameterCollection.AddRange` receiveng any enumerable collection of `ClickHouseParameter`.
+* Fixed overly eager parameter-name validation that prevented sending queries containing unresolved parameters (for example, creating a parameterized view).
+ The problem occurred when using a statement like:
+ `CREATE VIEW view AS SELECT * FROM TABLE WHERE Column1={column1:datatype1} and Column2={column2:datatype2} ...`
 
 ### Octonica.ClickHouseClient v2.2.11, 2023-01-11
 
