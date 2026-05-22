@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023-2024 Octonica
+/* Copyright 2019-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -398,7 +398,7 @@ namespace Octonica.ClickHouseClient.Types
                 var prefixReader = elementReaders[prefixPosition];
                 while (prefixPosition < elementReaders.Count - 1)
                 {
-                    var prefixSize = prefixReader.ReadPrefix(sequence);
+                    var prefixSize = prefixReader.ReadPrefix(sequence.Slice(totalBytes));
                     totalBytes += prefixSize.Bytes;
 
                     if (prefixSize.Elements == 0)
@@ -410,7 +410,7 @@ namespace Octonica.ClickHouseClient.Types
                     prefixReader = elementReaders[++prefixPosition];
                 }
 
-                var lastPrefixSize = prefixReader.ReadPrefix(sequence);
+                var lastPrefixSize = prefixReader.ReadPrefix(sequence.Slice(totalBytes));
                 return lastPrefixSize.AddBytes(totalBytes);
             }
         }

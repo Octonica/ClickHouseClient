@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2023-2024 Octonica
+/* Copyright 2020-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -217,6 +217,9 @@ namespace Octonica.ClickHouseClient.Types
             private readonly IClickHouseColumnTypeInfo _baseType;
             private readonly bool _isNullable;
 
+            private ulong _version;
+            private int _versionReaderOffset;
+
             private IClickHouseColumnReader? _baseColumnReader;
             private int _baseRowCount;
 
@@ -233,7 +236,7 @@ namespace Octonica.ClickHouseClient.Types
 
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
-                return ReadPrefix(sequence);
+                return ReadPrefix(ref _version, ref _versionReaderOffset, sequence);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
@@ -318,13 +321,21 @@ namespace Octonica.ClickHouseClient.Types
                 return result;
             }
 
-            public static SequenceSize ReadPrefix(ReadOnlySequence<byte> sequence)
+            public static SequenceSize ReadPrefix(ref ulong version, ref int offset, ReadOnlySequence<byte> sequence)
             {
-                if (sequence.Length < sizeof(ulong))
-                    return SequenceSize.Empty;
+                var versionSpan = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref version, 1));
+                var size = versionSpan.Length - offset;
+                Debug.Assert(size >= 0);
 
-                ulong version = 0;
-                sequence.Slice(0, sizeof(ulong)).CopyTo(MemoryMarshal.Cast<ulong, byte>(MemoryMarshal.CreateSpan(ref version, 1)));
+                if (size == 0)
+                    return new SequenceSize(0, 1);
+
+                var len = (int)Math.Min(size, sequence.Length);
+                sequence.Slice(0, len).CopyTo(versionSpan.Slice(offset, len));
+
+                offset += len;
+                if (offset < versionSpan.Length)
+                    return new SequenceSize(len, 0);
 
                 // https://github.com/ClickHouse/ClickHouse/blob/master/src/DataTypes/DataTypeLowCardinality.cpp
                 // Dictionary is written as number N and N keys after them.
@@ -336,7 +347,7 @@ namespace Octonica.ClickHouseClient.Types
                 if (version != 1)
                     throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, $"Unexpected dictionary version received: {version}.");
 
-                return new SequenceSize(sizeof(ulong), 1);
+                return new SequenceSize(len, 1);
             }
 
             public static (int keySize, int keyCount, int bytesRead)? TryReadHeader(ReadOnlySequence<byte> sequence)
@@ -388,6 +399,9 @@ namespace Octonica.ClickHouseClient.Types
             private readonly int _rowCount;
             private readonly IClickHouseColumnTypeInfo _baseType;
 
+            private ulong _version;
+            private int _versionReaderOffset;
+
             private IClickHouseColumnReaderBase? _baseReader;
             private int _baseRowCount;
             private int _keySize;
@@ -404,7 +418,7 @@ namespace Octonica.ClickHouseClient.Types
 
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
             {
-                return LowCardinalityColumnReader.ReadPrefix(sequence);
+                return LowCardinalityColumnReader.ReadPrefix(ref _version, ref _versionReaderOffset, sequence);
             }
 
             public SequenceSize ReadNext(ReadOnlySequence<byte> sequence)
