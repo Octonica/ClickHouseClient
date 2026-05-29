@@ -1,14 +1,14 @@
-### Octonica.ClickHouseClient Next Version, Unscheduled
+### Octonica.ClickHouseClient v4.1.4, 2026-05-29
 
-#### New Feature
+#### Bug Fix
 
-* Add method `ClickHouseDataReader.ConfigureColumnReader` which sets a value cast callback function for the column.
- The callback function is invoked whenever the reader reads a non-null value from the column. This feature could be useful in
- cases when ClcikHouseClient doesn't have a built-in type conversion rule, for expample, `double -> decimal`, `Guid -> string` or `uint -> int`.
+* Fixed reading of prefixes for columns of types `LowCardinality` and `Tuple`.
+ This error occurred only when connecting to a server with no compression (`Compress=false` in the connection string).
+* Fixed error: "Expected one of serialization modes: sparse or default. Received value: 4."
 
 #### Improvement
 
-* Add method `ClickHouseParameterCollection.AddRange` receiveng any enumerable collection of `ClickHouseParameter`.
+* Implemented reading of columns with the custom serialization mode `Replicated`.
 
 ### Octonica.ClickHouseClient v2.2.11, 2023-01-11
 
