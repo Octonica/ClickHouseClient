@@ -465,6 +465,8 @@ namespace Octonica.ClickHouseClient.Tests
                 var expectedIp = addr[expectedId].ip == null ? null : IPAddress.Parse(addr[expectedId].ip).MapToIPv6();
                 Assert.Equal(expectedIp, ip);
 
+                Assert.Equal(expectedIp == null, reader.IsDBNull(3));
+
                 if (++expectedId % 7 == 0)
                     ++expectedId;
             }
