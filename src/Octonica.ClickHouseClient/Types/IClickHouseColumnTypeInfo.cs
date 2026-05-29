@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2023-2024 Octonica
+/* Copyright 2020-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,8 +54,12 @@ namespace Octonica.ClickHouseClient.Types
                     return CreateColumnReader(rowCount);
 
                 case ClickHouseColumnSerializationMode.Sparse:
+                case ClickHouseColumnSerializationMode.Replicated:
+                case ClickHouseColumnSerializationMode.Detached:
+                case ClickHouseColumnSerializationMode.DetachedOverSparse:
+                case ClickHouseColumnSerializationMode.Combination:
                 case ClickHouseColumnSerializationMode.Custom:
-                    return new CustomSerializationColumnReader(this, rowCount, serializationMode);
+                    return new CustomSerializationColumnReader(this, rowCount, serializationMode, false);
 
                 default:
                     throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));
@@ -87,8 +91,12 @@ namespace Octonica.ClickHouseClient.Types
                     return CreateSkippingColumnReader(rowCount);
 
                 case ClickHouseColumnSerializationMode.Sparse:
+                case ClickHouseColumnSerializationMode.Replicated:
+                case ClickHouseColumnSerializationMode.Detached:
+                case ClickHouseColumnSerializationMode.DetachedOverSparse:
+                case ClickHouseColumnSerializationMode.Combination:
                 case ClickHouseColumnSerializationMode.Custom:
-                    return new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode);
+                    return new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode, false);
 
                 default:
                     throw new ArgumentException($"Unknown serialization mode: {serializationMode}.", nameof(serializationMode));

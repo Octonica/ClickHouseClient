@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023-2024 Octonica
+/* Copyright 2019-2021, 2023-2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,10 +62,13 @@ namespace Octonica.ClickHouseClient.Types
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode switch
+            {
+                ClickHouseColumnSerializationMode.Default => CreateColumnReader(rowCount),
+                ClickHouseColumnSerializationMode.Custom => new CustomSerializationColumnReader(this, rowCount, serializationMode, true),
+                ClickHouseColumnSerializationMode.Replicated => new ReplicatedSerializationColumnReader(this, rowCount, LowCardinalityTableColumnNullableMode.BaseColumn),
+                _ => throw new NotSupportedException($"Custom serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient."),
+            };
         }
 
         public IClickHouseColumnReaderBase CreateSkippingColumnReader(int rowCount)
@@ -78,10 +81,13 @@ namespace Octonica.ClickHouseClient.Types
 
         IClickHouseColumnReaderBase IClickHouseColumnTypeInfo.CreateSkippingColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
         {
-            if (serializationMode == ClickHouseColumnSerializationMode.Default)
-                return CreateSkippingColumnReader(rowCount);
-
-            throw new NotSupportedException($"Custom serialization for {TypeName} type is not supported by ClickHouseClient.");
+            return serializationMode switch
+            {
+                ClickHouseColumnSerializationMode.Default => CreateSkippingColumnReader(rowCount),
+                ClickHouseColumnSerializationMode.Custom => new CustomSerializationSkippingColumnReader(this, rowCount, serializationMode, true),
+                ClickHouseColumnSerializationMode.Replicated => new ReplicatedSerializationSkippingColumnReader(this, rowCount),
+                _ => throw new NotSupportedException($"Custom serialization mode {serializationMode} for {TypeName} type is not supported by ClickHouseClient."),
+            };
         }
 
         public IClickHouseColumnWriter CreateColumnWriter<T>(string columnName, IReadOnlyList<T> rows, ClickHouseColumnSettings? columnSettings)

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2020-2021, 2024 Octonica
+/* Copyright 2020-2021, 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Octonica.ClickHouseClient.Exceptions;
@@ -27,32 +28,36 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseTableColumn _values;
-        private readonly bool _isNullable;
+        private readonly LowCardinalityTableColumnNullableMode _nullableMode;
 
         public int RowCount { get; }
 
-        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values, bool isNullable)
+        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn values, LowCardinalityTableColumnNullableMode nullableMode)
         {
             _keys = keys;
             _keySize = keySize;
             _values = values;
-            _isNullable = isNullable;
+            _nullableMode = nullableMode;
             RowCount = _keys.Length / _keySize;
         }
 
         public bool IsNull(int index)
         {
-            if (!_isNullable)
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.NotNull)
                 return false;
 
             var valueIndex = GetValueIndex(index);
-            return valueIndex == 0;
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
+                return valueIndex == 0;
+
+            Debug.Assert(_nullableMode == LowCardinalityTableColumnNullableMode.BaseColumn);
+            return _values.IsNull(valueIndex);
         }
 
         public object GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
+            if (valueIndex == 0 && _nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
                 return DBNull.Value;
 
             return _values.GetValue(valueIndex);
@@ -64,7 +69,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
+            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _nullableMode);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
@@ -73,7 +78,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
+            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _nullableMode);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, [MaybeNullWhen(false)] out T dispatchedValue)
@@ -100,34 +105,38 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseTableColumn<TValue> _values;
-        private readonly bool _isNullable;
+        private readonly LowCardinalityTableColumnNullableMode _nullableMode;
 
         public int RowCount { get; }
 
         public TValue DefaultValue => _values.DefaultValue;
 
-        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn<TValue> values, bool isNullable)
+        public LowCardinalityTableColumn(ReadOnlyMemory<byte> keys, int keySize, IClickHouseTableColumn<TValue> values, LowCardinalityTableColumnNullableMode nullbaleMode)
         {
             _keys = keys;
             _keySize = keySize;
             _values = values;
-            _isNullable = isNullable;
+            _nullableMode = nullbaleMode;
             RowCount = _keys.Length / _keySize;
         }
 
         public bool IsNull(int index)
         {
-            if (!_isNullable)
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.NotNull)
                 return false;
 
             var valueIndex = GetValueIndex(index);
-            return valueIndex == 0;
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
+                return valueIndex == 0;
+
+            Debug.Assert(_nullableMode == LowCardinalityTableColumnNullableMode.BaseColumn);
+            return _values.IsNull(valueIndex);
         }
 
         public TValue GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
+            if (valueIndex == 0 && _nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
             {
                 var defaultValue = default(TValue);
                 if (!(defaultValue is null))
@@ -142,7 +151,7 @@ namespace Octonica.ClickHouseClient.Types
         object IClickHouseTableColumn.GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
+            if (valueIndex == 0 && _nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
                 return DBNull.Value;
 
             return ((IClickHouseTableColumn) _values).GetValue(valueIndex);
@@ -154,7 +163,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _isNullable);
+            return new LowCardinalityTableColumn<T>(_keys, _keySize, reinterpretedValues, _nullableMode);
         }
 
         IClickHouseArrayTableColumn<T>? IClickHouseTableColumn.TryReinterpretAsArray<T>()
@@ -163,7 +172,7 @@ namespace Octonica.ClickHouseClient.Types
             if (reinterpretedValues == null)
                 return null;
 
-            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _isNullable);
+            return new LowCardinalityArrayTableColumn<T>(this, _keys, _keySize, reinterpretedValues, _nullableMode);
         }
 
         bool IClickHouseTableColumn.TryDipatch<T>(IClickHouseTableColumnDispatcher<T> dispatcher, out T dispatchedValue)
@@ -191,24 +200,24 @@ namespace Octonica.ClickHouseClient.Types
         private readonly ReadOnlyMemory<byte> _keys;
         private readonly int _keySize;
         private readonly IClickHouseArrayTableColumn<TElement> _values;
-        private readonly bool _isNullable;
+        private readonly LowCardinalityTableColumnNullableMode _nullableMode;
 
         public int RowCount { get; }
 
-        public LowCardinalityArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, ReadOnlyMemory<byte> keys, int keySize, IClickHouseArrayTableColumn<TElement> values, bool isNullable)
+        public LowCardinalityArrayTableColumn(IClickHouseTableColumn reinterpretationRoot, ReadOnlyMemory<byte> keys, int keySize, IClickHouseArrayTableColumn<TElement> values, LowCardinalityTableColumnNullableMode nullableMode)
         {
             _reinterpretationRoot = reinterpretationRoot;
             _keys = keys;
             _keySize = keySize;
             _values = values;
-            _isNullable = isNullable;
+            _nullableMode = nullableMode;
             RowCount = _keys.Length / _keySize;
         }
 
         public int CopyTo(int index, Span<TElement> buffer, int dataOffset)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
+            if (valueIndex == 0 && _nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
                 throw new ClickHouseException(ClickHouseErrorCodes.DataReaderError, "Can't copy NULL value to the buffer.");
 
             return _values.CopyTo(valueIndex, buffer, dataOffset);
@@ -217,7 +226,7 @@ namespace Octonica.ClickHouseClient.Types
         public object GetValue(int index)
         {
             var valueIndex = GetValueIndex(index);
-            if (valueIndex == 0 && _isNullable)
+            if (valueIndex == 0 && _nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
                 return DBNull.Value;
 
             return _values.GetValue(valueIndex);
@@ -225,11 +234,15 @@ namespace Octonica.ClickHouseClient.Types
 
         public bool IsNull(int index)
         {
-            if (!_isNullable)
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.NotNull)
                 return false;
 
             var valueIndex = GetValueIndex(index);
-            return valueIndex == 0;
+            if (_nullableMode == LowCardinalityTableColumnNullableMode.ZeroIndex)
+                return valueIndex == 0;
+
+            Debug.Assert(_nullableMode == LowCardinalityTableColumnNullableMode.BaseColumn);
+            return _values.IsNull(valueIndex);
         }
 
         public IClickHouseTableColumn<T>? TryReinterpret<T>()
@@ -259,5 +272,23 @@ namespace Octonica.ClickHouseClient.Types
 
             return valueIndex;
         }
+    }
+
+    internal enum LowCardinalityTableColumnNullableMode
+    {
+        /// <summary>
+        /// A value can never be null
+        /// </summary>
+        NotNull = 0,
+
+        /// <summary>
+        /// A value is nul when its index is zero
+        /// </summary>
+        ZeroIndex = 1,
+
+        /// <summary>
+        /// A nullability of a value is defined by an underlying column
+        /// </summary>
+        BaseColumn = 2
     }
 }

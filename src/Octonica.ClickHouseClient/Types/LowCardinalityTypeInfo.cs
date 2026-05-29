@@ -51,7 +51,7 @@ namespace Octonica.ClickHouseClient.Types
         public IClickHouseColumnReader CreateColumnReader(int rowCount)
         {
             var typeInfo = GetBaseTypeInfo();
-            return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable);
+            return new LowCardinalityColumnReader(rowCount, typeInfo.baseType, typeInfo.isNullable ? LowCardinalityTableColumnNullableMode.ZeroIndex : LowCardinalityTableColumnNullableMode.NotNull);
         }
 
         IClickHouseColumnReader IClickHouseColumnTypeInfo.CreateColumnReader(int rowCount, ClickHouseColumnSerializationMode serializationMode)
@@ -215,7 +215,7 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly int _rowCount;
             private readonly IClickHouseColumnTypeInfo _baseType;
-            private readonly bool _isNullable;
+            private readonly LowCardinalityTableColumnNullableMode _nullableMode;
 
             private ulong _version;
             private int _versionReaderOffset;
@@ -227,11 +227,11 @@ namespace Octonica.ClickHouseClient.Types
             private byte[]? _buffer;
             private int _position;
 
-            public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType, bool isNullable)
+            public LowCardinalityColumnReader(int rowCount, IClickHouseColumnTypeInfo baseType, LowCardinalityTableColumnNullableMode nullableMode)
             {
                 _rowCount = rowCount;
                 _baseType = baseType;
-                _isNullable = isNullable;
+                _nullableMode = nullableMode;
             }
 
             SequenceSize IClickHouseColumnReaderBase.ReadPrefix(ReadOnlySequence<byte> sequence)
@@ -315,8 +315,8 @@ namespace Octonica.ClickHouseClient.Types
                 }
 
                 var valuesColumn = (_baseColumnReader ?? _baseType.CreateColumnReader(0)).EndRead(settings);
-                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize, _isNullable), out var result))
-                    result = new LowCardinalityTableColumn(keys, keySize, valuesColumn, _isNullable);
+                if (!valuesColumn.TryDipatch(new LowCardinalityTableColumnDispatcher(keys, keySize, _nullableMode), out var result))
+                    result = new LowCardinalityTableColumn(keys, keySize, valuesColumn, _nullableMode);
 
                 return result;
             }
@@ -606,18 +606,18 @@ namespace Octonica.ClickHouseClient.Types
         {
             private readonly ReadOnlyMemory<byte> _keys;
             private readonly int _keySize;
-            private readonly bool _isNullable;
+            private readonly LowCardinalityTableColumnNullableMode _nullableMode;
 
-            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize, bool isNullable)
+            public LowCardinalityTableColumnDispatcher(ReadOnlyMemory<byte> keys, int keySize, LowCardinalityTableColumnNullableMode nullableMode)
             {
                 _keys = keys;
                 _keySize = keySize;
-                _isNullable = isNullable;
+                _nullableMode = nullableMode;
             }
 
             public IClickHouseTableColumn Dispatch<T>(IClickHouseTableColumn<T> column)
             {
-                return new LowCardinalityTableColumn<T>(_keys, _keySize, column, _isNullable);
+                return new LowCardinalityTableColumn<T>(_keys, _keySize, column, _nullableMode);
             }
         }
 

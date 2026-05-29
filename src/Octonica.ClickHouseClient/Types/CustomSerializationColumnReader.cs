@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2024 Octonica
+/* Copyright 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ namespace Octonica.ClickHouseClient.Types
     {
         private readonly int _rowCount;
         private readonly IClickHouseColumnTypeInfo _typeInfo;
+        private readonly bool _customBaseReaderDispatch;
 
         private ClickHouseColumnSerializationMode _mode;
         private bool _trailingDefaults;
@@ -36,10 +37,11 @@ namespace Octonica.ClickHouseClient.Types
         private int _expectedBaseRowCount = -1;
         private IClickHouseColumnReader? _baseReader;
 
-        public CustomSerializationColumnReader(IClickHouseColumnTypeInfo typeInfo, int rowCount, ClickHouseColumnSerializationMode mode)
+        public CustomSerializationColumnReader(IClickHouseColumnTypeInfo typeInfo, int rowCount, ClickHouseColumnSerializationMode mode, bool customBaseReaderDispatch)
         {
             _typeInfo = typeInfo;
             _mode = mode;
+            _customBaseReaderDispatch = customBaseReaderDispatch;
             _rowCount = rowCount;
         }
 
@@ -49,7 +51,7 @@ namespace Octonica.ClickHouseClient.Types
                 return _typeInfo.CreateColumnReader(0).EndRead(settings);
 
             var columnInfo = _baseReader.EndRead(settings);
-            if (_mode == ClickHouseColumnSerializationMode.Sparse)
+            if (!_customBaseReaderDispatch && _mode == ClickHouseColumnSerializationMode.Sparse)
             {
                 if (columnInfo.TryDipatch(this, out var dispatchedColumn))
                     return dispatchedColumn;
@@ -76,21 +78,41 @@ namespace Octonica.ClickHouseClient.Types
 
                     // The prefix consists of a single byte encoding the serialization mode
                     var mode = (ClickHouseColumnSerializationMode)sequence.FirstSpan[0];
-                    if (mode == ClickHouseColumnSerializationMode.Sparse || mode == ClickHouseColumnSerializationMode.Default)
-                    {
-                        _mode = mode;
-                        var result = ReadNext(sequence.Slice(1));
-                        return result.AddBytes(1);
-                    }
+                    if (mode == ClickHouseColumnSerializationMode.Custom)
+                        throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Expected one of custom serialization modes. Received value: {mode}.");
 
-                    throw new ClickHouseException(ClickHouseErrorCodes.ProtocolUnexpectedResponse, $"Expected one of serialization modes: sparse or default. Received value: {mode}.");
+                    _mode = mode;
+                    var result = ReadNext(sequence.Slice(1));
+                    return result.AddBytes(1);
 
                 case ClickHouseColumnSerializationMode.Default:
                     _baseReader ??= _typeInfo.CreateColumnReader(_rowCount);
                     return _baseReader.ReadNext(sequence);
 
                 case ClickHouseColumnSerializationMode.Sparse:
+                    if (_customBaseReaderDispatch)
+                    {
+                        _baseReader ??= _typeInfo.CreateColumnReader(_rowCount, _mode);
+                        return _baseReader.ReadNext(sequence);
+                    }
+
                     return ReadSparse(sequence);
+
+                case ClickHouseColumnSerializationMode.Replicated:
+                    if (_baseReader == null)
+                    {
+                        if (_customBaseReaderDispatch)
+                            _baseReader = _typeInfo.CreateColumnReader(_rowCount, _mode);
+                        else
+                            _baseReader = new ReplicatedSerializationColumnReader(_typeInfo, _rowCount, LowCardinalityTableColumnNullableMode.NotNull);
+                    }
+
+                    return _baseReader.ReadNext(sequence);
+
+                case ClickHouseColumnSerializationMode.Detached:
+                case ClickHouseColumnSerializationMode.DetachedOverSparse:
+                case ClickHouseColumnSerializationMode.Combination:
+                    throw new ClickHouseException(ClickHouseErrorCodes.FeatureNotImplemented, $"Custom serialization mode {_mode} is not supported.");
 
                 default:
                     throw new InvalidOperationException($"Internal error. Unexpected column serialization mode: {_mode}.");

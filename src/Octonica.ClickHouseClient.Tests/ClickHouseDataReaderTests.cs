@@ -797,5 +797,54 @@ FROM
                 }
             }
         }
+
+        [Fact]
+        public async Task ReadFromSystemTables()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            // Query returns columns serialized in 'Replicated' custom  mode
+            const string query =
+                """
+                SELECT T.database, T.name, T.comment
+                FROM system.databases AS D
+                JOIN system.tables AS T ON T.database = D.name
+                WHERE T.engine<>'Dictionary'
+                """;
+
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+            var cmd = cn.CreateCommand(query);
+
+            await using (var reader = await cmd.ExecuteReaderAsync(ct))
+            {
+                bool systemNumbersFound = false;
+                int tableCount = 0;
+                while (await reader.ReadAsync(ct))
+                {
+                    var db = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    var comment = reader.GetString(2);
+
+                    if (db == "system" && table == "numbers")
+                        systemNumbersFound = true;
+
+                    ++tableCount;
+                }
+
+                // There are some system tables
+                Assert.True(tableCount > 10);
+                // including system.numbers
+                Assert.True(systemNumbersFound);
+            }
+
+            var pinged = await cn.TryPingAsync(ct);
+            Assert.True(pinged);
+
+            // Skipping the same table
+            await cmd.ExecuteNonQueryAsync(ct);
+
+            pinged = await cn.TryPingAsync(ct);
+            Assert.True(pinged);
+        }
     }
 }

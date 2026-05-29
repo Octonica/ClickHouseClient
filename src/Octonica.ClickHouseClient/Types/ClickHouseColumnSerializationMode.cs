@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2024 Octonica
+/* Copyright 2024, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,35 @@ namespace Octonica.ClickHouseClient.Types
         /// Sparse serialization. In this mode the reader should expect the list of 'granules' followed by column values.
         /// </summary>
         Sparse = 1,
+
+        /// <summary>
+        /// stack: {Default, Detached}
+        /// </summary>
+        /// <remarks>
+        /// Not supported
+        /// </remarks>
+        Detached = 2,
+
+        /// <summary>
+        /// stack: {Default, Sparse, Detached}
+        /// </summary>
+        /// <remarks>
+        /// Not supported
+        /// </remarks>
+        DetachedOverSparse = 3,
+
+        /// <summary>
+        /// stack: {Default, Replicated}
+        /// </summary>
+        Replicated = 4,
+
+        /// <summary>
+        /// Serialized as number of kinds and all kinds one after another.
+        /// </summary>
+        /// <remarks>
+        /// Not supported
+        /// </remarks>
+        Combination = 5,
 
         /// <summary>
         /// Custom serialization. In this mode the reader should expect serialization settings followed by actual column values.
