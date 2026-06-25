@@ -1,3 +1,14 @@
+### Octonica.ClickHouseClient v3.1.1, 2024-16-1
+
+#### Backward Incompatible Change
+
+* End support of .NET 5. .NET 5 reached end of support on May 8, 2022.
+
+#### Improvement
+
+* Remove parentheses around parameters in Interpolate mode. It makes possible passing a table comment as a parameter.
+* Fix over-allocaction for `(ReadOnly)Memory<T>` ([#83](https://github.com/Octonica/ClickHouseClient/pull/83)).
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
