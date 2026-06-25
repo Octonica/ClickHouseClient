@@ -1,3 +1,34 @@
+### Octonica.ClickHouseClient v2.3.2, 2023-12-29
+
+#### New Feature
+
+* Add .NET 8 support.
+* Add new parameter mode `Serialize`. In this mode parameters are passed as key-value pairs where values are literals. Parameters are not inlined to the query.
+* Add method `ClickHouseDataReader.ConfigureColumnReader` which sets a value cast callback function for the column.
+ The callback function is invoked whenever the reader reads a non-null value from the column. This feature could be useful in
+ cases when ClickHouseClient doesn't have a built-in type conversion rule, for example, `double -> decimal`, `Guid -> string` or `uint -> int`.
+* Add basic support for transactions ([#77](https://github.com/Octonica/ClickHouseClient/issues/77)).
+* Add `QuotaKey` to connection settings.
+* Add support for native parameters of nested types: `Nullable(T)`, `Array(T)`.
+* Password complexity rules are now part of the server info which can be obtained with the property `ServerInfo` of the connection (protocol revision 54461).
+
+#### Bug Fix
+
+* Fix inserting values to nullable enum columns ([#64](https://github.com/Octonica/ClickHouseClient/issues/64)).
+* Fix escape sequences for native string parameters.
+* Fix `Date32` and `Date` parameters for .NET 5 and .NET Core App 3.1.
+
+#### Improvement
+
+* Add method `ClickHouseParameterCollection.AddRange` receiving any enumerable collection of `ClickHouseParameter`.
+* Allow writing byte values to Bool column ([#69](https://github.com/Octonica/ClickHouseClient/issues/69)). Writing 0 as false and any other value as true.
+* Better exception handling for missing response. It helps to detect an attempt of establishing HTTP connection.
+* Performance improvement: using stackalloc for writing decimal values (.NET 5+) ([#82](https://github.com/Octonica/ClickHouseClient/pull/82)).
+
+#### Miscellaneous
+
+* Update supported protocol revision to 54466.
+
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
 #### Bug Fix
