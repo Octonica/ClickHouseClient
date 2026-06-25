@@ -10,6 +10,16 @@
 
 * Add method `ClickHouseParameterCollection.AddRange` receiveng any enumerable collection of `ClickHouseParameter`.
 
+### Octonica.ClickHouseClient v3.1.3, 2024-03-19
+
+#### New Feature
+
+* Add support for the type `Variant(T1, ... ,TN)` ([#84](https://github.com/Octonica/ClickHouseClient/issues/84)).
+
+#### Bug Fix
+
+* Fix writing an empty array or several empty arrays to a column of type `Array(LowCardinality(String))` ([#92](https://github.com/Octonica/ClickHouseClient/issues/92)).
+
 ### Octonica.ClickHouseClient v3.1.2, 2024-03-10
 
 #### Bug Fix
