@@ -10,6 +10,17 @@
 
 * Add method `ClickHouseParameterCollection.AddRange` receiveng any enumerable collection of `ClickHouseParameter`.
 
+### Octonica.ClickHouseClient v3.1.1, 2024-16-1
+
+#### Backward Incompatible Change
+
+* End support of .NET 5. .NET 5 reached end of support on May 8, 2022.
+
+#### Improvement
+
+* Remove parentheses around parameters in Interpolate mode. It makes possible passing a table comment as a parameter.
+* Fix over-allocaction for `(ReadOnly)Memory<T>` ([#83](https://github.com/Octonica/ClickHouseClient/pull/83)).
+
 ### Octonica.ClickHouseClient v2.3.2, 2023-12-29
 
 #### New Feature
@@ -74,6 +85,7 @@
 #### Improvement
 
 * Set `DateTimeKind.Unspecified` when cast a value of ClickHouse types `Date` and `Date32` to the .NET type `DateTime` (PR [#45](https://github.com/Octonica/ClickHouseClient/pull/45)).
+
 
 ### Octonica.ClickHouseClient v2.2.8, 2022-01-09
 
