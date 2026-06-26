@@ -1,3 +1,10 @@
+### Octonica.ClickHouseClient v3.1.8, 2026-01-20
+
+#### New Feature
+
+* `ClickHouseCommand.ExecuteReader` / `ExecuteReaderAsync` now support DDL and DML queries (`CREATE`, `INSERT`, `DROP`, etc.)
+ that don't return a result set. The reader is returned in a closed state with no fields ([#108](https://github.com/Octonica/ClickHouseClient/issues/108)).
+
 ### Octonica.ClickHouseClient Next Version, Unscheduled
 
 #### New Feature
