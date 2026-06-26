@@ -1,3 +1,15 @@
+### Octonica.ClickHouseClient v4.1.4, 2026-05-29
+
+#### Bug Fix
+
+* Fixed reading of prefixes for columns of types `LowCardinality` and `Tuple`.
+ This error occurred only when connecting to a server with no compression (`Compress=false` in the connection string).
+* Fixed error: "Expected one of serialization modes: sparse or default. Received value: 4."
+
+#### Improvement
+
+* Implemented reading of columns with the custom serialization mode `Replicated`.
+
 ### Octonica.ClickHouseClient v4.1.3, 2026-05-22
 
 #### Backward Incompatible Change
