@@ -1,4 +1,15 @@
-### Octonica.ClickHouseClient v3.1.9, 2026-05-20
+### Octonica.ClickHouseClient v3.1.10, 2026-05-21
+
+#### New Feature
+
+* `ClickHouseServerInfo` now exposes additional information reported by the server when opening a connection:
+  `ParallelReplicasProtocolVersion` (protocol revision 54471), the list of server settings `Settings` (protocol revision 54474),
+  `QueryPlanSerializationVersion` and `ClusterProcessingProtocolVersion` (protocol revision 54479).
+
+#### Miscellaneous
+
+* Update the supported protocol revision to 54483
+?### Octonica.ClickHouseClient v3.1.9, 2026-05-20
 
 #### New Feature
 
