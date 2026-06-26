@@ -1,3 +1,9 @@
+### Octonica.ClickHouseClient v3.1.7, 2026-01-19
+
+#### Bug Fix
+
+* Fix `ClickHouseCommand.ExecuteDbDataReader(Async)` throwing exception on DDL queries.
+
 ### Octonica.ClickHouseClient Next Version, Unscheduled
 
 #### New Feature
