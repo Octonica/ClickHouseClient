@@ -1,3 +1,19 @@
+### Octonica.ClickHouseClient v4.1.3, 2026-05-22
+
+#### Backward Incompatible Change
+
+* End of support for .NET Core 3.1.
+
+#### New Feature
+
+* Added support for .NET 10.
+
+#### Bug Fix
+
+* Fixed overly eager parameter-name validation that prevented sending queries containing unresolved parameters (for example, creating a parameterized view).
+ The problem occurred when using a statement like:
+ `CREATE VIEW view AS SELECT * FROM TABLE WHERE Column1={column1:datatype1} and Column2={column2:datatype2} ...`
+
 ### Octonica.ClickHouseClient v3.1.10, 2026-05-21
 
 #### New Feature
@@ -9,7 +25,8 @@
 #### Miscellaneous
 
 * Update the supported protocol revision to 54483
-?### Octonica.ClickHouseClient v3.1.9, 2026-05-20
+
+### Octonica.ClickHouseClient v3.1.9, 2026-05-20
 
 #### New Feature
 
