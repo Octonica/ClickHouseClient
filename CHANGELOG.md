@@ -1,3 +1,23 @@
+### Octonica.ClickHouseClient v3.1.9, 2026-05-20
+
+#### New Feature
+
+* `ClickHouseDataReader` and `ClickHouseColumnWriter` now expose the query execution progress reported by the server through the `ExecutionProgress` property
+ of type `ClickHouseQueryExecutionProgress`. The progress includes the number of rows and bytes read and written, the total number of rows and bytes to process,
+ and the elapsed time ([#109](https://github.com/Octonica/ClickHouseClient/issues/109)).
+* Add overload `ClickHouseDataReader.ConfigureColumnReader(int ordinal, IConverterDispatcher readAsDispatcher)` and method
+ `ClickHouseDataReader.ConfigureDataReader(IConverterDispatcher readAsDispatcher)` that configure the reader with a type converter callback function provided
+ by a dispatcher. A caller can implement a dispatcher for dynamically providing converter functions based on a column's type.
+
+#### Bug Fix
+
+* Fix reading and writing values of type `Variant(T1, ..., TN)`.
+* Fix skipping the end-of-stream message received after a progress message when writing data with `ClickHouseColumnWriter` ([#109](https://github.com/Octonica/ClickHouseClient/issues/109)).
+
+#### Miscellaneous
+
+* Update the supported protocol revision to 54470.
+
 ### Octonica.ClickHouseClient Next Version, Unscheduled
 
 #### New Feature
