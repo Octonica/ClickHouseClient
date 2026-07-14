@@ -18,6 +18,7 @@
 using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Octonica.ClickHouseClient.Protocol
 {
@@ -48,6 +49,8 @@ namespace Octonica.ClickHouseClient.Protocol
 
         public IReadOnlyCollection<KeyValuePair<string, ClickHouseParameterWriter>>? Parameters { get; }
 
+        public Activity? Activity { get; }
+
         private ClientQueryMessage(Builder builder)
         {
             QueryKind = builder.QueryKind ?? throw new ArgumentException("The kind of the query is required.", nameof(QueryKind));
@@ -61,6 +64,7 @@ namespace Octonica.ClickHouseClient.Protocol
             CompressionEnabled = builder.CompressionEnabled ?? throw new ArgumentException("Unknown compression mode.", nameof(CompressionEnabled));
             Settings = builder.Settings == null || builder.Settings.Count == 0 ? null : builder.Settings;
             Parameters = builder.Parameters == null || builder.Parameters.Count == 0 ? null : builder.Parameters;
+            Activity = builder.Activity;
         }
 
         public void Write(ClickHouseBinaryProtocolWriter writer)
@@ -105,7 +109,33 @@ namespace Octonica.ClickHouseClient.Protocol
                     writer.Write7BitInt32(ClientVersion.Build);
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithOpenTelemetry)
-                        writer.WriteByte(0); // TODO: add support for Open Telemetry headers
+                    {
+                        writer.WriteBool(Activity != null);
+                        if (Activity != null)
+                        {
+                            Span<byte> traceAndSpanIds = stackalloc byte[16 + 8];
+                            Activity.TraceId.CopyTo(traceAndSpanIds.Slice(0, 16));
+                            Activity.SpanId.CopyTo(traceAndSpanIds.Slice(16));
+                            for (int i = 0; i < 4; i++)
+                            {
+                                var tmp = traceAndSpanIds[i];
+                                traceAndSpanIds[i] = traceAndSpanIds[7 - i];
+                                traceAndSpanIds[7 - i] = tmp;
+
+                                tmp = traceAndSpanIds[8 + i];
+                                traceAndSpanIds[8 + i] = traceAndSpanIds[15 - i];
+                                traceAndSpanIds[15 - i] = tmp;
+
+                                tmp = traceAndSpanIds[16 + i];
+                                traceAndSpanIds[16 + i] = traceAndSpanIds[23 - i];
+                                traceAndSpanIds[23 - i] = tmp;
+                            }
+
+                            writer.WriteBytes(traceAndSpanIds);
+                            writer.WriteString(Activity.TraceStateString ?? string.Empty);
+                            writer.WriteByte(checked((byte)(int)Activity.ActivityTraceFlags));
+                        }
+                    }
 
                     if (ProtocolRevision >= ClickHouseProtocolRevisions.MinRevisionWithParallelReplicas)
                     {
@@ -260,6 +290,11 @@ namespace Octonica.ClickHouseClient.Protocol
             /// Optional
             /// </summary>
             public IReadOnlyCollection<KeyValuePair<string, ClickHouseParameterWriter>>? Parameters { get; set; }
+
+            /// <summary>
+            /// Optional
+            /// </summary>
+            public Activity? Activity { get; set; }
 
             public ClientQueryMessage Build()
             {
