@@ -19,6 +19,7 @@ using Octonica.ClickHouseClient.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -710,6 +711,54 @@ namespace Octonica.ClickHouseClient.Tests
                 await using var connection = await OpenConnectionAsync(cancellationToken: ct);
                 var cmd = connection.CreateCommand("DROP VIEW IF EXISTS parametrized_view");
                 await cmd.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        [Fact(Skip = "This test is flaky. The server might not flush the OpenTelemetry log before our second query.")]
+        public async Task WithOpenTelemetryActivity()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            ActivityTraceId traceId;
+            ActivitySpanId spanId;
+            await using (var connection = await OpenConnectionAsync(cancellationToken: ct))
+            {
+                var cmd = connection.CreateCommand();
+                cmd.CommandText = "SELECT 42::Int32";
+
+                cmd.Activity = new Activity("otel_test");
+                cmd.Activity.Start();
+                cmd.Activity.TraceStateString = "my custom trace state string with some lore ipsum dolor sit amen...";
+                traceId = cmd.Activity.TraceId;
+                spanId = cmd.Activity.SpanId;
+
+                var result = await cmd.ExecuteScalarAsync(ct);
+                Assert.Equal(42, result);
+
+                cmd.Activity.Stop();
+            }
+
+            await Task.Delay(4000, ct);
+
+            await using (var connection = await OpenConnectionAsync(cancellationToken: ct))
+            {
+                var cmd = connection.CreateCommand();
+                cmd.CommandText = $"SELECT *, lower(hex(parent_span_id)) AS parent_span_id_hex FROM system.opentelemetry_span_log WHERE lower(hex(trace_id)) = '{traceId.ToHexString()}'";
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+                int queryCount = 0;
+                int queryWithSameParentCount = 0;
+                var spanIdHexString = spanId.ToHexString();
+                while (await reader.ReadAsync(ct))
+                {
+                    ++queryCount;
+                    var parentSpanId = reader.GetString("parent_span_id_hex");
+                    if (string.Equals(spanIdHexString, parentSpanId, StringComparison.Ordinal))
+                        ++queryWithSameParentCount;
+                }
+
+                Assert.True(queryWithSameParentCount > 0);
+                Assert.True(queryCount > queryWithSameParentCount);
             }
         }
     }
