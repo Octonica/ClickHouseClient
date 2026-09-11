@@ -442,9 +442,7 @@ namespace Octonica.ClickHouseClient
 
                         case BlockFieldCodes.OutOfOrderBuckets:
                             var outOfOrderBucketsNum = await reader.Read7BitInt32(async, cancellationToken);
-                            if (outOfOrderBucketsNum != 0)
-                                throw new ClickHouseException(ClickHouseErrorCodes.FeatureNotImplemented, $"ClickHouseClient received {outOfOrderBucketsNum} out-of-order bucket(s) in the server reply. This feature is not supported on the client side.");
-
+                            await reader.SkipBytes(outOfOrderBucketsNum * sizeof(int), async, cancellationToken);
                             break;
 
                         case BlockFieldCodes.End:

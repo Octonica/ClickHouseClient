@@ -846,5 +846,84 @@ FROM
             pinged = await cn.TryPingAsync(ct);
             Assert.True(pinged);
         }
+
+        /// <summary>
+        /// Out-of-order buckets in aggregation (revision 54480). The server may deliver the buckets of a
+        /// two-level aggregation in any order. The query below makes it deterministic by lowering the
+        /// two-level thresholds; the same happens on a plain query once it crosses the default ones.
+        /// </summary>
+        /// <remarks>
+        /// The server produces out-of-order buckets only since v25.9. On older servers the feature is latent
+        /// and this test passes regardless of the client's support for it.
+        /// </remarks>
+        [Fact]
+        public async Task ReadTwoLevelAggregationResult()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+
+            await using var cmd = cn.CreateCommand(TwoLevelAggregationQuery);
+
+            var rowCount = 0;
+            ulong keySum = 0;
+            await using (var reader = await cmd.ExecuteReaderAsync(ct))
+            {
+                while (await reader.ReadAsync(ct))
+                {
+                    // The server is free to choose the width of the integer types in the result,
+                    // so the values are converted instead of being read as values of an expected type
+                    keySum += Convert.ToUInt64(reader.GetValue(0));
+
+                    // Each key appears exactly 10 times in numbers(1000000)
+                    Assert.Equal(10ul, Convert.ToUInt64(reader.GetValue(1)));
+                    ++rowCount;
+                }
+            }
+
+            Assert.Equal(100_000, rowCount);
+
+            // The sum of all keys from 0 to 99999. It detects buckets lost or read twice
+            Assert.Equal(4_999_950_000ul, keySum);
+
+            await AssertConnectionIsAlive(cn);
+        }
+
+        /// <summary>
+        /// The same aggregation as in <see cref="ReadTwoLevelAggregationResult"/>, but the reader is abandoned
+        /// after the first row. The client must not break the connection when it stops reading the result early.
+        /// </summary>
+        [Fact]
+        public async Task AbandonTwoLevelAggregationReader()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+
+            await using (var cmd = cn.CreateCommand(TwoLevelAggregationQuery))
+            {
+                var reader = await cmd.ExecuteReaderAsync(ct);
+                Assert.True(await reader.ReadAsync(ct));
+                await reader.DisposeAsync();
+            }
+
+            await AssertConnectionIsAlive(cn);
+        }
+
+        /// <summary>
+        /// The two-level aggregation with 100000 keys. The number of distinct keys matters: an aggregation with
+        /// significantly fewer keys is not split into out-of-order buckets under the same settings.
+        /// </summary>
+        private const string TwoLevelAggregationQuery = @"
+SELECT number % 100000 AS k, count() AS cnt
+FROM numbers(1000000)
+GROUP BY k
+SETTINGS group_by_two_level_threshold = 1, group_by_two_level_threshold_bytes = 1, max_threads = 8";
+
+        private static async Task AssertConnectionIsAlive(ClickHouseConnection cn)
+        {
+            await using var cmd = cn.CreateCommand("SELECT 1");
+            var value = await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, Convert.ToInt32(value));
+        }
     }
 }

@@ -1,3 +1,10 @@
+### Octonica.ClickHouseClient Next Version, Unscheduled
+
+#### Bug Fix
+
+* Fixed an error when reading the result of a two-level aggregation: "ClickHouseClient received N out-of-order bucket(s) in the server reply."
+ Servers since v25.9 may produce aggregation buckets out of order ([#112](https://github.com/Octonica/ClickHouseClient/issues/112)).
+
 ### Octonica.ClickHouseClient v4.1.4, 2026-05-29
 
 #### Bug Fix
