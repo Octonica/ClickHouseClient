@@ -78,6 +78,7 @@ internal sealed class ReplicatedSerializationColumnReader : IClickHouseColumnRea
                 case 1:
                 case 2:
                 case 4:
+                case 8:
                     break;
 
                 default:

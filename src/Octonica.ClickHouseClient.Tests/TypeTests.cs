@@ -16,6 +16,8 @@
 #endregion
 
 using System;
+using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -3518,6 +3520,81 @@ FROM clickhouse_test_nullable";
                 await using var cmdDrop = connection.CreateCommand("DROP TABLE IF EXISTS clickhouse_test_nullable ");
                 await cmdDrop.ExecuteNonQueryAsync();
             }
+        }
+
+        /// <summary>
+        /// Replicated serialization (revision 54482). The indexes of a replicated column are serialized as
+        /// <c>UInt8</c>, <c>UInt16</c>, <c>UInt32</c> or <c>UInt64</c> values, i.e. the size of the index type
+        /// is one of 1, 2, 4 or 8 bytes (see <c>SerializationReplicated::serializeBinaryBulkWithMultipleStreams</c>).
+        /// All four sizes must be supported by the client.
+        /// </summary>
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(4)]
+        [InlineData(8)]
+        public void ReadColumnWithReplicatedSerialization(int indexTypeSize)
+        {
+            var indexes = new[] { 0, 1, 1, 0 };
+            var elements = new[] { 100, 200 };
+
+            var typeInfo = ClickHouseTypeInfoProvider.Instance.GetTypeInfo("Int32");
+            var column = CreateReplicatedInt32Column(indexTypeSize, indexes, elements);
+
+            var reader = typeInfo.CreateColumnReader(indexes.Length, ClickHouseColumnSerializationMode.Custom);
+            var size = reader.ReadNext(new ReadOnlySequence<byte>(column));
+
+            Assert.Equal(column.Length, size.Bytes);
+            Assert.Equal(indexes.Length, size.Elements);
+
+            var tableColumn = reader.EndRead(null);
+            Assert.Equal(indexes.Length, tableColumn.RowCount);
+
+            var typedColumn = tableColumn.TryReinterpret<int>();
+            Assert.NotNull(typedColumn);
+
+            for (var i = 0; i < indexes.Length; i++)
+            {
+                Assert.Equal(elements[indexes[i]], tableColumn.GetValue(i));
+                Assert.Equal(elements[indexes[i]], typedColumn.GetValue(i));
+            }
+
+            var skippingReader = typeInfo.CreateSkippingColumnReader(indexes.Length, ClickHouseColumnSerializationMode.Custom);
+            var skipped = skippingReader.ReadNext(new ReadOnlySequence<byte>(column));
+            Assert.Equal(column.Length, skipped.Bytes);
+            Assert.Equal(indexes.Length, skipped.Elements);
+        }
+
+        /// <summary>
+        /// Serializes a column of the type <c>Int32</c> with replicated serialization. The layout is
+        /// the serialization kind followed by the number of rows, the size of the index type, the indexes,
+        /// the number of elements and the elements themselves.
+        /// </summary>
+        private static byte[] CreateReplicatedInt32Column(int indexTypeSize, int[] indexes, int[] elements)
+        {
+            // All the counters below are written as 7-bit encoded integers. A single byte is enough for a value less than 0x80
+            Assert.InRange(indexes.Length, 0, 0x7F);
+            Assert.InRange(elements.Length, 0, 0x7F);
+
+            var column = new List<byte> { (byte)ClickHouseColumnSerializationMode.Replicated, (byte)indexes.Length, (byte)indexTypeSize };
+
+            var indexBytes = new byte[sizeof(ulong)];
+            foreach (var index in indexes)
+            {
+                BinaryPrimitives.WriteUInt64LittleEndian(indexBytes, (ulong)index);
+                column.AddRange(indexBytes[..indexTypeSize]);
+            }
+
+            column.Add((byte)elements.Length);
+
+            var elementBytes = new byte[sizeof(int)];
+            foreach (var element in elements)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(elementBytes, element);
+                column.AddRange(elementBytes);
+            }
+
+            return column.ToArray();
         }
     }
 }

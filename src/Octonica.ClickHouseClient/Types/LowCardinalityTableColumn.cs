@@ -92,11 +92,12 @@ namespace Octonica.ClickHouseClient.Types
             if (index < 0 || index > RowCount)
                 throw new ArgumentOutOfRangeException(nameof(index));
 
-            int valueIndex = 0;
+            long valueIndex = 0;
             var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
-            return valueIndex;
+            // Let's hope we won't get over 2M keys
+            return checked((int)valueIndex);
         }
     }
 
@@ -186,11 +187,12 @@ namespace Octonica.ClickHouseClient.Types
             if (index < 0 || index > RowCount)
                 throw new ArgumentOutOfRangeException(nameof(index));
 
-            int valueIndex = 0;
+            long valueIndex = 0;
             var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
-            return valueIndex;
+            // Let's hope we won't get over 2M keys
+            return checked((int)valueIndex);
         }
     }
 
@@ -266,11 +268,12 @@ namespace Octonica.ClickHouseClient.Types
             if (index < 0 || index > RowCount)
                 throw new ArgumentOutOfRangeException(nameof(index));
 
-            int valueIndex = 0;
+            long valueIndex = 0;
             var valueIndexBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref valueIndex, 1)).Slice(0, _keySize);
             _keys.Slice(index * _keySize, _keySize).Span.CopyTo(valueIndexBytes);
 
-            return valueIndex;
+            // Let's hope we won't get over 2M keys
+            return checked((int)valueIndex);
         }
     }
 

@@ -74,6 +74,7 @@ internal sealed class ReplicatedSerializationSkippingColumnReader : IClickHouseC
                 case 1:
                 case 2:
                 case 4:
+                case 8:
                     break;
 
                 default:

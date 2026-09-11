@@ -4,6 +4,8 @@
 
 * Fixed an error when reading the result of a two-level aggregation: "ClickHouseClient received N out-of-order bucket(s) in the server reply."
  Servers since v25.9 may produce aggregation buckets out of order ([#112](https://github.com/Octonica/ClickHouseClient/issues/112)).
+* Fixed an error when reading a column with the `Replicated` serialization mode whose indexes are serialized as `UInt64` values:
+ "Unexpected key (8) size when reading a column with 'replicated' serialization." ([#112](https://github.com/Octonica/ClickHouseClient/issues/112)).
 
 ### Octonica.ClickHouseClient v4.1.4, 2026-05-29
 
