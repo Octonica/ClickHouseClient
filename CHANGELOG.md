@@ -5,6 +5,7 @@
 * Add property `ClickHouseCommand.Activity`. It allows to pass an OpenTelemetry activity (`System.Diagnostics.Activity`)
  with queries executed by the command. The client sends the activity's trace id, span id, W3C trace state and flags in the query
  so the server can attach the query to the same distributed trace.
+ Overloads of `ClickHouseConnection.CreateColumnWriter` and `CreateColumnWriterAsync` accept the same activity for bulk INSERT.
 
 #### Bug Fix
 

@@ -366,7 +366,22 @@ namespace Octonica.ClickHouseClient
         /// </remarks>
         public ClickHouseColumnWriter CreateColumnWriter(string insertFormatCommand)
         {
-            return TaskHelper.WaitNonAsyncTask(CreateColumnWriter(insertFormatCommand, false, CancellationToken.None));
+            return TaskHelper.WaitNonAsyncTask(CreateColumnWriter(insertFormatCommand, null, false, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Creates and returns a <see cref="ClickHouseColumnWriter"/> object.
+        /// </summary>
+        /// <param name="insertFormatCommand">The INSERT statement.</param>
+        /// <param name="activity">The activity that should be passed to the INSERT query. May be <see langword="null"/>.</param>
+        /// <returns>A <see cref="ClickHouseColumnWriter"/> object.</returns>
+        /// <remarks>
+        /// The command (<paramref name="insertFormatCommand"/>) must be a valid INSERT statement ending with VALUES. For example,
+        /// <code>INSERT INTO table(field1, ... fieldN) VALUES</code>
+        /// </remarks>
+        public ClickHouseColumnWriter CreateColumnWriter(string insertFormatCommand, Activity? activity)
+        {
+            return TaskHelper.WaitNonAsyncTask(CreateColumnWriter(insertFormatCommand, activity, false, CancellationToken.None));
         }
 
         /// <summary>
@@ -381,10 +396,26 @@ namespace Octonica.ClickHouseClient
         /// </remarks>
         public async Task<ClickHouseColumnWriter> CreateColumnWriterAsync(string insertFormatCommand, CancellationToken cancellationToken)
         {
-            return await CreateColumnWriter(insertFormatCommand, true, cancellationToken);
+            return await CreateColumnWriter(insertFormatCommand, null, true, cancellationToken);
         }
 
-        private async ValueTask<ClickHouseColumnWriter> CreateColumnWriter(string insertFormatCommand, bool async, CancellationToken cancellationToken)
+        /// <summary>
+        /// Asyncronously creates and returns a <see cref="ClickHouseColumnWriter"/> object.
+        /// </summary>
+        /// <param name="insertFormatCommand">The INSERT statement.</param>
+        /// <param name="activity">The activity that should be passed to the INSERT query. May be <see langword="null"/>.</param>
+        /// <param name="cancellationToken">The cancellation instruction.</param>
+        /// <returns>A <see cref="Task{ClickHouseColumnWriter}"/> representing asyncronous operation.</returns>
+        /// <remarks>
+        /// The command (<paramref name="insertFormatCommand"/>) must be a valid INSERT statement ending with VALUES. For example,
+        /// <code>INSERT INTO table(field1, ... fieldN) VALUES</code>
+        /// </remarks>
+        public async Task<ClickHouseColumnWriter> CreateColumnWriterAsync(string insertFormatCommand, Activity? activity, CancellationToken cancellationToken)
+        {
+            return await CreateColumnWriter(insertFormatCommand, activity, true, cancellationToken);
+        }
+
+        private async ValueTask<ClickHouseColumnWriter> CreateColumnWriter(string insertFormatCommand, Activity? activity, bool async, CancellationToken cancellationToken)
         {
             var connectionState = _connectionState;
             if (connectionState.TcpClient == null)
@@ -399,7 +430,7 @@ namespace Octonica.ClickHouseClient
             {
                 session = await connectionState.TcpClient.OpenSession(async, null, CancellationToken.None, cancellationToken);
 
-                var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand};
+                var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand, Activity = activity};
                 var query = await session.SendQuery(messageBuilder, null, async, cancellationToken);
 
                 cancelOnFailure = true;

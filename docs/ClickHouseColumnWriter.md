@@ -15,6 +15,9 @@ using var writer = connection.CreateColumnWriter("INSERT INTO some_table VALUES"
 
 Please, note that the `INSERT` query for the writer must end with `VALUES` keyword, but without actual list of values.
 
+Both methods have overloads that take a `System.Diagnostics.Activity`. When an activity is provided, the client sends its OpenTelemetry
+trace context (trace id, span id, W3C trace state and flags) with the INSERT query.
+
 Some methods of `ClickHouseColumnWriter` are similar to methods of `ClickHouseDataReader`: `GetName`, `GetOrdinal`, `GetFieldType`,
 `ConfigureColumn` and other methods for manipulating column metadata.
 
