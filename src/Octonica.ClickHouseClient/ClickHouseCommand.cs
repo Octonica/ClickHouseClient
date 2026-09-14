@@ -326,9 +326,10 @@ namespace Octonica.ClickHouseClient
         /// All other columns and rows are ignored.
         /// </summary>
         /// <returns>
-        /// The first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// The first row of the first columns in the result set or <see langword="null"/> if the result set is empty.
+        /// If the value in the database is NULL, the method returns <see cref="DBNull.Value"/>.
         /// </returns>
-        public override object ExecuteScalar()
+        public override object? ExecuteScalar()
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar(null, false, CancellationToken.None));
         }
@@ -339,9 +340,10 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
         /// <returns>
-        /// The first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// The first row of the first columns in the result set or <see langword="null"/> if the result set is empty.
+        /// If the value in the database is NULL, the method returns <see cref="DBNull.Value"/>.
         /// </returns>
-        public object ExecuteScalar(ClickHouseColumnSettings? columnSettings)
+        public object? ExecuteScalar(ClickHouseColumnSettings? columnSettings)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar(columnSettings, false, CancellationToken.None));
         }
@@ -354,6 +356,11 @@ namespace Octonica.ClickHouseClient
         /// <returns>
         /// The first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalar()"/>.
+        /// </remarks>
         public T ExecuteScalar<T>()
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(null, false, CancellationToken.None));
@@ -368,6 +375,11 @@ namespace Octonica.ClickHouseClient
         /// <returns>
         /// The first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalar(ClickHouseColumnSettings)"/>.
+        /// </remarks>
         public T ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings)
         {
             return TaskHelper.WaitNonAsyncTask(ExecuteScalar<T>(columnSettings, false, CancellationToken.None));
@@ -380,7 +392,8 @@ namespace Octonica.ClickHouseClient
         /// <param name="cancellationToken">The cancellation instruction.</param>
         /// <returns>
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
-        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// the first row of the first columns in the result set or <see langword="null"/> if the result set is empty.
+        /// If the value in the database is NULL, the method returns <see cref="DBNull.Value"/>.
         /// </returns>
         public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
         {
@@ -394,9 +407,10 @@ namespace Octonica.ClickHouseClient
         /// <param name="columnSettings">Optional parameter. Settings for the first column in the result set.</param>
         /// <returns>
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
-        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// the first row of the first columns in the result set or <see langword="null"/> if the result set is empty.
+        /// If the value in the database is NULL, the method returns <see cref="DBNull.Value"/>.
         /// </returns>
-        public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings)
+        public async Task<object?> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings)
         {
             return await ExecuteScalar(columnSettings, true, CancellationToken.None);
         }
@@ -409,9 +423,10 @@ namespace Octonica.ClickHouseClient
         /// <param name="cancellationToken">The cancellation instruction.</param>
         /// <returns>
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
-        /// the first row of the first columns in the result set or <see cref="DBNull.Value"/> if the result set is empty.
+        /// the first row of the first columns in the result set or <see langword="null"/> if the result set is empty.
+        /// If the value in the database is NULL, the method returns <see cref="DBNull.Value"/>.
         /// </returns>
-        public async Task<object> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
+        public async Task<object?> ExecuteScalarAsync(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
         {
             return await ExecuteScalar(columnSettings, true, cancellationToken);
         }
@@ -425,6 +440,11 @@ namespace Octonica.ClickHouseClient
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
         /// the first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalarAsync(CancellationToken)"/>.
+        /// </remarks>
         public async Task<T> ExecuteScalarAsync<T>()
         {
             return await ExecuteScalar<T>(null, true, CancellationToken.None);
@@ -440,6 +460,11 @@ namespace Octonica.ClickHouseClient
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
         /// the first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalarAsync(CancellationToken)"/>.
+        /// </remarks>
         public async Task<T> ExecuteScalarAsync<T>(CancellationToken cancellationToken)
         {
             return await ExecuteScalar<T>(null, true, cancellationToken);
@@ -455,6 +480,11 @@ namespace Octonica.ClickHouseClient
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
         /// the first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalarAsync(ClickHouseColumnSettings)"/>.
+        /// </remarks>
         public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings)
         {
             return await ExecuteScalar<T>(columnSettings, true, CancellationToken.None);
@@ -471,6 +501,11 @@ namespace Octonica.ClickHouseClient
         /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The result (<see cref="Task{TResult}.Result"/>) is
         /// the first row of the first columns in the result set.
         /// </returns>
+        /// <exception cref="ClickHouseException">The result set is empty.</exception>
+        /// <remarks>
+        /// This method uses <see cref="ClickHouseDataReader.GetFieldValue{T}(int)"/>, which cannot return <see langword="null"/>.
+        /// For nullable values, use the non-generic <see cref="ExecuteScalarAsync(ClickHouseColumnSettings, CancellationToken)"/>.
+        /// </remarks>
         public async Task<T> ExecuteScalarAsync<T>(ClickHouseColumnSettings? columnSettings, CancellationToken cancellationToken)
         {
             return await ExecuteScalar<T>(columnSettings, true, cancellationToken);
@@ -479,15 +514,18 @@ namespace Octonica.ClickHouseClient
         private async ValueTask<T> ExecuteScalar<T>(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
         {
             var result = await ExecuteScalar(columnSettings, reader => reader.GetFieldValue<T>(0), async, cancellationToken);
-            return (T) result;
+            if (result == null)
+                throw new ClickHouseException(ClickHouseErrorCodes.EmptyResult, "The command returned no data.");
+
+            return (T)result;
         }
 
-        private ValueTask<object> ExecuteScalar(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
+        private ValueTask<object?> ExecuteScalar(ClickHouseColumnSettings? columnSettings, bool async, CancellationToken cancellationToken)
         {
             return ExecuteScalar(columnSettings, reader => reader.GetValue(0), async, cancellationToken);
         }
 
-        private async ValueTask<object> ExecuteScalar(ClickHouseColumnSettings? columnSettings, Func<ClickHouseDataReader, object?> valueSelector, bool async, CancellationToken cancellationToken)
+        private async ValueTask<object?> ExecuteScalar(ClickHouseColumnSettings? columnSettings, Func<ClickHouseDataReader, object?> valueSelector, bool async, CancellationToken cancellationToken)
         {
             ClickHouseDataReader? reader = null;
             try
@@ -495,14 +533,14 @@ namespace Octonica.ClickHouseClient
                 reader = await ExecuteDbDataReader(CommandBehavior.Default, true, async, cancellationToken);
                 bool hasAnyColumn = reader.FieldCount > 0;
                 if (!hasAnyColumn)
-                    return DBNull.Value;
+                    return null;
 
                 if (columnSettings != null)
                     reader.ConfigureColumn(0, columnSettings);
 
                 bool hasAnyRow = async ? await reader.ReadAsync(cancellationToken) : reader.Read();
                 if (!hasAnyRow)
-                    return DBNull.Value;
+                    return null;
 
                 if (reader.IsDBNull(0))
                     return DBNull.Value;

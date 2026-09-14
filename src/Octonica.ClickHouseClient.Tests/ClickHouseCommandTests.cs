@@ -761,5 +761,33 @@ namespace Octonica.ClickHouseClient.Tests
                 Assert.True(queryCount > queryWithSameParentCount);
             }
         }
+
+        [Fact]
+        public async Task ExecuteScalarEmpty()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            await using var connection = await OpenConnectionAsync(cancellationToken: ct);
+            await using var cmd = connection.CreateCommand("SELECT 1 LIMIT 0");
+
+            var obj = await cmd.ExecuteScalarAsync(ct);
+            Assert.Null(obj);
+
+            cmd.CommandText = "SELECT NULL";
+            obj = await cmd.ExecuteScalarAsync(ct);
+            Assert.Equal(DBNull.Value, obj);
+        }
+
+        [Fact]
+        public async Task ExecuteScalarEmptyGeneric()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            await using var connection = await OpenConnectionAsync(cancellationToken: ct);
+            await using var cmd = connection.CreateCommand("SELECT 1 LIMIT 0");
+
+            var ex = await Assert.ThrowsAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync<int?>(ct));
+            Assert.Equal(ClickHouseErrorCodes.EmptyResult, ex.ErrorCode);
+        }
     }
 }

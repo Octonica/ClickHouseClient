@@ -149,5 +149,10 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for indication that the server is required to use a protocol feature which is not implemented by ClickHouseClient.
         /// </summary>
         public const int FeatureNotImplemented = 24;
+
+        /// <summary>
+        /// The code for an error caused by an attempt to read from an empty result set.
+        /// </summary>
+        public const int EmptyResult = 25;
     }
 }

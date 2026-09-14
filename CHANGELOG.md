@@ -1,5 +1,13 @@
 ### Octonica.ClickHouseClient Next Version, Unscheduled
 
+#### Backward Incompatible Change
+
+* `ExecuteScalar` and `ExecuteScalarAsync` now return `null` when the result set is empty, matching `DbCommand`.
+  A SQL `NULL` is still returned as `DBNull.Value`. Previously both cases returned `DBNull.Value`
+  ([#94](https://github.com/Octonica/ClickHouseClient/issues/94)).
+* Generic `ExecuteScalar<T>` and `ExecuteScalarAsync<T>` throw `ClickHouseException` with the error code `EmptyResult`
+  when the result set is empty. Previously this case threw `InvalidCastException`.
+
 #### New Feature
 
 * Add property `ClickHouseCommand.Activity`. It allows to pass an OpenTelemetry activity (`System.Diagnostics.Activity`)
