@@ -231,3 +231,6 @@ architecture and coding conventions.
   the library; it is a decision for the maintainers.
 * **When you claim a test reproduces a bug, run it and quote the failure.** If you could not run it,
   say so plainly instead of implying it was verified.
+* **When working on an issue from https://github.com/Octonica/ClickHouseClient/issues, add its number
+  at the end of the comment** in the format `(#N)`, for example `(#112)`. This applies only in that
+  case. Do not invent a number, and do not append one when the work is not for an issue there.
