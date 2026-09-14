@@ -2850,15 +2850,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         public async Task ReadDateScalar(string str, int year, int month, int day)
         {
             DateTime expectedDateTime = default;
-#if NET6_0_OR_GREATER
             DateOnly expectedDate = default;
-#endif
             if (year != 0 || month != 0 || day != 0)
             {
                 expectedDateTime = new DateTime(year, month, day);
-#if NET6_0_OR_GREATER
                 expectedDate = new DateOnly(year, month, day);
-#endif
             }
 
             await using var connection = await OpenConnectionAsync();
@@ -2868,13 +2864,8 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             var result = await cmd.ExecuteScalarAsync();
 
             DateTime resultDateTime;
-#if NET6_0_OR_GREATER
             var resultDateOnly = Assert.IsType<DateOnly>(result);
             Assert.Equal(expectedDate, resultDateOnly);
-#else
-            resultDateTime = Assert.IsType<DateTime>(result);
-            Assert.Equal(expectedDateTime, resultDateTime);
-#endif
 
             resultDateTime = await cmd.ExecuteScalarAsync<DateTime>();
             Assert.Equal(expectedDateTime, resultDateTime);
@@ -2921,7 +2912,6 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
 
-#if NET6_0_OR_GREATER
         [Theory]
         [MemberData(nameof(ParameterModes))]
         public async Task ReadDateParameterScalarNet6(ClickHouseParameterMode parameterMode)
@@ -2965,7 +2955,6 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
-#endif
 
         [Theory]
         [InlineData("2021-11-09", 2021, 11, 09)]
@@ -2978,15 +2967,11 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
         public async Task ReadDate32Scalar(string str, int year, int month, int day)
         {
             DateTime expectedDateTime = default;
-#if NET6_0_OR_GREATER
             DateOnly expectedDate = default;
-#endif
             if (year != 0 || month != 0 || day != 0)
             {
                 expectedDateTime = new DateTime(year, month, day);
-#if NET6_0_OR_GREATER
                 expectedDate = new DateOnly(year, month, day);
-#endif
             }
 
             await using var connection = await OpenConnectionAsync();
@@ -2996,13 +2981,8 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             var result = await cmd.ExecuteScalarAsync();
 
             DateTime resultDateTime;
-#if NET6_0_OR_GREATER
             var resultDateOnly = Assert.IsType<DateOnly>(result);
             Assert.Equal(expectedDate, resultDateOnly);
-#else
-            resultDateTime = Assert.IsType<DateTime>(result);
-            Assert.Equal(expectedDateTime, resultDateTime);
-#endif
 
             resultDateTime = await cmd.ExecuteScalarAsync<DateTime>();
             Assert.Equal(expectedDateTime, resultDateTime);
@@ -3055,7 +3035,6 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
 
-#if NET6_0_OR_GREATER
         [Theory]
         [MemberData(nameof(ParameterModes))]
         public async Task ReadDate32ParameterScalarNet6(ClickHouseParameterMode parameterMode)
@@ -3102,7 +3081,6 @@ UNION ALL SELECT 5, CAST((['null'], [null]), 'Map(String, Nullable(Int32))')");
             handledException = await Assert.ThrowsAsync<ClickHouseHandledException>(() => cmd.ExecuteScalarAsync());
             Assert.IsType<OverflowException>(handledException.InnerException);
         }
-#endif
 
         [Fact]
         public async Task ReadMultidimensionalArrayLowCardinality()

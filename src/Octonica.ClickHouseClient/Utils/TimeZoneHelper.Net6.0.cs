@@ -15,8 +15,6 @@
  */
 #endregion
 
-#if NET6_0_OR_GREATER
-
 using System;
 using System.Runtime.CompilerServices;
 
@@ -44,5 +42,3 @@ namespace Octonica.ClickHouseClient.Utils
         }
     }
 }
-
-#endif

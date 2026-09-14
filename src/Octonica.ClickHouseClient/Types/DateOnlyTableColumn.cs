@@ -15,8 +15,6 @@
  */
 #endregion
 
-#if NET6_0_OR_GREATER
-
 using System;
 
 namespace Octonica.ClickHouseClient.Types
@@ -39,5 +37,3 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 }
-
-#endif

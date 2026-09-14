@@ -553,7 +553,6 @@ namespace Octonica.ClickHouseClient
             return GetFieldValue<char>(ordinal);
         }
 
-#if NET6_0_OR_GREATER
         /// <summary>
         /// Gets the value of the specified column as a <see cref="DateOnly"/> object.
         /// </summary>
@@ -563,7 +562,6 @@ namespace Octonica.ClickHouseClient
         {
             return GetFieldValue<DateOnly>(ordinal);
         }
-#endif
 
         /// <summary>
         /// Gets the value of the specified column as a <see cref="DateTime"/> object.

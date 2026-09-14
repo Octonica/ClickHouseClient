@@ -1023,34 +1023,10 @@ namespace Octonica.ClickHouseClient
                     return false;
 
                 var collection = CertificateHelper.LoadFromFile(connectionSettings.RootCertificate);
-#if NET5_0_OR_GREATER
                 chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 chain.ChainPolicy.CustomTrustStore.AddRange(collection);
                 var isValid = chain.Build(cert as X509Certificate2 ?? new X509Certificate2(cert));
                 return isValid;
-#else
-                foreach (var chainElement in chain.ChainElements)
-                {
-                    if (chainElement.ChainElementStatus.Length != 0)
-                    {
-                        bool ignoreError = true;
-                        foreach (var status in chainElement.ChainElementStatus)
-                        {
-                            if (status.Status == X509ChainStatusFlags.UntrustedRoot)
-                                continue;
-
-                            ignoreError = false;
-                            break;
-                        }
-
-                        if (!ignoreError)
-                            break;
-                    }
-
-                    if (collection.Contains(chainElement.Certificate))
-                        return true;
-                }
-#endif
             }
 
             return false;

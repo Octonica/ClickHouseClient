@@ -15,8 +15,6 @@
  */
 #endregion
 
-#if NET6_0_OR_GREATER
-
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
 using Octonica.ClickHouseClient.Utils;
@@ -159,5 +157,3 @@ namespace Octonica.ClickHouseClient.Types
         }
     }
 }
-
-#endif
