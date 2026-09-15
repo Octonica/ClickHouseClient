@@ -10,6 +10,11 @@
 
 #### New Feature
 
+* Add property `ClickHouseCommand.Settings` (`ClickHouseQuerySettingCollection`) for per-query ClickHouse
+  settings sent in the native protocol. Each `ClickHouseQuerySetting` keeps the original value, a wire-formatted
+  string, and `Important`/`Custom` flags. `ClickHouseCommand.Extremes` now maps to the `extremes` setting in
+  that collection.
+
 * Add property `ClickHouseCommand.Activity`. It allows to pass an OpenTelemetry activity (`System.Diagnostics.Activity`)
  with queries executed by the command. The client sends the activity's trace id, span id, W3C trace state and flags in the query
  so the server can attach the query to the same distributed trace.

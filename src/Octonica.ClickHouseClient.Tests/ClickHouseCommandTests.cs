@@ -789,5 +789,100 @@ namespace Octonica.ClickHouseClient.Tests
             var ex = await Assert.ThrowsAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync<int?>(ct));
             Assert.Equal(ClickHouseErrorCodes.EmptyResult, ex.ErrorCode);
         }
+
+        [Fact]
+        public void SettingsAreEmptyByDefault()
+        {
+            using var cmd = new ClickHouseCommand();
+            Assert.Empty(cmd.Settings);
+            Assert.Null(cmd.Extremes);
+        }
+
+        [Fact]
+        public void ExtremesWrapsSettingsCollection()
+        {
+            using var cmd = new ClickHouseCommand();
+
+            cmd.Extremes = true;
+            Assert.True(cmd.Extremes);
+            Assert.True(cmd.Settings.ContainsKey("extremes"));
+            Assert.Equal(true, cmd.Settings["extremes"].Value);
+            Assert.Equal("1", cmd.Settings["extremes"].FormattedValue);
+
+            cmd.Extremes = false;
+            Assert.False(cmd.Extremes);
+            Assert.Equal(false, cmd.Settings["extremes"].Value);
+            Assert.Equal("0", cmd.Settings["extremes"].FormattedValue);
+
+            cmd.Extremes = null;
+            Assert.Null(cmd.Extremes);
+            Assert.False(cmd.Settings.ContainsKey("extremes"));
+        }
+
+        [Fact]
+        public void ExtremesReadsBooleanFromSettings()
+        {
+            using var cmd = new ClickHouseCommand();
+            cmd.Settings.Add("extremes", true);
+            Assert.True(cmd.Extremes);
+        }
+
+        [Fact]
+        public void ExtremesRequiresBooleanValue()
+        {
+            using var cmd = new ClickHouseCommand();
+            cmd.Settings.Add("extremes", 1);
+
+            Assert.Throws<InvalidOperationException>(() => cmd.Extremes);
+        }
+
+        [Fact]
+        public async Task QuerySettingNumeric()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT value FROM system.settings WHERE name = 'max_block_size'";
+
+            var defaultValue = await cmd.ExecuteScalarAsync<string>(ct);
+            Assert.NotEqual("1234", defaultValue);
+
+            cmd.Settings.Add("max_block_size", 1234);
+            Assert.Equal(1234, cmd.Settings["max_block_size"].Value);
+            Assert.Equal("1234", await cmd.ExecuteScalarAsync<string>(ct));
+
+            cmd.Settings.Clear();
+            Assert.Equal(defaultValue, await cmd.ExecuteScalarAsync<string>(ct));
+        }
+
+        [Fact]
+        public async Task QuerySettingString()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT value FROM system.settings WHERE name = 'join_algorithm'";
+
+            var defaultValue = await cmd.ExecuteScalarAsync<string>(ct);
+
+            cmd.Settings.Add("join_algorithm", "hash");
+            Assert.Equal("hash", await cmd.ExecuteScalarAsync<string>(ct));
+
+            cmd.Settings.Clear();
+            Assert.Equal(defaultValue, await cmd.ExecuteScalarAsync<string>(ct));
+        }
+
+        [Fact]
+        public async Task QuerySettingBool()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var cn = await OpenConnectionAsync(cancellationToken: ct);
+            await using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT value FROM system.settings WHERE name = 'extremes'";
+
+            cmd.Settings.Add("extremes", true);
+            Assert.True(cmd.Extremes);
+            Assert.Equal("1", await cmd.ExecuteScalarAsync<string>(ct));
+        }
     }
 }

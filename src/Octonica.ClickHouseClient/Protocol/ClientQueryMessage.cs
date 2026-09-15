@@ -45,7 +45,7 @@ namespace Octonica.ClickHouseClient.Protocol
         public bool CompressionEnabled { get; }
 
         // https://github.com/ClickHouse/ClickHouse/blob/master/dbms/src/Core/Settings.h
-        public IReadOnlyCollection<KeyValuePair<string, string>>? Settings { get; }
+        public IReadOnlyCollection<ClickHouseQuerySetting>? Settings { get; }
 
         public IReadOnlyCollection<KeyValuePair<string, ClickHouseParameterWriter>>? Parameters { get; }
 
@@ -62,7 +62,22 @@ namespace Octonica.ClickHouseClient.Protocol
             ProtocolRevision = builder.ProtocolRevision ?? throw new ArgumentException("The revision of the protocol is required.", nameof(ProtocolRevision));
             Query = builder.Query ?? throw new ArgumentException("The query is required.", nameof(Query));
             CompressionEnabled = builder.CompressionEnabled ?? throw new ArgumentException("Unknown compression mode.", nameof(CompressionEnabled));
-            Settings = builder.Settings == null || builder.Settings.Count == 0 ? null : builder.Settings;
+
+            if (builder.Settings != null && builder.Settings.Count > 0)
+            {
+                foreach (var setting in builder.Settings)
+                {
+                    if (setting.FormattedValue == null)
+                    {
+                        throw new ArgumentException(
+                            $"The query setting \"{setting.Name}\" has no value. Call {nameof(ClickHouseQuerySetting.SetValue)} before executing the command.",
+                            nameof(Settings));
+                    }
+                }
+
+                Settings = builder.Settings;
+            }
+
             Parameters = builder.Parameters == null || builder.Parameters.Count == 0 ? null : builder.Parameters;
             Activity = builder.Activity;
         }
@@ -165,15 +180,16 @@ namespace Octonica.ClickHouseClient.Protocol
 
             if (Settings != null)
             {
-                // All settings are serialized as strings. Before each value the flag `is_important` is serialized.
+                // All settings are serialized as strings. Before each value the flags field is serialized.
                 // https://github.com/ClickHouse/ClickHouse/blob/97d97f6b2e50ab3cf21a25a18cbf1aa327f242e5/src/Core/BaseSettings.h#L19
 
-                const int isImportantFlag = 0x1;
-                foreach (var pair in Settings)
+                foreach (var setting in Settings)
                 {
-                    writer.WriteString(pair.Key);
-                    writer.Write7BitInt32(isImportantFlag);
-                    writer.WriteString(pair.Value);
+                    Debug.Assert(setting.FormattedValue != null);
+
+                    writer.WriteString(setting.Name);
+                    writer.Write7BitInt32((int)setting.GetFlags());
+                    writer.WriteString(setting.FormattedValue);
                 }
             }
 
@@ -284,7 +300,7 @@ namespace Octonica.ClickHouseClient.Protocol
             /// <summary>
             /// Optional
             /// </summary>
-            public IReadOnlyCollection<KeyValuePair<string, string>>? Settings { get; set; }
+            public IReadOnlyCollection<ClickHouseQuerySetting>? Settings { get; set; }
 
             /// <summary>
             /// Optional

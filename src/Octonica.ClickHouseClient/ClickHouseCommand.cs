@@ -39,6 +39,10 @@ namespace Octonica.ClickHouseClient
     /// </summary>
     public sealed class ClickHouseCommand : DbCommand
     {
+        private const string ExtremesSettingName = "extremes";
+        private const string MaxResultRowsSettingName = "max_result_rows";
+        private const string ResultOverflowModeSettingName = "result_overflow_mode";
+
         private string? _commandText;
         private TimeSpan? _commandTimeout;
 
@@ -122,6 +126,14 @@ namespace Octonica.ClickHouseClient
         public ClickHouseTableProviderCollection TableProviders { get; } = new ClickHouseTableProviderCollection();
 
         /// <summary>
+        /// Gets the collection of ClickHouse settings sent with the query over the native protocol.
+        /// </summary>
+        /// <returns>
+        /// The per-query settings. The default is an empty collection.
+        /// </returns>
+        public ClickHouseQuerySettingCollection Settings { get; } = new ClickHouseQuerySettingCollection();
+
+        /// <summary>
         /// Gets or sets the transaction within which the command executes. Always returns <b>null</b>.
         /// </summary>
         /// <returns><b>null</b></returns>
@@ -145,7 +157,39 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Gets or sets value indicating whether the query should be executed with an explicitly defined values of the property 'extremes'.
         /// </summary>
-        public bool? Extremes { get; set; }
+        /// <returns>
+        /// <see langword="true"/> or <see langword="false"/> when the <c>extremes</c> setting is present in <see cref="Settings"/>;
+        /// otherwise <see langword="null"/>. The default is <see langword="null"/>.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">
+        /// The <c>extremes</c> setting is present in <see cref="Settings"/> but its value is not a <see cref="bool"/>.
+        /// </exception>
+        public bool? Extremes
+        {
+            get
+            {
+                if (!Settings.TryGetValue(ExtremesSettingName, out var setting))
+                    return null;
+
+                if (setting.Value is bool value)
+                    return value;
+
+                throw new InvalidOperationException($"The query setting \"{ExtremesSettingName}\" must have a boolean value in order to be accessed via {nameof(Extremes)}.");
+            }
+            set
+            {
+                if (value == null)
+                {
+                    Settings.Remove(ExtremesSettingName);
+                    return;
+                }
+
+                if (Settings.TryGetValue(ExtremesSettingName, out var setting))
+                    setting.SetValue(value.Value);
+                else
+                    Settings.Add(ExtremesSettingName, value.Value);
+            }
+        }
 
         /// <summary>
         /// Gets or sets a value indicating whether profile events should be ignored while reading data.
@@ -853,26 +897,44 @@ namespace Octonica.ClickHouseClient
                 throw ClickHouseHandledException.Wrap(ex);
             }
 
-            List<KeyValuePair<string, string>>? setting = null;
-            if (Extremes != null)
-            {
-                setting = new List<KeyValuePair<string, string>>(1) {new KeyValuePair<string, string>("extremes", Extremes.Value ? "1" : "0")};
-            }
-
+            List<ClickHouseQuerySetting>? settings = null;
             if (session.ServerInfo.Revision >= ClickHouseProtocolRevisions.MinRevisionWithSettingsSerializedAsStrings)
             {
-                if (behavior.HasFlag(CommandBehavior.SchemaOnly) || behavior.HasFlag(CommandBehavior.SingleRow))
+                bool setSingleRowHint = behavior.HasFlag(CommandBehavior.SchemaOnly) | behavior.HasFlag(CommandBehavior.SingleRow);
+                if (Settings.Count > 0)
+                {
+                    settings = new List<ClickHouseQuerySetting>(Settings.Count + (setSingleRowHint ? 2 : 0));
+                    foreach (var setting in Settings)
+                    {
+                        if (setSingleRowHint
+                            && (string.Equals(setting.Name, MaxResultRowsSettingName, StringComparison.Ordinal)
+                                || string.Equals(setting.Name, ResultOverflowModeSettingName, StringComparison.Ordinal)))
+                        {
+                            continue;
+                        }
+
+                        settings.Add(setting);
+                    }
+                }
+
+                if (setSingleRowHint)
                 {
                     // https://github.com/ClickHouse/ClickHouse/blob/master/src/Core/Settings.h
                     // This settings are hints for the server. The result may contain more than one row.
 
-                    setting ??= new List<KeyValuePair<string, string>>(2);
-                    setting.Add(new KeyValuePair<string, string>("max_result_rows", "1"));
-                    setting.Add(new KeyValuePair<string, string>("result_overflow_mode", "break"));
+                    settings ??= new List<ClickHouseQuerySetting>(2);
+
+                    var maxResultRows = new ClickHouseQuerySetting(MaxResultRowsSettingName);
+                    maxResultRows.SetValue("1");
+                    settings.Add(maxResultRows);
+
+                    var overflowMode = new ClickHouseQuerySetting(ResultOverflowModeSettingName);
+                    overflowMode.SetValue("break");
+                    settings.Add(overflowMode);
                 }
             }
 
-            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, QueryId = QueryId, Query = commandText, Settings = setting, Parameters = parameterWriters, Activity = Activity };
+            var messageBuilder = new ClientQueryMessage.Builder { QueryKind = QueryKind.InitialQuery, QueryId = QueryId, Query = commandText, Settings = settings, Parameters = parameterWriters, Activity = Activity };
             await session.SendQuery(messageBuilder, tableWriters, async, cancellationToken);
 
             return commandText;
