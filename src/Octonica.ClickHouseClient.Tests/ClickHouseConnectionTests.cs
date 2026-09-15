@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2021, 2023 Octonica
+/* Copyright 2019-2021, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -245,6 +245,66 @@ namespace Octonica.ClickHouseClient.Tests
             {
                 disposed = true;
             }
+        }
+
+        [Fact]
+        public async Task KeepStateAfterServerError()
+        {
+            await using var cn = await OpenConnectionAsync();
+            using var cmd = cn.CreateCommand();
+
+            const string getSettingValueQuery = "SELECT value FROM system.settings WHERE name = 'max_block_size'";
+            cmd.CommandText = getSettingValueQuery;
+            var defaultValue = await cmd.ExecuteScalarAsync<string>();
+            Assert.NotEqual("1234", defaultValue);
+
+            // Change the state of the session
+            cmd.CommandText = "SET max_block_size = 1234";
+            await cmd.ExecuteNonQueryAsync();
+
+            cmd.CommandText = "DROP TABLE unknown_table";
+            await Assert.ThrowsAsync<ClickHouseServerException>(() => cmd.ExecuteNonQueryAsync());
+
+            // The connection must be alive AND its state intact
+            Assert.Equal(ConnectionState.Open, cn.State);
+            cmd.CommandText = getSettingValueQuery;
+            Assert.Equal("1234", await cmd.ExecuteScalarAsync<string>());
+        }
+
+        [Fact]
+        public async Task KeepStateAfterServerErrorInDataReader()
+        {
+            await using var cn = await OpenConnectionAsync();
+            using var cmd = cn.CreateCommand();
+
+            const string getSettingValueQuery = "SELECT value FROM system.settings WHERE name = 'max_block_size'";
+            cmd.CommandText = getSettingValueQuery;
+            Assert.NotEqual("1234", await cmd.ExecuteScalarAsync<string>());
+
+            // Change the state of the session
+            cmd.CommandText = "SET max_block_size = 1234";
+            await cmd.ExecuteNonQueryAsync();
+
+            cmd.CommandText = @"SELECT toInt64(number) FROM numbers(10)
+UNION ALL
+SELECT intDiv(1, toInt64(number) - 10) FROM numbers(11)
+SETTINGS max_threads = 1";
+
+            int count = 0;
+            await Assert.ThrowsAsync<ClickHouseServerException>(
+                async () =>
+                {
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                        ++count;
+                });
+
+            Assert.True(count > 0, "The error must arrive after the first block was read.");
+
+            // The connection must be alive AND its state intact
+            Assert.Equal(ConnectionState.Open, cn.State);
+            cmd.CommandText = getSettingValueQuery;
+            Assert.Equal("1234", await cmd.ExecuteScalarAsync<string>());
         }
     }
 }

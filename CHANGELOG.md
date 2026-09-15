@@ -17,6 +17,10 @@
 
 #### Bug Fix
 
+* `ExecuteNonQuery` and `ExecuteNonQueryAsync` no longer break the connection when the server returns an error.
+  The next command on the same connection failed with "The connection is closed."; the connection and its session
+  state are now preserved, matching `ExecuteReader` and `ExecuteScalar`
+  ([#58](https://github.com/Octonica/ClickHouseClient/issues/58)).
 * Fixed an error when reading the result of a two-level aggregation: "ClickHouseClient received N out-of-order bucket(s) in the server reply."
  Servers since v25.9 may produce aggregation buckets out of order ([#112](https://github.com/Octonica/ClickHouseClient/issues/112)).
 * Fixed an error when reading a column with the `Replicated` serialization mode whose indexes are serialized as `UInt64` values:

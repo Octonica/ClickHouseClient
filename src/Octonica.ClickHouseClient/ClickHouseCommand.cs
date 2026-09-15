@@ -303,6 +303,13 @@ namespace Octonica.ClickHouseClient
 
                 throw;
             }
+            catch (ClickHouseServerException)
+            {
+                // The server sends an error instead of the end of the stream and returns to the state in which
+                // it is ready to accept the next query. The session may be disposed as usual, keeping the connection
+                // and its state (e.g. settings applied with SET) intact.
+                throw;
+            }
             catch (Exception ex)
             {
                 if (session != null)
