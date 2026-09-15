@@ -26,8 +26,9 @@ All three live under [src](src) and are in [Octonica.ClickHouseClient.sln](src/O
 * `Octonica.ClickHouseClient` — the library. Targets `net6.0`, `net8.0` and `net10.0`.
   `Nullable` is enabled, `TreatWarningsAsErrors` is on, and `GenerateDocumentationFile` is on.
 * `Octonica.ClickHouseClient.Tests` — xUnit v3. Targets `net8.0` and `net10.0`. Most tests need a
-  live server; see [CONTRIBUTING.md](CONTRIBUTING.md) for how to point them at one. The library grants
-  the test assembly `InternalsVisibleTo`, so internal classes can be tested directly.
+  live server; see [CONTRIBUTING.md](CONTRIBUTING.md) for how to point them at one. Pass `--framework`
+  so the two TFMs do not run against that server at once. The library grants the test assembly
+  `InternalsVisibleTo`, so internal classes can be tested directly.
 * `Octonica.ClickHouseClient.Benchmarks` — BenchmarkDotNet.
 
 ## Repository layout

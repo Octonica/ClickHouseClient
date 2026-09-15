@@ -170,8 +170,14 @@ build `net10.0` covers everything.
 
 ```sh
 dotnet build src/Octonica.ClickHouseClient.sln
-dotnet test src/Octonica.ClickHouseClient.Tests/Octonica.ClickHouseClient.Tests.csproj
+dotnet test src/Octonica.ClickHouseClient.Tests/Octonica.ClickHouseClient.Tests.csproj --framework net8.0
+dotnet test src/Octonica.ClickHouseClient.Tests/Octonica.ClickHouseClient.Tests.csproj --framework net10.0
 ```
+
+The test project targets `net8.0` and `net10.0`. Always pass `--framework` so only one of them hits the
+server at a time. `dotnet test` without it launches both concurrently against the same instance; they
+share deterministic temporary table names and then collide, which shows up as spurious
+`ClickHouseColumnWriterTests` failures.
 
 Most of the suite consists of integration tests that need **a live ClickHouse server**. Point them at
 one in either of two ways:
