@@ -956,8 +956,8 @@ namespace Octonica.ClickHouseClient
 
                 if (closeConnection || sessionTokenSource != null)
                     resources = new SessionResources(closeConnection ? connection : null, sessionTokenSource);
-                
-                return await connection.OpenSession(async, resources, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
+
+                return await connection.OpenSession(async: async, waitIfBusy: false, resources, sessionTokenSource?.Token ?? CancellationToken.None, cancellationToken);
             }
             catch
             {

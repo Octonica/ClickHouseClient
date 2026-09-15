@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,6 +104,12 @@ namespace Octonica.ClickHouseClient
         public ClickHouseParameterMode ParametersMode { get; }
 
         /// <summary>
+        /// Gets the behavior of a command when the connection already has an active session.
+        /// See <see cref="ClickHouseBusyConnectionMode"/> for details.
+        /// </summary>
+        public ClickHouseBusyConnectionMode BusyConnectionMode { get; }
+
+        /// <summary>
         /// Gets the 'quota key' passed with the query. This key is used by the ClickHouse server for tracking quotas.
         /// </summary>
         public string? QuotaKey { get; }
@@ -133,6 +139,7 @@ namespace Octonica.ClickHouseClient
             RootCertificate = builder.RootCertificate;
             ServerCertificateHash = ParseHashString(builder.ServerCertificateHash);
             ParametersMode = builder.ParametersMode;
+            BusyConnectionMode = builder.BusyConnectionMode;
             QuotaKey = string.IsNullOrEmpty(builder.QuotaKey) ? null : builder.QuotaKey;
         }
 

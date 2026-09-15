@@ -20,8 +20,16 @@
  so the server can attach the query to the same distributed trace.
  Overloads of `ClickHouseConnection.CreateColumnWriter` and `CreateColumnWriterAsync` accept the same activity for bulk INSERT.
 
+* Add connection setting `BusyConnectionMode` (`ClickHouseBusyConnectionMode`, default `Wait`). With `Throw`,
+  a command on a connection that already has an active session throws `ClickHouseException` with the error code
+  `OperationInProgress` instead of waiting for the session to be released
+  ([#59](https://github.com/Octonica/ClickHouseClient/issues/59)).
+
 #### Bug Fix
 
+* A second **synchronous** command on the same thread no longer hangs while a data reader or column writer is
+  open on the connection; it throws `ClickHouseException` with the error code `OperationInProgress`
+  ([#59](https://github.com/Octonica/ClickHouseClient/issues/59)).
 * `ExecuteNonQuery` and `ExecuteNonQueryAsync` no longer break the connection when the server returns an error.
   The next command on the same connection failed with "The connection is closed."; the connection and its session
   state are now preserved, matching `ExecuteReader` and `ExecuteScalar`

@@ -154,5 +154,10 @@ namespace Octonica.ClickHouseClient.Exceptions
         /// The code for an error caused by an attempt to read from an empty result set.
         /// </summary>
         public const int EmptyResult = 25;
+
+        /// <summary>
+        /// The code for an error caused by an attempt to execute a command while another command, data reader, or column writer is using the connection.
+        /// </summary>
+        public const int OperationInProgress = 26;
     }
 }

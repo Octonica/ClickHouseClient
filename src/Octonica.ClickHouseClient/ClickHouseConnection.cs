@@ -428,7 +428,7 @@ namespace Octonica.ClickHouseClient
             bool cancelOnFailure = false;
             try
             {
-                session = await connectionState.TcpClient.OpenSession(async, null, CancellationToken.None, cancellationToken);
+                session = await connectionState.TcpClient.OpenSession(async: async, waitIfBusy: false, null, CancellationToken.None, cancellationToken);
 
                 var messageBuilder = new ClientQueryMessage.Builder {QueryKind = QueryKind.InitialQuery, Query = insertFormatCommand, Activity = activity};
                 var query = await session.SendQuery(messageBuilder, null, async, cancellationToken);
@@ -797,7 +797,7 @@ namespace Octonica.ClickHouseClient
                 {
                     try
                     {
-                        session = await OpenSession(async, null, CancellationToken.None, ts.Token);
+                        session = await OpenSession(async: async, waitIfBusy: true, null, CancellationToken.None, ts.Token);
                     }
                     catch (OperationCanceledException ex)
                     {
@@ -855,10 +855,10 @@ namespace Octonica.ClickHouseClient
             }
         }
 
-        internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+        internal ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, bool waitIfBusy, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
             var connectionSession = new ConnectionSession(this, externalResources);
-            return connectionSession.OpenSession(async, sessionCancellationToken, cancellationToken);
+            return connectionSession.OpenSession(async: async, waitIfBusy: waitIfBusy, sessionCancellationToken, cancellationToken);
         }
 
         internal async ValueTask Close(bool async)
@@ -880,9 +880,17 @@ namespace Octonica.ClickHouseClient
                         try
                         {
                             // Acquire session for preventing access to the communication object
-                            var sessionTask = tcpClient?.OpenSession(async, null, CancellationToken.None, CancellationToken.None);
-                            if (sessionTask != null)
-                                session = await sessionTask.Value;
+                            if (tcpClient != null && tcpClient.HasSynchronousSessionOnCurrentThread)
+                            {
+                                // Waiting would never end: this thread holds the session, so it can't release it. (#59)
+                                tcpClient.Abort();
+                            }
+                            else
+                            {
+                                var sessionTask = tcpClient?.OpenSession(async: async, waitIfBusy: true, null, CancellationToken.None, CancellationToken.None);
+                                if (sessionTask != null)
+                                    session = await sessionTask.Value;
+                            }
                         }
                         catch (ObjectDisposedException)
                         {
@@ -1055,10 +1063,10 @@ namespace Octonica.ClickHouseClient
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is closed.");                
             }
 
-            public ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+            public ValueTask<ClickHouseTcpClient.Session> OpenSession(bool async, bool waitIfBusy, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
             {
                 Debug.Assert(_state.TcpClient != null);
-                return _state.TcpClient.OpenSession(async, this, sessionCancellationToken, cancellationToken);
+                return _state.TcpClient.OpenSession(async: async, waitIfBusy: waitIfBusy, this, sessionCancellationToken, cancellationToken);
             }
 
             public ValueTask Release(bool async)

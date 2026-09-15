@@ -83,6 +83,122 @@ namespace Octonica.ClickHouseClient.Tests
         }
 
         [Fact]
+        public void SecondSyncCommandOnSameThreadThrows()
+        {
+            using var cn = OpenConnection();
+            using var cmd = cn.CreateCommand("SELECT * FROM system.numbers");
+            using var reader = cmd.ExecuteReader();
+            Assert.True(reader.Read());
+
+            using var cmd2 = cn.CreateCommand("SELECT 1");
+            var readerEx = Assert.Throws<ClickHouseException>(() => cmd2.ExecuteReader());
+            Assert.Equal(ClickHouseErrorCodes.OperationInProgress, readerEx.ErrorCode);
+
+            var nonQueryEx = Assert.Throws<ClickHouseException>(() => cmd2.ExecuteNonQuery());
+            Assert.Equal(ClickHouseErrorCodes.OperationInProgress, nonQueryEx.ErrorCode);
+
+            var scalarEx = Assert.Throws<ClickHouseException>(() => cmd2.ExecuteScalar());
+            Assert.Equal(ClickHouseErrorCodes.OperationInProgress, scalarEx.ErrorCode);
+
+            reader.Dispose();
+
+            Assert.Equal((byte)1, cmd2.ExecuteScalar<byte>());
+        }
+
+        [Fact]
+        public async Task SecondCommandOnAnotherThreadWaitsByDefault()
+        {
+            using var cn = OpenConnection();
+            using var reader = cn.CreateCommand("SELECT * FROM system.numbers").ExecuteReader();
+            Assert.True(reader.Read());
+
+            var started = new ManualResetEventSlim();
+            var task = Task.Run(() =>
+            {
+                started.Set();
+                using var cmd = cn.CreateCommand("SELECT 1");
+                return cmd.ExecuteScalar<byte>();
+            });
+
+            Assert.True(started.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.False(task.Wait(TimeSpan.FromMilliseconds(200)));
+
+            reader.Dispose();
+
+            Assert.Equal((byte)1, await task);
+        }
+
+        [Fact]
+        public void CloseConnectionWithOpenSyncReader()
+        {
+            using var cn = OpenConnection();
+            var reader = cn.CreateCommand("SELECT * FROM system.numbers").ExecuteReader();
+            Assert.True(reader.Read());
+
+            cn.Close();
+            Assert.Equal(ConnectionState.Closed, cn.State);
+
+            reader.Dispose();
+        }
+
+        [Fact]
+        public async Task CloseConnectionAsyncWithOpenSyncReader()
+        {
+            using var cn = OpenConnection();
+            var reader = cn.CreateCommand("SELECT * FROM system.numbers").ExecuteReader();
+            Assert.True(reader.Read());
+
+            // The timeout is a guard against a deadlock. A regression should fail this test instead of hanging it.
+            var closeTask = cn.CloseAsync();
+            var completedTask = await Task.WhenAny(closeTask, Task.Delay(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.Same(closeTask, completedTask);
+
+            Assert.Equal(ConnectionState.Closed, cn.State);
+
+            reader.Dispose();
+        }
+
+        [Fact]
+        public async Task ThrowModeRejectsSecondAsyncReader()
+        {
+            var settings = new ClickHouseConnectionStringBuilder(GetDefaultConnectionSettings())
+            {
+                BusyConnectionMode = ClickHouseBusyConnectionMode.Throw
+            }.BuildSettings();
+
+            await using var cn = await OpenConnectionAsync(settings, TestContext.Current.CancellationToken);
+            await using var cmd = cn.CreateCommand("SELECT * FROM system.numbers");
+            await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
+
+            await using var cmd2 = cn.CreateCommand("SELECT 1");
+            var ex = await Assert.ThrowsAsync<ClickHouseException>(() => cmd2.ExecuteReaderAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(ClickHouseErrorCodes.OperationInProgress, ex.ErrorCode);
+        }
+
+        [Fact]
+        public async Task ThrowModeRejectsCommandOnAnotherThread()
+        {
+            var settings = new ClickHouseConnectionStringBuilder(GetDefaultConnectionSettings())
+            {
+                BusyConnectionMode = ClickHouseBusyConnectionMode.Throw
+            }.BuildSettings();
+
+            await using var cn = await OpenConnectionAsync(settings, TestContext.Current.CancellationToken);
+            await using var reader = await cn.CreateCommand("SELECT * FROM system.numbers").ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
+
+            var task = Task.Run(() =>
+            {
+                using var cmd = cn.CreateCommand("SELECT 1");
+                return cmd.ExecuteScalar();
+            });
+
+            var ex = await Assert.ThrowsAsync<ClickHouseException>(() => task);
+            Assert.Equal(ClickHouseErrorCodes.OperationInProgress, ex.ErrorCode);
+        }
+
+        [Fact]
         public async Task TotalsWithNextResult()
         {
             await using var cn = await OpenConnectionAsync();

@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -134,6 +134,9 @@ namespace Octonica.ClickHouseClient.Tests
             Assert.Equal(ClickHouseConnectionStringBuilder.DefaultParametersMode, settings.ParametersMode);
             ++checkedPropertiesCount;
 
+            Assert.Equal(ClickHouseConnectionStringBuilder.DefaultBusyConnectionMode, settings.BusyConnectionMode);
+            ++checkedPropertiesCount;
+
             Assert.Null(settings.QuotaKey);
             ++checkedPropertiesCount;
 
@@ -159,6 +162,7 @@ namespace Octonica.ClickHouseClient.Tests
                 "RootCertificate=/usr/local/share/ca-certificates/Yandex/YandexInternalRootCA.pem;" +
                 "ServerCertificateHash=1234-5678 9abc-def0;" +
                 "ParametersMode=Interpolate;" +
+                "BusyConnectionMode=Throw;" +
                 "QuotaKey='unlimited'");
 
             var settings = builder.BuildSettings();
@@ -211,6 +215,9 @@ namespace Octonica.ClickHouseClient.Tests
             ++checkedPropertiesCount;
 
             Assert.Equal(ClickHouseParameterMode.Interpolate, settings.ParametersMode);
+            ++checkedPropertiesCount;
+
+            Assert.Equal(ClickHouseBusyConnectionMode.Throw, settings.BusyConnectionMode);
             ++checkedPropertiesCount;
 
             Assert.Equal("unlimited", settings.QuotaKey);

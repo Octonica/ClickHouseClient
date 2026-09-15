@@ -43,8 +43,18 @@ namespace Octonica.ClickHouseClient
 
         private Exception? _unhandledException;
         private int _state;
+        private volatile int _syncSessionOwnerThreadId;
 
         public ClickHouseTcpClientState State => (ClickHouseTcpClientState)_state;
+
+        internal bool HasSynchronousSessionOnCurrentThread
+        {
+            get
+            {
+                var ownerThreadId = _syncSessionOwnerThreadId;
+                return ownerThreadId != 0 && ownerThreadId == Environment.CurrentManagedThreadId;
+            }
+        }
 
         public ClickHouseServerInfo ServerInfo { get; private set; }
 
@@ -66,17 +76,40 @@ namespace Octonica.ClickHouseClient
             _sslStream = sslStream;
         }
 
-        public async ValueTask<Session> OpenSession(bool async, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
+        public async ValueTask<Session> OpenSession(bool async, bool waitIfBusy, IClickHouseSessionExternalResources? externalResources, CancellationToken sessionCancellationToken, CancellationToken cancellationToken)
         {
             var state = (ClickHouseTcpClientState)_state;
             if (state != ClickHouseTcpClientState.Failed)
             {
                 try
                 {
-                    if (async)
+                    if (!async && !waitIfBusy)
+                    {
+                        // A second synchronous call on the thread that holds the session can only deadlock. (#59)
+                        if (HasSynchronousSessionOnCurrentThread)
+                            throw CreateOperationInProgressException();
+                    }
+
+                    var acquired = true;
+                    if (!waitIfBusy && _settings.BusyConnectionMode == ClickHouseBusyConnectionMode.Throw)
+                    {
+                        acquired = async
+                            ? await _semaphore.WaitAsync(0, cancellationToken)
+                            : _semaphore.Wait(0, cancellationToken);
+                    }
+                    else if (async)
+                    {
                         await _semaphore.WaitAsync(cancellationToken);
+                    }
                     else
+                    {
                         _semaphore.Wait(cancellationToken);
+                    }
+
+                    if (!acquired)
+                        throw CreateOperationInProgressException();
+
+                    _syncSessionOwnerThreadId = async ? 0 : Environment.CurrentManagedThreadId;
 
                     var previousState = (ClickHouseTcpClientState)Interlocked.CompareExchange(ref _state, (int)ClickHouseTcpClientState.Active, (int)ClickHouseTcpClientState.Ready);
                     Debug.Assert(previousState != ClickHouseTcpClientState.Active);
@@ -105,9 +138,24 @@ namespace Octonica.ClickHouseClient
             }
             catch
             {
+                _syncSessionOwnerThreadId = 0;
                 _semaphore.Release();
                 throw;
             }
+        }
+
+        // Closes the client without acquiring the session. The client is marked as failed rather than merely disposed,
+        // so a thread waiting for the session gets "Connection is broken." instead of ObjectDisposedException.
+        internal void Abort()
+        {
+            SetFailed(null);
+        }
+
+        private static ClickHouseException CreateOperationInProgressException()
+        {
+            return new ClickHouseException(
+                ClickHouseErrorCodes.OperationInProgress,
+                "A command is already in progress on this connection. Close the current data reader or column writer before executing another command on the same connection.");
         }
 
         private bool TryInterceptMessage(IServerMessage message)
@@ -717,6 +765,7 @@ namespace Octonica.ClickHouseClient
                     return default;
 
                 Interlocked.CompareExchange(ref _client._state, (int)ClickHouseTcpClientState.Ready, (int)ClickHouseTcpClientState.Active);
+                _client._syncSessionOwnerThreadId = 0;
                 _client._semaphore.Release();
                 IsDisposed = true;
 

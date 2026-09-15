@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2023 Octonica
+/* Copyright 2019-2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,6 +79,11 @@ namespace Octonica.ClickHouseClient
         /// The default value for the mode of passing parameters to the query is <see cref="ClickHouseParameterMode.Default"/>.
         /// </summary>
         public const ClickHouseParameterMode DefaultParametersMode = ClickHouseParameterMode.Default;
+
+        /// <summary>
+        /// The default value for the busy-connection mode is <see cref="ClickHouseBusyConnectionMode.Wait"/>.
+        /// </summary>
+        public const ClickHouseBusyConnectionMode DefaultBusyConnectionMode = ClickHouseBusyConnectionMode.Wait;
 
         /// <summary>
         /// Gets or sets the name or the IP address of the host.
@@ -257,6 +262,19 @@ namespace Octonica.ClickHouseClient
         }
 
         /// <summary>
+        /// Gets or sets the behavior of a command when the connection already has an active session.
+        /// See <see cref="ClickHouseBusyConnectionMode"/> for details.
+        /// </summary>
+        /// <returns>
+        /// The busy-connection mode. The default value is <see cref="DefaultBusyConnectionMode"/>.
+        /// </returns>
+        public ClickHouseBusyConnectionMode BusyConnectionMode
+        {
+            get => GetEnumOrDefault(nameof(BusyConnectionMode), DefaultBusyConnectionMode);
+            set => this[nameof(BusyConnectionMode)] = value == DefaultBusyConnectionMode ? null : value.ToString("G");
+        }
+
+        /// <summary>
         /// Gets the 'quota key' passed with the query. This key is used by the ClickHouse server for tracking quotas.
         /// </summary>
         /// <returns>The value of 'quota key' passed with the query.</returns>
@@ -289,6 +307,7 @@ namespace Octonica.ClickHouseClient
                 nameof(RootCertificate),
                 nameof(ServerCertificateHash),
                 nameof(ParametersMode),
+                nameof(BusyConnectionMode),
                 nameof(QuotaKey)
             };
         }
@@ -331,6 +350,7 @@ namespace Octonica.ClickHouseClient
             RootCertificate = settings.RootCertificate;
             ServerCertificateHash = HashToString(settings.ServerCertificateHash);
             ParametersMode = settings.ParametersMode;
+            BusyConnectionMode = settings.BusyConnectionMode;
             QuotaKey = settings.QuotaKey;
 
             if (settings.ClientName != DefaultClientName)
