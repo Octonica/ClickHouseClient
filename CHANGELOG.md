@@ -1,4 +1,4 @@
-### Octonica.ClickHouseClient Next Version, Unscheduled
+### Octonica.ClickHouseClient v4.1.6, 2026-09-16
 
 #### Backward Incompatible Change
 
