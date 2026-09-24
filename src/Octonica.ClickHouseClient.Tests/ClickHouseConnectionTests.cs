@@ -23,6 +23,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Octonica.ClickHouseClient.Exceptions;
 using Octonica.ClickHouseClient.Protocol;
+using Octonica.ClickHouseClient.Types;
 using Xunit;
 
 namespace Octonica.ClickHouseClient.Tests
@@ -305,6 +306,37 @@ SETTINGS max_threads = 1";
             Assert.Equal(ConnectionState.Open, cn.State);
             cmd.CommandText = getSettingValueQuery;
             Assert.Equal("1234", await cmd.ExecuteScalarAsync<string>());
+        }
+
+        [Fact]
+        public async Task ReopenAfterClientSideFailure()
+        {
+            var ct = TestContext.Current.CancellationToken;
+
+            var settings = GetDefaultConnectionSettings();
+            // Profile events sent with every result, so the rejected type should be something not present in profile events tables
+            var rejectingTypeInfoProvider = new TestRejectingTypeInfoProvider("Date");
+
+            await using var cn = new ClickHouseConnection(settings, rejectingTypeInfoProvider);
+            await cn.OpenAsync(ct);
+
+            using var cmd = cn.CreateCommand("SELECT 1");
+            Assert.Equal((byte)1, await cmd.ExecuteScalarAsync<byte>(ct));
+            Assert.Equal(ConnectionState.Open, cn.State);
+
+            cmd.CommandText = "SELECT toDate('2020-01-01')";
+            var typeEx = await Assert.ThrowsAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync(ct));
+            Assert.Equal(ClickHouseErrorCodes.TypeNotSupported, typeEx.ErrorCode);
+            Assert.Equal(ConnectionState.Broken, cn.State);
+
+            cmd.CommandText = "SELECT 1";
+            var closedEx = await Assert.ThrowsAsync<ClickHouseException>(() => cmd.ExecuteScalarAsync(ct));
+            Assert.Equal(ClickHouseErrorCodes.ConnectionClosed, closedEx.ErrorCode);
+
+            await cn.OpenAsync(ct);
+            Assert.Equal(ConnectionState.Open, cn.State);
+            cmd.CommandText = "SELECT 1";
+            Assert.Equal((byte)1, await cmd.ExecuteScalarAsync<byte>(ct));
         }
     }
 }

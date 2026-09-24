@@ -297,6 +297,11 @@ namespace Octonica.ClickHouseClient
         /// <summary>
         /// Opens a database connection.
         /// </summary>
+        /// <remarks>
+        /// A connection in the <see cref="ConnectionState.Broken"/> state can be opened again when its previous TCP channel
+        /// has already been closed. Opening it starts a new session. Session settings and temporary tables from the previous
+        /// session are not preserved.
+        /// </remarks>
         public override void Open()
         {
             TaskHelper.WaitNonAsyncTask(Open(false, CancellationToken.None));
@@ -307,6 +312,11 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         /// <param name="cancellationToken">The cancellation instruction.</param>
         /// <returns>A <see cref="Task"/> representing asyncronous operation.</returns>
+        /// <remarks>
+        /// A connection in the <see cref="ConnectionState.Broken"/> state can be opened again when its previous TCP channel
+        /// has already been closed. Opening it starts a new session. Session settings and temporary tables from the previous
+        /// session are not preserved.
+        /// </remarks>
         public override async Task OpenAsync(CancellationToken cancellationToken)
         {
             await Open(true, cancellationToken);
@@ -530,7 +540,11 @@ namespace Octonica.ClickHouseClient
                 case ConnectionState.Connecting:
                     throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is already opening.");
                 case ConnectionState.Broken:
-                    throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is broken.");
+                    // The previous TCP channel was closed with the client. A new session can be opened. (#113)
+                    if (connectionState.TcpClient != null)
+                        throw new ClickHouseException(ClickHouseErrorCodes.InvalidConnectionState, "The connection is broken.");
+
+                    break;
                 default:
                     throw new NotSupportedException($"Internal error. The state {_connectionState} is not supported.");
             }

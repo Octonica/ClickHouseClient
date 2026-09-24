@@ -1,3 +1,10 @@
+### Octonica.ClickHouseClient Next Version, Unscheduled
+
+#### Bug Fix
+
+* `ClickHouseConnection.Open` and `OpenAsync` can reopen a connection in the `Broken` state when the previous TCP channel was closed. A client-side failure, such as reading an unsupported column type, no longer forces the caller to create a new connection object. The reopened connection is a new session
+  ([#113](https://github.com/Octonica/ClickHouseClient/issues/113)).
+
 ### Octonica.ClickHouseClient v4.1.6, 2026-09-16
 
 #### Backward Incompatible Change
