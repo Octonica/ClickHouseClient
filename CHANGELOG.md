@@ -10,6 +10,10 @@
 * Bulk insert with compression (`Compress=true`, the default) no longer slows down quadratically with the size of a block.
   The time spent on buffering a block before compression is now proportional to the size of the block
   ([#115](https://github.com/Octonica/ClickHouseClient/issues/115)).
+* The client compresses data with the default LZ4 level instead of LZ4 HC (`L10_OPT`). The server uses the same level for
+  the network compression. Bulk insert with compression (`Compress=true`, the default) is no longer limited by the speed
+  of compression; the compressed traffic is slightly larger
+  ([#116](https://github.com/Octonica/ClickHouseClient/issues/116)).
 
 ### Octonica.ClickHouseClient v4.1.6, 2026-09-16
 

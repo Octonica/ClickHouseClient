@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020 Octonica
+/* Copyright 2019-2020, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,9 @@ namespace Octonica.ClickHouseClient.Protocol
         public Lz4CompressionEncoder(int bufferSize, int blockSize)
             : base(bufferSize)
         {
-            _encoder = new LZ4BlockEncoder(LZ4Level.L10_OPT, blockSize);
+            // The default LZ4 level, the same as the server uses for the network compression.
+            // High compression levels are several times slower and make compression the bottleneck of bulk insert (#116).
+            _encoder = new LZ4BlockEncoder(LZ4Level.L00_FAST, blockSize);
             _compressedBuffer = new byte[LZ4Codec.MaximumOutputSize(blockSize)];
         }
 
