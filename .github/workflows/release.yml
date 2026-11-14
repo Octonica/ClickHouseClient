@@ -1,0 +1,136 @@
+# Publishes Octonica.ClickHouseClient to nuget.org when a GitHub release is published.
+#
+# How to release:
+#   1. Create a GitHub release with a tag of the form v<major>.<minor>.<patch>[-<suffix>],
+#      for example v4.1.7 or v4.1.7-beta.1. A tag with a suffix must be marked as a pre-release
+#      and a tag without a suffix must not.
+#   2. Publish the release. This workflow builds the package with the version taken from the tag,
+#      attaches the .nupkg file to the release and pushes it to nuget.org.
+#
+# The version in Octonica.ClickHouseClient.csproj is only a default for local builds; the tag overrides it.
+#
+# Running the workflow manually (workflow_dispatch) builds the package for the given version and uploads it
+# as a workflow artifact. It never publishes anything.
+#
+# Publishing uses nuget.org Trusted Publishing, so there is no long-lived API key:
+# https://learn.microsoft.com/nuget/nuget-org/trusted-publishing
+# Setup on nuget.org: a trusted publishing policy owned by the organization that owns the package with
+#   Repository Owner: Octonica, Repository: ClickHouseClient, Workflow File: release.yml, Environment: release.
+# Setup on GitHub: the secret NUGET_USER with the nuget.org user name (profile name, not e-mail)
+# of a member of that organization.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version, for example 4.1.7-beta.1
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Get the version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            tag="$RELEASE_TAG"
+          else
+            tag="v$INPUT_VERSION"
+          fi
+
+          if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::The tag '$tag' doesn't match v<major>.<minor>.<patch>[-<suffix>]."
+            exit 1
+          fi
+
+          version="${BASH_REMATCH[1]}"
+          suffix="${BASH_REMATCH[2]}"
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            if [ -n "$suffix" ] && [ "$RELEASE_PRERELEASE" != "true" ]; then
+              echo "::error::The version $version$suffix is a pre-release version, but the release is not marked as a pre-release."
+              exit 1
+            fi
+            if [ -z "$suffix" ] && [ "$RELEASE_PRERELEASE" = "true" ]; then
+              echo "::error::The release is marked as a pre-release, but the version $version has no pre-release suffix."
+              exit 1
+            fi
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: >
+          dotnet pack src/Octonica.ClickHouseClient/Octonica.ClickHouseClient.csproj
+          --configuration Release
+          --output artifacts
+          -p:ClickHouseClientVersion=${{ steps.version.outputs.version }}
+          -p:ClickHouseClientVersionSuffix=${{ steps.version.outputs.suffix }}
+          -p:ContinuousIntegrationBuild=true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    needs: pack
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # attach the package to the release
+      id-token: write # nuget.org Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: artifacts
+
+      - name: Attach the package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.pack.outputs.tag }}
+        run: gh release upload "$TAG" artifacts/*.nupkg --repo "$GITHUB_REPOSITORY" --clobber
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Get a temporary nuget.org API key
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to nuget.org
+        run: >
+          dotnet nuget push artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
