@@ -1,5 +1,5 @@
 ﻿#region License Apache 2.0
-/* Copyright 2019-2020, 2023 Octonica
+/* Copyright 2019-2020, 2023, 2026 Octonica
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ namespace Octonica.ClickHouseClient.Protocol
         private readonly List<(int bufferIndex, int offset, int length)> _sequences = new List<(int bufferIndex, int offset, int length)>();
 
         private int _acquiredBufferIndex = -1;
+        private int _writeBufferIndex;
 
         protected abstract byte AlgorithmIdentifier { get; }
 
@@ -68,17 +69,21 @@ namespace Octonica.ClickHouseClient.Protocol
             if (_acquiredBufferIndex >= 0)
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is already in progress.");
 
-            for (var i = _buffers.Count - 1; i >= 0; i--)
+            // Buffers are filled one by one starting from _writeBufferIndex. A buffer which is not large enough for the requested size
+            // is skipped and is never returned to until the next Reset. Searching for free space in all buffers on each call
+            // made writing of a large block (thousands of buffers) quadratic (#115).
+            for (; _writeBufferIndex < _buffers.Count; _writeBufferIndex++)
             {
-                (var buffer, int position) = _buffers[i];
+                (var buffer, int position) = _buffers[_writeBufferIndex];
                 if (buffer.Length - position >= sizeHint)
                 {
-                    _acquiredBufferIndex = i;
+                    _acquiredBufferIndex = _writeBufferIndex;
                     return (buffer, position);
                 }
             }
 
             _acquiredBufferIndex = _buffers.Count;
+            _writeBufferIndex = _buffers.Count;
             var nextBuffer = new byte[Math.Max(sizeHint, _bufferSize)];
             _buffers.Add((nextBuffer, 0));
             return (nextBuffer, 0);
@@ -116,6 +121,7 @@ namespace Octonica.ClickHouseClient.Protocol
                 throw new ClickHouseException(ClickHouseErrorCodes.InternalError, "Internal error. Writing is in progress.");
 
             _sequences.Clear();
+            _writeBufferIndex = 0;
 
             for (int i = 0; i < _buffers.Count; i++)
                 _buffers[i] = (_buffers[i].buffer, 0);
