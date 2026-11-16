@@ -114,7 +114,8 @@ namespace Octonica.ClickHouseClient
         /// </summary>
         public string? QuotaKey { get; }
 
-        internal readonly int CompressionBlockSize = 1024 * 8; // Maybe it should be configurable
+        // The same as the default value of the server setting max_compress_block_size (#117)
+        internal readonly int CompressionBlockSize = 1024 * 1024;
 
         internal ClickHouseConnectionSettings(ClickHouseConnectionStringBuilder builder)
         {

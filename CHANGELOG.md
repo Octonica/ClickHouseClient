@@ -14,6 +14,10 @@
   the network compression. Bulk insert with compression (`Compress=true`, the default) is no longer limited by the speed
   of compression; the compressed traffic is slightly larger
   ([#116](https://github.com/Octonica/ClickHouseClient/issues/116)).
+* The client compresses data in blocks of 1 MiB instead of 8 KiB, matching the default `max_compress_block_size` of the server.
+  This makes bulk insert with compression faster and its traffic smaller. A connection allocates about 2 MiB
+  for compression buffers when it sends compressed data for the first time
+  ([#117](https://github.com/Octonica/ClickHouseClient/issues/117)).
 
 ### Octonica.ClickHouseClient v4.1.6, 2026-09-16
 
