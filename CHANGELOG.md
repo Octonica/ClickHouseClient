@@ -5,6 +5,12 @@
 * `ClickHouseConnection.Open` and `OpenAsync` can reopen a connection in the `Broken` state when the previous TCP channel was closed. A client-side failure, such as reading an unsupported column type, no longer forces the caller to create a new connection object. The reopened connection is a new session
   ([#113](https://github.com/Octonica/ClickHouseClient/issues/113)).
 
+#### Improvement
+
+* Bulk insert with compression (`Compress=true`, the default) no longer slows down quadratically with the size of a block.
+  The time spent on buffering a block before compression is now proportional to the size of the block
+  ([#115](https://github.com/Octonica/ClickHouseClient/issues/115)).
+
 ### Octonica.ClickHouseClient v4.1.6, 2026-09-16
 
 #### Backward Incompatible Change
