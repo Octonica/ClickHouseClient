@@ -1,6 +1,5 @@
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
+# Builds this fork only (driver + tests + benchmarks, no ClickHouse server).
+# Parent-repository check: MrDoe/ClickSphere_API/.github/workflows/dotnet.yml.
 name: .NET
 
 on:
@@ -11,18 +10,25 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the image is migrated under builds otherwise (ubuntu-latest moved to
+    # Ubuntu 26 on 2026-10-19). Valid labels are ubuntu-24.04 / ubuntu-2404 — a bare "ubuntu-24"
+    # matches no runner and the job then waits forever with no runner assigned.
+    runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 9.0.x
+        # All projects target net11.0 (retargeted from net10.0 on 2026-11-17).
+        dotnet-version: 11.0.x
     - name: Restore dependencies
       run: cd src && dotnet restore
     - name: Build
-      run: cd src && dotnet build --no-restore
-#    - name: Test
-#      run: cd src && dotnet test --no-build --verbosity normal
+      # No CLI -warnaserror here (unlike the parent repos): the driver library is already strict via
+      # its own TreatWarningsAsErrors, and the upstream Tests/Benchmarks projects keep benign warnings
+      # (e.g. CS8618 nullable fields in benchmarks). CS8619 exemption must be explicit because this
+      # repository has no parent Directory.Build.props.
+      run: cd src && dotnet build --no-restore -p:WarningsNotAsErrors=CS8619
+    # Tests need a live ClickHouse server (clickHouse.dbconfig) - they run against a server elsewhere,
+    # not in this workflow.
