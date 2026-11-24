@@ -1,4 +1,4 @@
-### Octonica.ClickHouseClient Next Version, Unscheduled
+### Octonica.ClickHouseClient v4.1.8, 2026-11-24
 
 #### Bug Fix
 
